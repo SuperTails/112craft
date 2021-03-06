@@ -91,9 +91,6 @@ def appStarted(app):
     app.cameraPitch = 0
     app.cameraPos = [4.0, 10.0 + app.playerHeight, 4.0]
 
-    app.cameraPitch = 0.0
-    app.cameraYaw = 0.0
-
     app.vpDist = 0.25
     app.vpWidth = 3.0 / 4.0
     app.vpHeight = app.vpWidth * app.height / app.width 
