@@ -390,9 +390,6 @@ def updateLight(app, blockPos: BlockPos):
 
     (chunk, localPos) = getChunk(app, blockPos)
 
-    # FIXME: Check for block changes at the top of the world
-    if chunk.lightLevels[localPos[0], localPos[1] + 1, localPos[2]] == 7:
-
     shape = chunk.blocks.shape
 
     visited = []
