@@ -539,6 +539,12 @@ def redrawAll(app, canvas):
 
     canvas.create_oval(app.width / 2 - 1, app.height / 2 - 1, 
         app.width / 2 + 1, app.height / 2 + 1)
+
+    tickTime = sum(app.tickTimes) / len(app.tickTimes) * 1000.0
+
+    # This makes it more easily legible on both dark and light backgrounds
+    canvas.create_text(11, 21, text=f'Tick Time: {tickTime:.2f}ms', anchor='nw')
+    canvas.create_text(10, 20, text=f'Tick Time: {tickTime:.2f}ms', anchor='nw', fill='white')
     
     global frameTimes
     global frameTimeIdx

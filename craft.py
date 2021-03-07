@@ -100,7 +100,12 @@ def appStarted(app):
 
     print(f"Horizontal FOV: {app.horizFov} ({math.degrees(app.horizFov)}°)")
 
-    app.timerDelay = 50
+    app.timerDelay = 20
+
+    app.tickTimes = [0.0] * 10
+    app.tickTimeIdx = 0
+
+    app.mouseMovedDelay = 10
 
     app.w = False
     app.s = False
@@ -143,7 +148,13 @@ def mousePressed(app, event):
             
             world.addBlock(app, world.BlockPos(x, y, z), app.selectedBlock)
 
+def mouseDragged(app, event):
+    mouseMovedOrDragged(app, event)
+
 def mouseMoved(app, event):
+    mouseMovedOrDragged(app, event)
+
+def mouseMovedOrDragged(app, event):
     if not app.captureMouse:
         app.prevMouse = None
 

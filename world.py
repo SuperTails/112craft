@@ -2,6 +2,7 @@ import numpy as np
 import math
 import heapq
 import render
+import time
 from math import cos, sin
 from numpy import ndarray
 from typing import NamedTuple, List, Any, Tuple, Optional
@@ -39,11 +40,6 @@ class Chunk:
 
         for xIdx in range(0, 16):
             for zIdx in range(0, 16):
-                # globalPos = self._globalBlockPos(BlockPos(xIdx, 0, zIdx))
-                # val = app.lowNoise([globalPos[0] / 16.0, globalPos[1] / 16.0, globalPos[2] / 16.0])
-
-                # h = 6 + int(val * 4)
-
                 for yIdx in range(0, 8):
                     self.lightLevels[xIdx, yIdx, zIdx] = 0
                     blockId = 'grass' if yIdx == 7 else 'stone'
@@ -293,6 +289,8 @@ def tickChunks(app):
         chunk.isTicking = adjacentChunks == 8
 
 def tick(app):
+    startTime = time.time()
+
     loadUnloadChunks(app)
 
     tickChunks(app)
@@ -376,6 +374,11 @@ def tick(app):
             elif coordsOccupied(app, BlockPos(round(x), y, loZBlockCoord)):
                 zEdge = (loZBlockCoord + 0.5)
                 app.cameraPos[2] = zEdge + app.playerRadius
+    
+    endTime = time.time()
+    app.tickTimes[app.tickTimeIdx] = (endTime - startTime)
+    app.tickTimeIdx += 1
+    app.tickTimeIdx %= len(app.tickTimes)
 
 def setLightLevel(app, blockPos: BlockPos, level: int):
     (chunk, (x, y, z)) = getChunk(app, blockPos)
@@ -385,8 +388,10 @@ def updateLight(app, blockPos: BlockPos):
     # FIXME: Lighting changes need to propogate across chunk boundaries
     # But that's REALLY slow
 
-    (chunk, blockPos) = getChunk(app, blockPos)
-    chunk.lightLevels = np.full_like(chunk.blocks, 0, int)
+    (chunk, localPos) = getChunk(app, blockPos)
+
+    # FIXME: Check for block changes at the top of the world
+    if chunk.lightLevels[localPos[0], localPos[1] + 1, localPos[2]] == 7:
 
     shape = chunk.blocks.shape
 
