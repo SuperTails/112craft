@@ -12,7 +12,7 @@ from world import BlockPos, adjacentBlockPos
 # =========================================================================== #
 
 # Author: Carson Swoveland (cswovela)
-# Part of a possible term project for 15112
+# Part of a term project for 15112
 
 # I shall name my custom rendering engine "Campfire", because:
 #   1. It's a minecraft block
@@ -34,7 +34,7 @@ class Model:
         self.faces = []
         for face in faces:
             if len(face) == 4:
-                # FIXME
+                # FIXME:
                 1 / 0
             elif len(face) == 3:
                 self.faces.append(face)
@@ -519,7 +519,7 @@ frameTimeIdx = 0
 
 def redrawAll(app, canvas):
     startTime = time.time()
-
+    
     canvas.create_rectangle(0.0, 0.0, app.width, app.height, fill='#0080FF')
 
     renderInstances(app, canvas)

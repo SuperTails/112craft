@@ -5,13 +5,87 @@ import render
 import world
 from world import Chunk, ChunkPos
 from typing import List
-import perlin_noise
 
 # =========================================================================== #
 # ----------------------------- THE APP ------------------------------------- #
 # =========================================================================== #
 
+# Author: Carson Swoveland (cswovela)
+# Part of a term project for 15112
+
+# I've incorporated Minecraft into every year of my education so far,
+# and I don't plan to stop any time soon.
+
+
+# Initializes all the data needed to run 112craft
 def appStarted(app):
+    loadResources(app)
+
+    # ---------------
+    # World variables
+    # ---------------
+    app.chunks = {
+        ChunkPos(0, 0, 0): Chunk(ChunkPos(0, 0, 0))
+    }
+
+    app.chunks[ChunkPos(0, 0, 0)].generate(app)
+
+    app.timerDelay = 30
+
+    app.tickTimes = [0.0] * 10
+    app.tickTimeIdx = 0
+
+    # ----------------
+    # Player variables
+    # ----------------
+    app.playerHeight = 1.5
+    app.playerWidth = 0.6
+    app.playerRadius = app.playerWidth / 2
+    app.playerOnGround = False
+    app.playerVel = [0.0, 0.0, 0.0]
+    app.playerWalkSpeed = 0.2
+    app.selectedBlock = 'air'
+    app.gravity = 0.10
+
+    app.cameraYaw = 0
+    app.cameraPitch = 0
+    app.cameraPos = [4.0, 10.0 + app.playerHeight, 4.0]
+
+    # -------------------
+    # Rendering Variables
+    # -------------------
+    app.vpDist = 0.25
+    app.vpWidth = 3.0 / 4.0
+    app.vpHeight = app.vpWidth * app.height / app.width 
+    app.wireframe = False
+    app.renderDistanceSq = 6**2
+
+    app.horizFov = math.atan(app.vpWidth / app.vpDist)
+    app.vertFov = math.atan(app.vpHeight / app.vpDist)
+
+    print(f"Horizontal FOV: {app.horizFov} ({math.degrees(app.horizFov)}°)")
+    print(f"Vertical FOV: {app.vertFov} ({math.degrees(app.vertFov)}°)")
+
+    app.csToCanvasMat = render.csToCanvasMat(app.vpDist, app.vpWidth,
+                        app.vpHeight, app.width, app.height)
+
+
+    # ---------------
+    # Input Variables
+    # ---------------
+    app.mouseMovedDelay = 10
+
+    app.w = False
+    app.s = False
+    app.a = False
+    app.d = False
+
+    app.prevMouse = None
+
+    app.captureMouse = False
+
+
+def loadResources(app):
     vertices = [
         np.array([[-1.0], [-1.0], [-1.0]]) / 2.0,
         np.array([[-1.0], [-1.0], [1.0]]) / 2.0,
@@ -67,60 +141,8 @@ def appStarted(app):
         (3, 6, 7),
     ]
 
-    app.lowNoise = perlin_noise.PerlinNoise(octaves=3)
-
     app.cube = render.Model(vertices, faces)
 
-    app.chunks = {
-        ChunkPos(0, 0, 0): Chunk(ChunkPos(0, 0, 0))
-    }
-
-    app.chunks[ChunkPos(0, 0, 0)].generate(app)
-
-    app.playerHeight = 1.5
-    app.playerWidth = 0.6
-    app.playerRadius = app.playerWidth / 2
-    app.playerOnGround = False
-    app.playerVel = [0.0, 0.0, 0.0]
-    app.playerWalkSpeed = 0.2
-    app.selectedBlock = 'air'
-    app.gravity = 0.10
-    app.renderDistanceSq = 6**2
-
-    app.cameraYaw = 0
-    app.cameraPitch = 0
-    app.cameraPos = [4.0, 10.0 + app.playerHeight, 4.0]
-
-    app.vpDist = 0.25
-    app.vpWidth = 3.0 / 4.0
-    app.vpHeight = app.vpWidth * app.height / app.width 
-
-    app.horizFov = math.atan(app.vpWidth / app.vpDist)
-    app.vertFov = math.atan(app.vpHeight / app.vpDist)
-
-    print(f"Horizontal FOV: {app.horizFov} ({math.degrees(app.horizFov)}°)")
-
-    app.timerDelay = 20
-
-    app.tickTimes = [0.0] * 10
-    app.tickTimeIdx = 0
-
-    app.mouseMovedDelay = 10
-
-    app.w = False
-    app.s = False
-    app.a = False
-    app.d = False
-
-    app.prevMouse = None
-
-    app.captureMouse = False
-
-    app.wireframe = False
-
-    app.csToCanvasMat = render.csToCanvasMat(app.vpDist, app.vpWidth, app.vpHeight,
-                        app.width, app.height)
-    
 def sizeChanged(app):
     app.csToCanvasMat = render.csToCanvasMat(app.vpDist, app.vpWidth, app.vpHeight,
                         app.width, app.height)
@@ -177,16 +199,6 @@ def mouseMovedOrDragged(app, event):
         app._theRoot.event_generate('<Motion>', warp=True, x=x, y=y)
         app.prevMouse = (x, y)
 
-def keyReleased(app, event):
-    if event.key == 'w':
-        app.w = False
-    elif event.key == 's':
-        app.s = False 
-    elif event.key == 'a':
-        app.a = False
-    elif event.key == 'd':
-        app.d = False
-
 def timerFired(app):
     world.tick(app)
 
@@ -213,6 +225,16 @@ def keyPressed(app, event):
             app._theRoot.config(cursor="none")
         else:
             app._theRoot.config(cursor="")
+
+def keyReleased(app, event):
+    if event.key == 'w':
+        app.w = False
+    elif event.key == 's':
+        app.s = False 
+    elif event.key == 'a':
+        app.a = False
+    elif event.key == 'd':
+        app.d = False
 
 def redrawAll(app, canvas):
     render.redrawAll(app, canvas)

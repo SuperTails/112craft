@@ -388,6 +388,8 @@ def updateLight(app, blockPos: BlockPos):
     # FIXME: Lighting changes need to propogate across chunk boundaries
     # But that's REALLY slow
 
+    startTime = time.time()
+
     (chunk, localPos) = getChunk(app, blockPos)
 
     shape = chunk.blocks.shape
@@ -432,6 +434,13 @@ def updateLight(app, blockPos: BlockPos):
                 nextLight = max(light - 1, 0)
             
             heapq.heappush(queue, (-nextLight, nextPos))
+    
+    endTime = time.time()
+
+    timeDiff = (endTime - startTime) * 1000.0
+
+    print(f"updateLight() took {timeDiff:.3f}ms")
+
     
 def removeBlock(app, blockPos: BlockPos):
     setBlock(app, blockPos, 'air')
