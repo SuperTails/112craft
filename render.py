@@ -67,7 +67,7 @@ class Instance:
         return result
     
 def toHomogenous(cartesian: ndarray) -> ndarray:
-    assert(cartesian.shape[1] == 1)
+    #assert(cartesian.shape[1] == 1)
 
     #return np.vstack((cartesian, np.array([[1]])))
 

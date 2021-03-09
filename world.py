@@ -51,15 +51,16 @@ class Chunk:
             for yIdx in range(0, 8):
                 for zIdx in range(0, 16):
                     self.updateBuriedStateAt(app, BlockPos(xIdx, yIdx, zIdx))
+
         self.isFinalized = True
     
     def iterInstances(self):
         if self.isFinalized and self.isVisible:
             for (i, instance) in enumerate(self.instances):
                 if instance is not None:
-                    wx = self.pos[0] * 16 + (i // 256)
-                    wy = self.pos[1] * 16 + (i // 16) % 16
-                    wz = self.pos[2] * 16 + (i % 16)
+                    wx = self.pos.x * 16 + (i // 256)
+                    wy = self.pos.y * 16 + (i // 16) % 16
+                    wz = self.pos.z * 16 + (i % 16)
                     yield (BlockPos(wx, wy, wz), instance)
 
     def _coordsToIdx(self, pos: BlockPos) -> int:
@@ -380,15 +381,101 @@ def tick(app):
     app.tickTimeIdx += 1
     app.tickTimeIdx %= len(app.tickTimes)
 
+def getLightLevel(app, blockPos: BlockPos) -> int:
+    (chunk, (x, y, z)) = getChunk(app, blockPos)
+    return chunk.lightLevels[x, y, z]
+
 def setLightLevel(app, blockPos: BlockPos, level: int):
     (chunk, (x, y, z)) = getChunk(app, blockPos)
     chunk.lightLevels[x, y, z] = level
 
 def updateLight(app, blockPos: BlockPos):
+    startTime = time.time()
+
+    added = coordsOccupied(app, blockPos)
+
+    if added:
+        # When a block is ADDED:
+        # Note that this can only ever *decrease* the light level of a block! So:
+        # TODO:
+
+        # FIXME: "naive" in this case means "300x slower"
+        naiveUpdateLight(app, blockPos)
+    else:
+        # When a block is REMOVED:
+        # Note that this can only ever *increase* the light level of a block! So:
+        # If the block is directly skylit:
+        #   Propogate light downwards
+        #   Add every block visibly beneath the change to the queue
+        # 
+        # Add every block adjacent to the change to the queue
+
+
+        (chunk, localPos) = getChunk(app, blockPos)
+
+        skyExposed = True
+        for y in range(localPos.y + 1, 16):
+            checkPos = BlockPos(localPos.x, y, localPos.z)
+            if chunk.coordsOccupied(checkPos):
+                skyExposed = False
+                break
+        
+        print(f"Sky exposed: {skyExposed}")
+
+        queue = []
+
+        # FIXME: If I ever add vertical chunks this needs to change
+        if skyExposed:
+            for y in range(localPos.y, -1, -1):
+                if coordsOccupied(app, blockPos):
+                    break
+
+                heapq.heappush(queue, (-7, BlockPos(blockPos.x, y, blockPos.z)))
+        
+        for faceIdx in range(0, 12, 2):
+            gPos = adjacentBlockPos(blockPos, faceIdx)
+
+            lightLevel = getLightLevel(app, gPos)
+
+            heapq.heappush(queue, (-lightLevel, gPos))
+
+        visited = []
+        
+        while len(queue) > 0:
+            (light, pos) = heapq.heappop(queue)
+            light *= -1
+            if pos in visited:
+                continue
+            visited.append(pos)
+            setLightLevel(app, pos, light)
+
+            for faceIdx in range(0, 12, 2):
+                nextPos = adjacentBlockPos(pos, faceIdx)
+                if nextPos in visited:
+                    continue
+                if not coordsInBounds(app, nextPos):
+                    continue
+                if coordsOccupied(app, nextPos):
+                    continue
+
+                existingLight = getLightLevel(app, nextPos)
+                nextLight = max(light - 1, 0)
+
+                if nextLight > existingLight:
+                    heapq.heappush(queue, (-nextLight, nextPos))
+
+    endTime = time.time()
+
+    timeDiff = (endTime - startTime) * 1000.0
+
+    print(f"updateLight() took {timeDiff:.3f}ms")
+
+# FIXME: This is super broken
+def naiveUpdateLight(app, blockPos: BlockPos):
     # FIXME: Lighting changes need to propogate across chunk boundaries
     # But that's REALLY slow
 
-    startTime = time.time()
+    #startTime = time.time()
 
     (chunk, localPos) = getChunk(app, blockPos)
 
@@ -435,11 +522,9 @@ def updateLight(app, blockPos: BlockPos):
             
             heapq.heappush(queue, (-nextLight, nextPos))
     
-    endTime = time.time()
-
-    timeDiff = (endTime - startTime) * 1000.0
-
-    print(f"updateLight() took {timeDiff:.3f}ms")
+    #endTime = time.time()
+    #timeDiff = (endTime - startTime) * 1000.0
+    #print(f"updateLight() took {timeDiff:.3f}ms")
 
     
 def removeBlock(app, blockPos: BlockPos):
