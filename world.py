@@ -390,8 +390,6 @@ def setLightLevel(app, blockPos: BlockPos, level: int):
     chunk.lightLevels[x, y, z] = level
 
 def updateLight(app, blockPos: BlockPos):
-    startTime = time.time()
-
     added = coordsOccupied(app, blockPos)
 
     (chunk, localPos) = getChunk(app, blockPos)
@@ -517,12 +515,6 @@ def updateLight(app, blockPos: BlockPos):
 
             if nextLight > existingLight:
                 heapq.heappush(queue, (-nextLight, nextPos))
-
-    endTime = time.time()
-
-    timeDiff = (endTime - startTime) * 1000.0
-
-    print(f"updateLight() took {timeDiff:.3f}ms")
     
 def removeBlock(app, blockPos: BlockPos):
     setBlock(app, blockPos, 'air')
