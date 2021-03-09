@@ -523,63 +523,6 @@ def updateLight(app, blockPos: BlockPos):
     timeDiff = (endTime - startTime) * 1000.0
 
     print(f"updateLight() took {timeDiff:.3f}ms")
-
-# FIXME: This is super broken
-def naiveUpdateLight(app, blockPos: BlockPos):
-    # FIXME: Lighting changes need to propogate across chunk boundaries
-    # But that's REALLY slow
-
-    #startTime = time.time()
-
-    (chunk, localPos) = getChunk(app, blockPos)
-
-    shape = chunk.blocks.shape
-
-    visited = []
-    queue = []
-
-    for x in range(shape[0]):
-        for z in range(shape[2]):
-            y = shape[1] - 1
-            heapq.heappush(queue, (-7, BlockPos(x, y, z)))
-    
-    while len(queue) > 0:
-        (light, pos) = heapq.heappop(queue)
-        light *= -1
-        if pos in visited:
-            continue
-        visited.append(pos)
-        #setLightLevel(app, pos, light)
-        (x, y, z) = pos
-        chunk.lightLevels[x, y, z] = light
-
-        for faceIdx in range(0, 10, 2):
-            nextPos = adjacentBlockPos(pos, faceIdx)
-            globalPos = chunk._globalBlockPos(nextPos)
-            if nextPos in visited:
-                continue
-            if not coordsInBounds(app, globalPos):
-                continue
-            if coordsOccupied(app, globalPos):
-                continue
-            if nextPos[0] < 0 or 16 <= nextPos[0]:
-                continue
-            if nextPos[1] < 0 or 16 <= nextPos[1]:
-                continue
-            if nextPos[2] < 0 or 16 <= nextPos[2]:
-                continue
-
-            if light == 7 and faceIdx == 8:
-                nextLight = 7
-            else:
-                nextLight = max(light - 1, 0)
-            
-            heapq.heappush(queue, (-nextLight, nextPos))
-    
-    #endTime = time.time()
-    #timeDiff = (endTime - startTime) * 1000.0
-    #print(f"updateLight() took {timeDiff:.3f}ms")
-
     
 def removeBlock(app, blockPos: BlockPos):
     setBlock(app, blockPos, 'air')
