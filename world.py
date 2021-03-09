@@ -394,13 +394,77 @@ def updateLight(app, blockPos: BlockPos):
 
     added = coordsOccupied(app, blockPos)
 
+    (chunk, localPos) = getChunk(app, blockPos)
+
+    skyExposed = True
+    for y in range(localPos.y + 1, 16):
+        checkPos = BlockPos(localPos.x, y, localPos.z)
+        if chunk.coordsOccupied(checkPos):
+            skyExposed = False
+            break
+
     if added:
         # When a block is ADDED:
-        # Note that this can only ever *decrease* the light level of a block! So:
-        # TODO:
+        # If the block is directly skylit:
+        #   Mark all blocks visibly beneath as ex-sources
+        # Mark every block adjacent to the change as an ex-source
+        # Propogate "negative light" from the ex-sources
+        # Mark any "overpowering" lights as actual sources
+        # Reset all "negative lights" to 0
+        # Propogate from the actual sources
 
-        # FIXME: "naive" in this case means "300x slower"
-        naiveUpdateLight(app, blockPos)
+        exSources = []
+        
+        # FIXME: If I ever add vertical chunks this needs to change
+        if skyExposed:
+            for y in range(localPos.y - 1, -1, -1):
+                checkPos = BlockPos(localPos.x, y, localPos.z)
+                if chunk.coordsOccupied(checkPos):
+                    break
+
+                heapq.heappush(exSources, (-7, BlockPos(blockPos.x, y, blockPos.z)))
+        
+        for faceIdx in range(0, 12, 2):
+            gPos = adjacentBlockPos(blockPos, faceIdx)
+
+            if coordsOccupied(app, gPos):
+                continue
+
+            lightLevel = getLightLevel(app, gPos)
+
+            heapq.heappush(exSources, (-lightLevel, gPos))
+
+        exVisited = []
+
+        queue = []
+        
+        while len(exSources) > 0:
+            (neglight, pos) = heapq.heappop(exSources)
+            neglight *= -1
+            if pos in exVisited:
+                continue
+            exVisited.append(pos)
+
+            existingLight = getLightLevel(app, pos)
+            if existingLight > neglight:
+                heapq.heappush(queue, (-existingLight, pos))
+                continue
+
+            setLightLevel(app, pos, 0)
+
+            nextLight = max(neglight - 1, 0)
+            for faceIdx in range(0, 12, 2):
+                nextPos = adjacentBlockPos(pos, faceIdx)
+                if nextPos in exVisited:
+                    continue
+                if not coordsInBounds(app, nextPos):
+                    continue
+                if coordsOccupied(app, nextPos):
+                    continue
+
+                heapq.heappush(exSources, (-nextLight, nextPos))
+        
+        chunk.lightLevels[localPos.x, localPos.y, localPos.z] = 0
     else:
         # When a block is REMOVED:
         # Note that this can only ever *increase* the light level of a block! So:
@@ -410,24 +474,13 @@ def updateLight(app, blockPos: BlockPos):
         # 
         # Add every block adjacent to the change to the queue
 
-
-        (chunk, localPos) = getChunk(app, blockPos)
-
-        skyExposed = True
-        for y in range(localPos.y + 1, 16):
-            checkPos = BlockPos(localPos.x, y, localPos.z)
-            if chunk.coordsOccupied(checkPos):
-                skyExposed = False
-                break
-        
-        print(f"Sky exposed: {skyExposed}")
-
         queue = []
 
         # FIXME: If I ever add vertical chunks this needs to change
         if skyExposed:
             for y in range(localPos.y, -1, -1):
-                if coordsOccupied(app, blockPos):
+                checkPos = BlockPos(localPos.x, y, localPos.z)
+                if chunk.coordsOccupied(checkPos):
                     break
 
                 heapq.heappush(queue, (-7, BlockPos(blockPos.x, y, blockPos.z)))
@@ -439,30 +492,31 @@ def updateLight(app, blockPos: BlockPos):
 
             heapq.heappush(queue, (-lightLevel, gPos))
 
-        visited = []
-        
-        while len(queue) > 0:
-            (light, pos) = heapq.heappop(queue)
-            light *= -1
-            if pos in visited:
+
+    visited = []
+    
+    while len(queue) > 0:
+        (light, pos) = heapq.heappop(queue)
+        light *= -1
+        if pos in visited:
+            continue
+        visited.append(pos)
+        setLightLevel(app, pos, light)
+
+        nextLight = max(light - 1, 0)
+        for faceIdx in range(0, 12, 2):
+            nextPos = adjacentBlockPos(pos, faceIdx)
+            if nextPos in visited:
                 continue
-            visited.append(pos)
-            setLightLevel(app, pos, light)
+            if not coordsInBounds(app, nextPos):
+                continue
+            if coordsOccupied(app, nextPos):
+                continue
 
-            for faceIdx in range(0, 12, 2):
-                nextPos = adjacentBlockPos(pos, faceIdx)
-                if nextPos in visited:
-                    continue
-                if not coordsInBounds(app, nextPos):
-                    continue
-                if coordsOccupied(app, nextPos):
-                    continue
+            existingLight = getLightLevel(app, nextPos)
 
-                existingLight = getLightLevel(app, nextPos)
-                nextLight = max(light - 1, 0)
-
-                if nextLight > existingLight:
-                    heapq.heappush(queue, (-nextLight, nextPos))
+            if nextLight > existingLight:
+                heapq.heappush(queue, (-nextLight, nextPos))
 
     endTime = time.time()
 
