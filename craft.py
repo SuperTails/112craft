@@ -44,13 +44,13 @@ def appStarted(app):
     app.playerOnGround = False
     app.playerVel = [0.0, 0.0, 0.0]
     app.playerWalkSpeed = 0.2
-    app.playerReach = 5.0
+    app.playerReach = 4.0
     app.selectedBlock = 'air'
     app.gravity = 0.10
 
     app.cameraYaw = 0
     app.cameraPitch = 0
-    app.cameraPos = [4.0, 10.0 + app.playerHeight, 4.0]
+    app.cameraPos = [4.0, 14.0 + app.playerHeight, 4.0]
 
     # -------------------
     # Rendering Variables

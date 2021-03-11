@@ -3,6 +3,7 @@ import math
 import heapq
 import render
 import time
+import perlin
 from math import cos, sin
 from numpy import ndarray
 from typing import NamedTuple, List, Any, Tuple, Optional
@@ -38,17 +39,31 @@ class Chunk:
         self.lightLevels = np.full((16, 16, 16), 7)
         self.instances = [None] * self.blocks.size
 
+        minVal = 100.0
+        maxVal = -100.0
+
         for xIdx in range(0, 16):
             for zIdx in range(0, 16):
-                for yIdx in range(0, 8):
+                globalPos = self._globalBlockPos(BlockPos(xIdx, 0, zIdx))
+
+                noise = perlin.getPerlinFractal(globalPos.x, globalPos.z, 1.0 / 256.0, 4)
+
+                if noise < minVal: minVal = noise
+                if noise > maxVal: maxVal = noise
+
+                topY = int(noise * 8 + 8)
+
+                for yIdx in range(0, topY):
                     self.lightLevels[xIdx, yIdx, zIdx] = 0
-                    blockId = 'grass' if yIdx == 7 else 'stone'
+                    blockId = 'grass' if yIdx == topY - 1 else 'stone'
                     self.setBlock(app, BlockPos(xIdx, yIdx, zIdx), blockId, doUpdateLight=False, doUpdateBuried=False)
+        
+        print(f"minval: {minVal}, maxVal: {maxVal}")
     
     def lightAndOptimize(self, app):
         print(f"Lighting and optimizing chunk at {self.pos}")
         for xIdx in range(0, 16):
-            for yIdx in range(0, 8):
+            for yIdx in range(0, 16):
                 for zIdx in range(0, 16):
                     self.updateBuriedStateAt(app, BlockPos(xIdx, yIdx, zIdx))
 
@@ -95,7 +110,6 @@ class Chunk:
             if coordsOccupied(app, adjPos):
                 self.instances[idx][0].visibleFaces[faceIdx] = False
                 self.instances[idx][0].visibleFaces[faceIdx + 1] = False
-                pass
             else:
                 self.instances[idx][0].visibleFaces[faceIdx] = True
                 self.instances[idx][0].visibleFaces[faceIdx + 1] = True
@@ -592,13 +606,9 @@ def lookedAtBlock(app) -> Optional[Tuple[BlockPos, str]]:
     lastMaxVal = 0.0
 
     while 1:
-        print(x, y, z)
-
         if coordsOccupied(app, BlockPos(x, y, z)):
             blockPos = BlockPos(x, y, z)
             break
-
-        print(f"tmaxes: {tMaxX}, {tMaxY}, {tMaxZ}")
 
         minVal = min(tMaxX, tMaxY, tMaxZ)
 
@@ -631,10 +641,10 @@ def lookedAtBlock(app) -> Optional[Tuple[BlockPos, str]]:
         pointZ -= blockPos.z
 
         if abs(pointX) > abs(pointY) and abs(pointX) > abs(pointZ):
-            face = 'right' if x > 0.0 else 'left'
+            face = 'right' if pointX > 0.0 else 'left'
         elif abs(pointY) > abs(pointX) and abs(pointY) > abs(pointZ):
-            face = 'top' if y > 0.0 else 'bottom'
+            face = 'top' if pointY > 0.0 else 'bottom'
         else:
-            face = 'front' if z > 0.0 else 'back'
+            face = 'front' if pointZ > 0.0 else 'back'
         
         return (blockPos, face)
