@@ -115,9 +115,29 @@ def loadResources(app):
         '#BBCCAA', '#BBBBBB'
     ]
 
+    leavesTexture = [
+        '#206000', '#256505',
+        '#257000', '#256505',
+        '#206010', '#206505',
+        '#206505', '#256005',
+        '#306005', '#256500',
+        '#206500', '#306505',
+    ]
+
+    logTexture = [
+        '#705020', '#655020',
+        '#705520', '#655025',
+        '#705025', '#705020',
+        '#755020', '#705A2A',
+        '#755520', '#7A4A20',
+        '#705525', '#70502A',
+    ]
+
     app.textures = {
         'grass': grassTexture,
         'stone': stoneTexture,
+        'leaves': leavesTexture,
+        'log': logTexture,
     }
 
     # Vertices in CCW order
@@ -210,6 +230,10 @@ def keyPressed(app, event):
         app.selectedBlock = 'grass'
     elif event.key == '3':
         app.selectedBlock = 'stone'
+    elif event.key == '4':
+        app.selectedBlock = 'leaves'
+    elif event.key == '5':
+        app.selectedBlock = 'log'
     elif event.key == 'w':
         app.w = True
     elif event.key == 's':

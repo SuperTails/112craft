@@ -436,7 +436,7 @@ def drawToFaces(app):
     faces = []
     for chunkPos in app.chunks:
         chunk = app.chunks[chunkPos]
-        if chunk.isVisible and chunk.isFinalized:
+        if chunk.isVisible:
             for (i, inst) in enumerate(chunk.instances):
                 if inst is not None:
                     (inst, unburied) = inst
