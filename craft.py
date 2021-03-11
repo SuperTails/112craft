@@ -44,6 +44,7 @@ def appStarted(app):
     app.playerOnGround = False
     app.playerVel = [0.0, 0.0, 0.0]
     app.playerWalkSpeed = 0.2
+    app.playerReach = 5.0
     app.selectedBlock = 'air'
     app.gravity = 0.10
 

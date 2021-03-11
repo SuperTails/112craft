@@ -104,9 +104,6 @@ class Chunk:
         self.instances[idx][1] = uncovered
 
     def coordsOccupied(self, pos: BlockPos) -> bool:
-        #if not coordsInBounds(self, pos):
-        #    raise Exception("outside of chunk")
-        
         (x, y, z) = pos
         return self.blocks[x, y, z] != 'air'
 
@@ -550,53 +547,94 @@ def adjacentBlockPos(blockPos: BlockPos, faceIdx: int) -> BlockPos:
     return BlockPos(x, y, z)
 
 def lookedAtBlock(app) -> Optional[Tuple[BlockPos, str]]:
-    # TODO: Optimize
-
     lookX = cos(app.cameraPitch)*sin(-app.cameraYaw)
     lookY = sin(app.cameraPitch)
     lookZ = cos(app.cameraPitch)*cos(-app.cameraYaw)
+
+    if lookX == 0.0:
+        lookX = 1e-6
+    if lookY == 0.0:
+        lookY = 1e-6
+    if lookZ == 0.0:
+        lookZ = 1e-6
 
     mag = math.sqrt(lookX**2 + lookY**2 + lookZ**2)
     lookX /= mag
     lookY /= mag
     lookZ /= mag
 
-    step = 0.1
-    lookX *= step
-    lookY *= step
-    lookZ *= step
+    # From the algorithm/code shown here:
+    # http://www.cse.yorku.ca/~amana/research/grid.pdf
 
-    [x, y, z] = app.cameraPos
+    x = nearestBlockCoord(app.cameraPos[0])
+    y = nearestBlockCoord(app.cameraPos[1])
+    z = nearestBlockCoord(app.cameraPos[2])
 
-    maxDist = 6.0
+    stepX = 1 if lookX > 0.0 else -1
+    stepY = 1 if lookY > 0.0 else -1
+    stepZ = 1 if lookZ > 0.0 else -1
+
+    tDeltaX = 1.0 / abs(lookX)
+    tDeltaY = 1.0 / abs(lookY)
+    tDeltaZ = 1.0 / abs(lookZ)
+
+    nextXWall = x + 0.5 if stepX == 1 else x - 0.5
+    nextYWall = y + 0.5 if stepY == 1 else y - 0.5
+    nextZWall = z + 0.5 if stepZ == 1 else z - 0.5
+
+    tMaxX = (nextXWall - app.cameraPos[0]) / lookX
+    tMaxY = (nextYWall - app.cameraPos[1]) / lookY
+    tMaxZ = (nextZWall - app.cameraPos[2]) / lookZ
+
+    print(f"{tMaxX}, {tMaxY}, {tMaxZ}")
 
     blockPos = None
+    lastMaxVal = 0.0
 
-    for _ in range(int(maxDist / step)):
-        x += lookX
-        y += lookY
-        z += lookZ
+    while 1:
+        print(x, y, z)
 
-        tempBlockPos = nearestBlockPos(x, y, z)
+        if coordsOccupied(app, BlockPos(x, y, z)):
+            blockPos = BlockPos(x, y, z)
+            break
 
-        if coordsOccupied(app, tempBlockPos):
-            blockPos = tempBlockPos
+        print(f"tmaxes: {tMaxX}, {tMaxY}, {tMaxZ}")
+
+        minVal = min(tMaxX, tMaxY, tMaxZ)
+
+        if minVal == tMaxX:
+            x += stepX
+            # FIXME: if outside...
+            lastMaxVal = tMaxX
+            tMaxX += tDeltaX
+        elif minVal == tMaxY:
+            y += stepY
+            lastMaxVal = tMaxY
+            tMaxY += tDeltaY
+        else:
+            z += stepZ
+            lastMaxVal = tMaxZ
+            tMaxZ += tDeltaZ
+        
+        if lastMaxVal > app.playerReach:
             break
     
     if blockPos is None:
         return None
-    
-    [centerX, centerY, centerZ] = blockPos
-
-    x -= centerX
-    y -= centerY
-    z -= centerZ
-
-    if abs(x) > abs(y) and abs(x) > abs(z):
-        face = 'right' if x > 0.0 else 'left'
-    elif abs(y) > abs(x) and abs(y) > abs(z):
-        face = 'top' if y > 0.0 else 'bottom'
     else:
-        face = 'front' if z > 0.0 else 'back'
-    
-    return (blockPos, face)
+        pointX = app.cameraPos[0] + lastMaxVal * lookX
+        pointY = app.cameraPos[1] + lastMaxVal * lookY
+        pointZ = app.cameraPos[2] + lastMaxVal * lookZ
+
+        pointX -= blockPos.x
+        pointY -= blockPos.y
+        pointZ -= blockPos.z
+
+        if abs(pointX) > abs(pointY) and abs(pointX) > abs(pointZ):
+            face = 'right' if x > 0.0 else 'left'
+        elif abs(pointY) > abs(pointX) and abs(pointY) > abs(pointZ):
+            face = 'top' if y > 0.0 else 'bottom'
+        else:
+            face = 'front' if z > 0.0 else 'back'
+        
+        return (blockPos, face)
