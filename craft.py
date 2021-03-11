@@ -3,8 +3,10 @@ import numpy as np
 import math
 import render
 import world
+import time
 from world import Chunk, ChunkPos
 from typing import List
+from enum import Enum
 
 # =========================================================================== #
 # ----------------------------- THE APP ------------------------------------- #
@@ -16,10 +18,37 @@ from typing import List
 # I've incorporated Minecraft into every year of my education so far,
 # and I don't plan to stop any time soon.
 
+class GameState(Enum):
+    STARTUP = 1,
+    TITLE = 2,
+    PLAYING = 3,
+
+def createSizedBackground(app, width: int, height: int):
+    cobble = app.loadImage('assets/CobbleBackground.png')
+    cobble = app.scaleImage(cobble, 2)
+    cWidth, cHeight = cobble.size
+
+    newCobble = Image.new(cobble.mode, (width, height))
+    for xIdx in range(math.ceil(width / cWidth)):
+        for yIdx in range(math.ceil(height / cHeight)):
+            xOffset = xIdx * cWidth
+            yOffset = yIdx * cHeight
+
+            newCobble.paste(cobble, (xOffset, yOffset))
+
+    return newCobble
+
 
 # Initializes all the data needed to run 112craft
 def appStarted(app):
     loadResources(app)
+
+    app.titleText = app.loadImage('assets/TitleText.png')
+    app.titleText = app.scaleImage(app.titleText, 3)
+
+    app.btnBg = createSizedBackground(app, 200, 50)
+
+    app.state = GameState.PLAYING
 
     # ---------------
     # World variables
@@ -50,7 +79,7 @@ def appStarted(app):
 
     app.cameraYaw = 0
     app.cameraPitch = 0
-    app.cameraPos = [4.0, 14.0 + app.playerHeight, 4.0]
+    app.cameraPos = [4.0, 8.0 + app.playerHeight, 4.0]
 
     # -------------------
     # Rendering Variables
@@ -221,9 +250,14 @@ def mouseMovedOrDragged(app, event):
         app.prevMouse = (x, y)
 
 def timerFired(app):
+    if app.state == GameState.TITLE:
+        app.cameraYaw += 0.01
+
     world.tick(app)
 
 def keyPressed(app, event):
+    if app.state == GameState.TITLE: return
+
     if event.key == '1':
         app.selectedBlock = 'air'
     elif event.key == '2':
@@ -263,6 +297,11 @@ def keyReleased(app, event):
 
 def redrawAll(app, canvas):
     render.redrawAll(app, canvas)
+
+    if app.state == GameState.TITLE:
+        canvas.create_image(app.width / 2, 50, image=ImageTk.PhotoImage(app.titleText))
+
+        canvas.create_image(app.width / 2, app.height / 2, image=ImageTk.PhotoImage(app.btnBg))
 
 # =========================================================================== #
 # ------------------------- IDK WHAT TO NAME THIS --------------------------- #

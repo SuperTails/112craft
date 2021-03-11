@@ -696,8 +696,6 @@ def lookedAtBlock(app) -> Optional[Tuple[BlockPos, str]]:
     tMaxY = (nextYWall - app.cameraPos[1]) / lookY
     tMaxZ = (nextZWall - app.cameraPos[2]) / lookZ
 
-    print(f"{tMaxX}, {tMaxY}, {tMaxZ}")
-
     blockPos = None
     lastMaxVal = 0.0
 
