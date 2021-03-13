@@ -10,6 +10,7 @@ from world import Chunk, ChunkPos
 from typing import List
 from render import getCachedImage
 from enum import Enum
+from player import Player
 
 # =========================================================================== #
 # ----------------------------- THE APP ------------------------------------- #
@@ -135,18 +136,13 @@ class PlayingMode(Mode):
     lookedAtBlock = world.BlockPos(0, 0, 0)
     mouseHeld: bool = False
 
+    player: Player
+
     def __init__(self, app, creative: bool):
         app.timerDelay = 30
         setMouseCapture(app, True)
 
-        app.creative = creative
-        if app.creative:
-            app.inventory = [(name, -1) for name in app.itemTextures]
-            while len(app.inventory) < 9:
-                app.inventory.append(('', 0))
-        else:
-            app.inventory = [('', 0)] * 9
-            app.inventory[0] = ('air', -1)
+        self.player = Player(app, creative)
 
     def redrawAll(self, app, canvas):
         render.redrawAll(app, canvas)
@@ -154,9 +150,9 @@ class PlayingMode(Mode):
     def timerFired(self, app):
         self.lookedAtBlock = world.lookedAtBlock(app)
         
-        if self.mouseHeld and app.hotbarIdx == 0 and self.lookedAtBlock is not None:
+        if self.mouseHeld and self.player.hotbarIdx == 0 and self.lookedAtBlock is not None:
             pos = self.lookedAtBlock[0]
-            if app.creative:
+            if self.player.creative:
                 app.breakingBlockPos = pos
                 app.breakingBlock = 1.0
             else:
@@ -172,7 +168,7 @@ class PlayingMode(Mode):
             if app.breakingBlock == 1.0:
                 brokenName = world.getBlock(app, pos)
                 world.removeBlock(app, pos)
-                pickUpItem(app, brokenName)
+                self.player.pickUpItem(app, brokenName)
         else:
             app.breakingBlock = 0.0
 
@@ -184,14 +180,12 @@ class PlayingMode(Mode):
         block = world.lookedAtBlock(app)
         if block is not None:
             (pos, face) = block
-            if app.hotbarIdx == 0:
-                pass
-            else:
-                (name, qty) = app.inventory[app.hotbarIdx]
-                if qty == 0: return
+            if self.player.hotbarIdx != 0:
+                slot = self.player.inventory[self.player.hotbarIdx]
+                if slot.amount == 0: return
                 
-                if qty > 0:
-                    app.inventory[app.hotbarIdx] = (name, qty - 1)
+                if slot.amount > 0:
+                    slot.amount -= 1
 
                 [x, y, z] = pos
                 if face == 'left':
@@ -207,16 +201,16 @@ class PlayingMode(Mode):
                 elif face == 'front':
                     z += 1
 
-                world.addBlock(app, world.BlockPos(x, y, z), name)
+                world.addBlock(app, world.BlockPos(x, y, z), slot.item)
     
     def mouseReleased(self, app, event):
         self.mouseHeld = False
     
     def keyPressed(self, app, event):
         if len(event.key) == 1 and event.key.isdigit():
-            idx = int(event.key)
-            if idx == 0: idx = 10
-            app.hotbarIdx = idx - 1
+            keyNum = int(event.key)
+            if keyNum != 0:
+                self.player.hotbarIdx = keyNum - 1
         elif event.key == 'w':
             app.w = True
         elif event.key == 's':
@@ -225,8 +219,9 @@ class PlayingMode(Mode):
             app.a = True
         elif event.key == 'd':
             app.d = True
-        elif event.key == 'Space' and app.playerOnGround:
-            app.playerVel[1] = 0.35
+        elif event.key == 'Space':
+            if hasattr(app.mode, 'player') and app.mode.player.onGround:
+                app.mode.player.velocity[1] = 0.35
         elif event.key == 'Escape':
             setMouseCapture(app, not app.captureMouse)
 
@@ -252,24 +247,14 @@ def appStarted(app):
     # ----------------
     # Player variables
     # ----------------
-    app.playerHeight = 1.5
-    app.playerWidth = 0.6
-    app.playerRadius = app.playerWidth / 2
-    app.playerOnGround = False
-    app.playerVel = [0.0, 0.0, 0.0]
-    app.playerWalkSpeed = 0.2
-    app.playerReach = 4.0
-    app.hotbarIdx = 0
-
     app.breakingBlock = 1.0
     app.breakingBlockPos = world.BlockPos(0, 0, 0)
-
 
     app.gravity = 0.10
 
     app.cameraYaw = 0
     app.cameraPitch = 0
-    app.cameraPos = [4.0, 8.0 + app.playerHeight, 4.0]
+    app.cameraPos = [4.0, 9.5, 4.0]
 
     # -------------------
     # Rendering Variables
@@ -303,24 +288,6 @@ def appStarted(app):
 
     setMouseCapture(app, False)
 
-def pickUpItem(app, newName):
-    # Prioritize adding it into an existing slot first
-    for (i, (name, qty)) in enumerate(app.inventory):
-        if qty < 0 and name == newName:
-            # It just stacks into an infinite slot
-            return
-        elif qty > 0 and name == newName:
-            app.inventory[i] = (name, qty + 1)
-            return
-
-    for (i, (_, qty)) in enumerate(app.inventory):
-        if qty == 0:
-            app.inventory[i] = (newName, 1)
-            return
-    
-    # TODO: Full inventory??
-    1 / 0
-    
 
 def loadResources(app):
     vertices = [

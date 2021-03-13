@@ -22,6 +22,8 @@ class BlockPos(NamedTuple):
 
 BlockId = str
 
+ItemId = str
+
 # Places a tree with its bottommost log at the given position in the world.
 # If `doUpdates` is True, this recalculates the lighting and block visibility.
 # Normally that's a good thing, but during worldgen it's redundant.
@@ -408,21 +410,23 @@ def tick(app):
     # then we update the player's X position and resolve X collisions,
     # and finally update the player's Z position and resolve Z collisions.
 
-    app.cameraPos[1] += app.playerVel[1]
+    player = app.mode.player
 
-    if app.playerOnGround:
+    app.cameraPos[1] += player.velocity[1]
+
+    if player.onGround:
         if not hasBlockBeneath(app):
-            app.playerOnGround = False
+            player.onGround = False
     else:
-        app.playerVel[1] -= app.gravity
+        player.velocity[1] -= app.gravity
         [_, yPos, _] = app.cameraPos
-        yPos -= app.playerHeight
+        yPos -= player.height
         yPos -= 0.1
         feetPos = round(yPos)
         if hasBlockBeneath(app):
-            app.playerOnGround = True
-            app.playerVel[1] = 0.0
-            app.cameraPos[1] = (feetPos + 0.5) + app.playerHeight
+            player.onGround = True
+            player.velocity[1] = 0.0
+            app.cameraPos[1] = (feetPos + 0.5) + player.height
     
     # W makes the player go forward, S makes them go backwards,
     # and pressing both makes them stop!
@@ -440,48 +444,48 @@ def tick(app):
 
         x, z = newX, newZ
 
-        x *= app.playerWalkSpeed 
-        z *= app.playerWalkSpeed
+        x *= player.walkSpeed 
+        z *= player.walkSpeed
 
     xVel = x
     zVel = z
 
-    minY = round((app.cameraPos[1] - app.playerHeight + 0.1))
+    minY = round((app.cameraPos[1] - player.height + 0.1))
     maxY = round((app.cameraPos[1]))
 
     app.cameraPos[0] += xVel
 
     for y in range(minY, maxY):
-        for z in [app.cameraPos[2] - app.playerRadius * 0.99, app.cameraPos[2] + app.playerRadius * 0.99]:
+        for z in [app.cameraPos[2] - player.radius * 0.99, app.cameraPos[2] + player.radius * 0.99]:
             x = app.cameraPos[0]
 
-            hiXBlockCoord = round((x + app.playerRadius))
-            loXBlockCoord = round((x - app.playerRadius))
+            hiXBlockCoord = round((x + player.radius))
+            loXBlockCoord = round((x - player.radius))
 
             if coordsOccupied(app, BlockPos(hiXBlockCoord, y, round(z))):
                 # Collision on the right, so move to the left
                 xEdge = (hiXBlockCoord - 0.5)
-                app.cameraPos[0] = xEdge - app.playerRadius
+                app.cameraPos[0] = xEdge - player.radius
             elif coordsOccupied(app, BlockPos(loXBlockCoord, y, round(z))):
                 # Collision on the left, so move to the right
                 xEdge = (loXBlockCoord + 0.5)
-                app.cameraPos[0] = xEdge + app.playerRadius
+                app.cameraPos[0] = xEdge + player.radius
     
     app.cameraPos[2] += zVel
 
     for y in range(minY, maxY):
-        for x in [app.cameraPos[0] - app.playerRadius * 0.99, app.cameraPos[0] + app.playerRadius * 0.99]:
+        for x in [app.cameraPos[0] - player.radius * 0.99, app.cameraPos[0] + player.radius * 0.99]:
             z = app.cameraPos[2]
 
-            hiZBlockCoord = round((z + app.playerRadius))
-            loZBlockCoord = round((z - app.playerRadius))
+            hiZBlockCoord = round((z + player.radius))
+            loZBlockCoord = round((z - player.radius))
 
             if coordsOccupied(app, BlockPos(round(x), y, hiZBlockCoord)):
                 zEdge = (hiZBlockCoord - 0.5)
-                app.cameraPos[2] = zEdge - app.playerRadius
+                app.cameraPos[2] = zEdge - player.radius
             elif coordsOccupied(app, BlockPos(round(x), y, loZBlockCoord)):
                 zEdge = (loZBlockCoord + 0.5)
-                app.cameraPos[2] = zEdge + app.playerRadius
+                app.cameraPos[2] = zEdge + player.radius
     
     endTime = time.time()
     app.tickTimes[app.tickTimeIdx] = (endTime - startTime)
@@ -634,12 +638,14 @@ def addBlock(app, blockPos: BlockPos, id: BlockId):
     setBlock(app, blockPos, id)
 
 def hasBlockBeneath(app):
+    player = app.mode.player
+
     [xPos, yPos, zPos] = app.cameraPos
-    yPos -= app.playerHeight
+    yPos -= player.height
     yPos -= 0.1
 
-    for x in [xPos - app.playerRadius * 0.99, xPos + app.playerRadius * 0.99]:
-        for z in [zPos - app.playerRadius * 0.99, zPos + app.playerRadius * 0.99]:
+    for x in [xPos - player.radius * 0.99, xPos + player.radius * 0.99]:
+        for z in [zPos - player.radius * 0.99, zPos + player.radius * 0.99]:
             feetPos = nearestBlockPos(x, yPos, z)
             if coordsOccupied(app, feetPos):
                 return True
@@ -724,7 +730,7 @@ def lookedAtBlock(app) -> Optional[Tuple[BlockPos, str]]:
             lastMaxVal = tMaxZ
             tMaxZ += tDeltaZ
         
-        if lastMaxVal > app.playerReach:
+        if lastMaxVal > app.mode.player.reach:
             break
     
     if blockPos is None:

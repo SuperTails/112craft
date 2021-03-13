@@ -6,7 +6,7 @@ from math import sin, cos
 from numpy import ndarray
 from typing import List, Tuple, Optional, Any
 from world import BlockPos, adjacentBlockPos
-from cmu_112_graphics import ImageTk
+from cmu_112_graphics import ImageTk # type: ignore
 from PIL import Image, ImageDraw
 
 # =========================================================================== #
@@ -526,20 +526,22 @@ def drawTextOutlined(canvas, x, y, **kwargs):
     canvas.create_text(x, y, fill='white', **kwargs)
 
 def drawHotbar(app, canvas):
+    player = app.mode.player
+
     texWidth = app.itemTextures['air'].width + 6
-    width = len(app.inventory) * texWidth
+    width = len(player.inventory) * texWidth
 
     leftX = app.width / 2 - width / 2
 
     margin = 10
 
-    for (i, (name, qty)) in enumerate(app.inventory):
+    for (i, slot) in enumerate(player.inventory):
         # Don't draw empty slots
-        if qty == 0: continue
+        if slot.isEmpty(): continue
 
-        tex = app.itemTextures[name]
+        tex = app.itemTextures[slot.item]
 
-        if app.hotbarIdx == i:
+        if player.hotbarIdx == i:
             canvas.create_rectangle(leftX + (i - 0.5) * texWidth,
                 app.height - margin - texWidth,
                 leftX + (i + 0.5) * texWidth,
@@ -548,12 +550,14 @@ def drawHotbar(app, canvas):
         image = getCachedImage(tex)
         canvas.create_image(leftX + i * texWidth, app.height - margin - 3, image=image, anchor='s')
 
-        if qty > 0:
+        # Slots that are infinite just don't have a number displayed
+        if not slot.isInfinite():
             cornerX = leftX + i * texWidth + 0.3 * texWidth
             cornerY = app.height - margin - 3 - 0.1 * texWidth
 
-            canvas.create_text(cornerX + 1, cornerY + 1, text=str(qty), font='Arial 12 bold', fill='black')
-            canvas.create_text(cornerX, cornerY, text=str(qty), font='Arial 12 bold', fill='white')
+            qty = slot.amount
+
+            drawTextOutlined(canvas, cornerX, cornerY, text=str(qty), font='Arial 12 bold')
 
 def drawHud(app, canvas, startTime):
     # Indicates the center of the screen
@@ -607,25 +611,30 @@ def redrawAll(app, canvas, doDrawHud=True):
 
     if doDrawHud: drawHud(app, canvas, startTime)
 
-def drawItemFromBlock(size: int, textures: List[Color]) -> Image:
+def drawItemFromBlock(size: int, textures: List[Color]) -> Image.Image:
+    from typing import cast
+
     sz = size
 
     im = Image.new('RGBA', (sz, sz))
-    draw = ImageDraw.Draw(im)
 
-    midX = (sz - 1) / 2
+    # This cast does nothing but suppress a boatload of 
+    # false-positive type errors from Pylance. 
+    draw = cast(ImageDraw.ImageDraw, ImageDraw.Draw(im))
+
+    midX = int((sz - 1) / 2)
 
     partH = sz / 5
 
     fill = '#000'
 
-    bottomLeft = (0, partH * 4)
+    bottomLeft = (0, int(partH * 4))
     bottomMiddle = (midX, sz - 1)
-    bottomRight = (sz - 1, partH * 4)
+    bottomRight = (sz - 1, int(partH * 4))
 
-    centerLeft = (0, partH)
-    centerMiddle = (midX, partH * 2)
-    centerRight = (sz - 1, partH)
+    centerLeft = (0, int(partH))
+    centerMiddle = (midX, int(partH * 2))
+    centerRight = (sz - 1, int(partH))
 
     top = (midX, 0)
 
