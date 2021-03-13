@@ -440,19 +440,28 @@ def renderInstances(app, canvas):
 # Straight down: 40ms
 # Forward: 35ms
 
-def drawToFaces(app):
-    pitch = app.cameraPitch
-    yaw = app.cameraYaw 
-
+def makeBlockChecker(app, pitch, yaw):
     lookX = cos(pitch)*sin(-yaw)
     lookY = sin(pitch)
     lookZ = cos(pitch)*cos(-yaw)
 
     [camX, camY, camZ] = app.cameraPos
 
-    look = np.array([lookX, lookY, lookZ], dtype=float)
+    camX -= lookX
+    camY -= lookY
+    camZ -= lookZ
 
-    offsetLook = lookX * camX + lookY * camY + lookZ * camZ
+    def wrapper(app, blockPos):
+        return blockPosIsVisible2(app, camX, camY, camZ, lookX, lookY, lookZ, blockPos)
+    
+    return wrapper
+
+def drawToFaces(app):
+    check1 = makeBlockChecker(app, app.cameraPitch, app.cameraYaw)
+    check2 = makeBlockChecker(app, app.cameraPitch, app.cameraYaw + (app.horizFov / 2))
+    check3 = makeBlockChecker(app, app.cameraPitch, app.cameraYaw - (app.horizFov / 2))
+    check4 = makeBlockChecker(app, app.cameraPitch - (app.vertFov / 2), app.cameraYaw)
+    check5 = makeBlockChecker(app, app.cameraPitch + (app.vertFov / 2), app.cameraYaw)
 
     toCamMat = wsToCamMat(app.cameraPos, app.cameraYaw, app.cameraPitch)
     faces = []
@@ -467,14 +476,17 @@ def drawToFaces(app):
                         wy = chunk.pos[1] * 16 + (i // 16) % 16
                         wz = chunk.pos[2] * 16 + (i % 16)
                         blockPos = BlockPos(wx, wy, wz)
-                        #if blockPosIsVisible(app, blockPos):
-                        if blockPosIsVisible2(app, camX, camY, camZ, lookX, lookY, lookZ, blockPos):
-                            #(x, y, z) = blockPos
-                            wx -= app.cameraPos[0]
-                            wy -= app.cameraPos[1]
-                            wz -= app.cameraPos[2]
-                            if wx**2 + wy**2 + wz**2 <= app.renderDistanceSq:
-                                faces += cullInstance(app, toCamMat, inst, blockPos)
+                        # View frustrum culling
+                        #if not check1(app, blockPos): continue
+                        if not check2(app, blockPos): continue
+                        if not check3(app, blockPos): continue
+                        if not check4(app, blockPos): continue
+                        if not check5(app, blockPos): continue
+                        wx -= app.cameraPos[0]
+                        wy -= app.cameraPos[1]
+                        wz -= app.cameraPos[2]
+                        if wx**2 + wy**2 + wz**2 <= app.renderDistanceSq:
+                            faces += cullInstance(app, toCamMat, inst, blockPos)
     return faces
 
 def drawToCanvas(app, canvas, faces):
