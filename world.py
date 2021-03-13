@@ -85,7 +85,7 @@ class Chunk:
     def __init__(self, pos: ChunkPos):
         self.pos = pos
 
-    def generate(self, app):
+    def generate(self, app, seed):
         # x and y and z
         self.blocks = np.full((16, 16, 16), 'air', dtype=object)
         self.lightLevels = np.full((16, 16, 16), 7)
@@ -98,8 +98,7 @@ class Chunk:
             for zIdx in range(0, 16):
                 globalPos = self._globalBlockPos(BlockPos(xIdx, 0, zIdx))
 
-                # FIXME: Use a seed
-                noise = perlin.getPerlinFractal(globalPos.x, globalPos.z, 1.0 / 256.0, 4)
+                noise = perlin.getPerlinFractal(globalPos.x, globalPos.z, 1.0 / 256.0, 4, seed)
 
                 if noise < minVal: minVal = noise
                 if noise > maxVal: maxVal = noise
@@ -115,9 +114,8 @@ class Chunk:
 
         self.worldgenStage = WorldgenStage.GENERATED
     
-    def populate(self, app):
-        # FIXME: Use a seed
-        random.seed(hash(self.pos))
+    def populate(self, app, seed):
+        random.seed(hash((self.pos, seed)))
 
         treePos = []
 
@@ -340,7 +338,7 @@ def unloadChunk(app, pos: ChunkPos):
 def loadChunk(app, pos: ChunkPos):
     print(f"Loading chunk at {pos}")
     app.chunks[pos] = Chunk(pos)
-    app.chunks[pos].generate(app)
+    app.chunks[pos].generate(app, app.worldSeed)
 
 def loadUnloadChunks(app, centerPos):
     (chunkPos, _) = toChunkLocal(nearestBlockPos(centerPos[0], centerPos[1], centerPos[2]))
@@ -391,7 +389,7 @@ def tickChunks(app):
         chunk = app.chunks[chunkPos]
         (adj, gen, pop, com) = countLoadedAdjacentChunks(app, chunkPos, 1)
         if chunk.worldgenStage == WorldgenStage.GENERATED and gen == 8:
-            chunk.populate(app)
+            chunk.populate(app, app.worldSeed)
         if chunk.worldgenStage == WorldgenStage.POPULATED and gen == 8:
             chunk.lightAndOptimize(app)
 

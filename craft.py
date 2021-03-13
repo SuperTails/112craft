@@ -58,11 +58,14 @@ class StartupMode(Mode):
 
         app.timerDelay = 10
 
+        # TODO: Fix
+        app.worldSeed = 40
+
         app.chunks = {
             ChunkPos(0, 0, 0): Chunk(ChunkPos(0, 0, 0))
         }
 
-        app.chunks[ChunkPos(0, 0, 0)].generate(app)
+        app.chunks[ChunkPos(0, 0, 0)].generate(app, app.worldSeed)
     
     def timerFired(self, app):
         if self.loadStage < 20:
@@ -125,11 +128,13 @@ class TitleMode(Mode):
         self.buttons.draw(app, canvas)
     
 def setMouseCapture(app, value: bool) -> None:
+    """If True, locks the mouse to the center of the window and hides it.
+    
+    This is True when playing the game normally, and False
+    in menus and GUIs.
+    """
+
     app.captureMouse = value
-    if app.captureMouse:
-        app._theRoot.config(cursor="none")
-    else:
-        app._theRoot.config(cursor="")
 
 
 class PlayingMode(Mode):
@@ -254,7 +259,7 @@ def appStarted(app):
 
     app.cameraYaw = 0
     app.cameraPitch = 0
-    app.cameraPos = [4.0, 9.5, 4.0]
+    app.cameraPos = [2.0, 9.5, 4.0]
 
     # -------------------
     # Rendering Variables
@@ -263,7 +268,7 @@ def appStarted(app):
     app.vpWidth = 3.0 / 4.0
     app.vpHeight = app.vpWidth * app.height / app.width 
     app.wireframe = False
-    app.renderDistanceSq = 6**2
+    app.renderDistanceSq = 7**2
 
     app.horizFov = math.atan(app.vpWidth / app.vpDist)
     app.vertFov = math.atan(app.vpHeight / app.vpDist)
@@ -426,6 +431,11 @@ def mouseMovedOrDragged(app, event):
 
 
 def redrawAll(app, canvas):
+    if app.captureMouse:
+        canvas.configure(cursor='none')
+    else:
+        canvas.configure(cursor='arrow')
+
     app.mode.redrawAll(app, canvas)
 
 

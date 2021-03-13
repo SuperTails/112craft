@@ -1,6 +1,6 @@
-from cmu_112_graphics import *
 from typing import Callable, List, Optional
 from render import getCachedImage
+from cmu_112_graphics import Image
 import math
 
 def createSizedBackground(app, width: int, height: int):
@@ -26,10 +26,10 @@ class Button:
     width: int
     height: int
 
-    background: Image
+    background: Image.Image
     text: str
 
-    def __init__(self, x: int, y: int, background, text, anchor='c'):
+    def __init__(self, x: int, y: int, background: Image.Image, text: str, anchor='c'):
         if anchor == 'c':
             (width, height) = background.size
 

@@ -581,9 +581,9 @@ def drawHud(app, canvas, startTime):
 
     drawTextOutlined(canvas, 10, 10, text=f'Frame Time: {frameTime:.2f}ms', anchor='nw')
 
-    chunkX = int(app.cameraPos[0] / 16)
-    chunkY = int(app.cameraPos[1] / 16)
-    chunkZ = int(app.cameraPos[2] / 16)
+    chunkX = math.floor(app.cameraPos[0] / 16)
+    chunkY = math.floor(app.cameraPos[1] / 16)
+    chunkZ = math.floor(app.cameraPos[2] / 16)
 
     drawTextOutlined(canvas, 10, 55, text=f'Chunk coords: {chunkX}, {chunkY}, {chunkZ}', anchor='nw')
 

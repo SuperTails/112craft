@@ -1,6 +1,6 @@
 import random, math
 
-def getPerlinVectors(x, y, width):
+def getPerlinVectors(x, y, width, seed):
     # Vectors from https://mrl.cs.nyu.edu/~perlin/paper445.pdf 
 
     gridX = math.floor(x / width)
@@ -9,7 +9,7 @@ def getPerlinVectors(x, y, width):
     vectors = [(1,1,0),(-1,1,0),(1,-1,0),(-1,-1,0),(1,0,1),(-1,0,1),(1,0,-1),
                (-1,0,-1),(0,1,1),(0,-1,1),(0,1,-1),(0,-1,-1)]
     
-    combine = lambda gx, gy: gx * 10_0000 + gy
+    combine = lambda gx, gy: hash((gx, gy, seed))
 
     random.seed(combine(gridX, gridY))
     vtl = random.choice(vectors)
@@ -25,11 +25,11 @@ def getPerlinVectors(x, y, width):
 
     return (vtl, vtr, vbl, vbr)
 
-def getPerlinValue(x, y, width):
+def getPerlinValue(x, y, width, seed):
     # Using explanations from https://adrianb.io/2014/08/09/perlinnoise.html
     # (it's all written in heavily-optimized C so no code was used)
 
-    (vtl, vtr, vbl, vbr) = getPerlinVectors(x, y, width)
+    (vtl, vtr, vbl, vbr) = getPerlinVectors(x, y, width, seed)
 
     gridX = math.floor(x / width)
     gridY = math.floor(y / width)
@@ -60,7 +60,7 @@ def timerFired(app):
 
 # This returns stuff *probably* in the range -0.5 to 0.5.
 # No promises.
-def getPerlinFractal(x, y, baseFreq, octaves):
+def getPerlinFractal(x, y, baseFreq: float, octaves: int, seed):
     freq = baseFreq
     total = 0.0
     totalscale = 0.0
@@ -69,7 +69,7 @@ def getPerlinFractal(x, y, baseFreq, octaves):
         freq *= 2
         amplitude = 0.5**i
 
-        total += amplitude * getPerlinValue(x, y, 1.0 / freq)
+        total += amplitude * getPerlinValue(x, y, 1.0 / freq, seed)
         totalscale += amplitude
     
     return total / totalscale
