@@ -21,11 +21,6 @@ from enum import Enum
 # I've incorporated Minecraft into every year of my education so far,
 # and I don't plan to stop any time soon.
 
-class GameState(Enum):
-    STARTUP = 1,
-    TITLE = 2,
-    PLAYING = 3,
-
 def createSizedBackground(app, width: int, height: int):
     cobble = app.loadImage('assets/CobbleBackground.png')
     cobble = app.scaleImage(cobble, 2)
@@ -103,7 +98,8 @@ class TitleMode(Mode):
         self.titleText = app.scaleImage(self.titleText, 3)
 
         # FIXME: This does not work with resizing!
-        self.buttons.addButton('playSurvival', Button(app.width / 2, app.height / 2, background=app.btnBg, text="Play Survival")) # type: ignore
+        self.buttons.addButton('playSurvival', Button(app.width / 2, app.height * 0.4, background=app.btnBg, text="Play Survival")) # type: ignore
+        self.buttons.addButton('playCreative', Button(app.width / 2, app.height * 0.55, background=app.btnBg, text="Play Creative")) # type: ignore
 
     def timerFired(self, app):
         app.cameraYaw += 0.01
@@ -116,7 +112,9 @@ class TitleMode(Mode):
         if btn is not None:
             print(f"Pressed {btn}")
             if btn == 'playSurvival':
-                app.mode = PlayingMode(app)
+                app.mode = PlayingMode(app, False)
+            elif btn == 'playCreative':
+                app.mode = PlayingMode(app, True)
 
     def redrawAll(self, app, canvas):
         render.redrawAll(app, canvas, doDrawHud=False)
@@ -134,9 +132,18 @@ def setMouseCapture(app, value: bool) -> None:
 
 
 class PlayingMode(Mode):
-    def __init__(self, app):
+    def __init__(self, app, creative: bool):
         app.timerDelay = 30
         setMouseCapture(app, True)
+
+        app.creative = creative
+        if app.creative:
+            app.inventory = [(name, -1) for name in app.itemTextures]
+            while len(app.inventory) < 9:
+                app.inventory.append(('', 0))
+        else:
+            app.inventory = [('', 0)] * 9
+            app.inventory[0] = ('air', -1)
 
     def redrawAll(self, app, canvas):
         render.redrawAll(app, canvas)
@@ -148,9 +155,18 @@ class PlayingMode(Mode):
         block = world.lookedAtBlock(app)
         if block is not None:
             (pos, face) = block
-            if app.selectedBlock == 'air':
+            if app.hotbarIdx == 0:
+                brokenName = world.getBlock(app, pos)
                 world.removeBlock(app, pos)
+
+                pickUpItem(app, brokenName)
             else:
+                (name, qty) = app.inventory[app.hotbarIdx]
+                if qty == 0: return
+                
+                if qty > 0:
+                    app.inventory[app.hotbarIdx] = (name, qty - 1)
+
                 [x, y, z] = pos
                 if face == 'left':
                     x -= 1
@@ -164,20 +180,14 @@ class PlayingMode(Mode):
                     z -= 1
                 elif face == 'front':
                     z += 1
-                
-                world.addBlock(app, world.BlockPos(x, y, z), app.selectedBlock)
+
+                world.addBlock(app, world.BlockPos(x, y, z), name)
     
     def keyPressed(self, app, event):
-        if event.key == '1':
-            app.selectedBlock = 'air'
-        elif event.key == '2':
-            app.selectedBlock = 'grass'
-        elif event.key == '3':
-            app.selectedBlock = 'stone'
-        elif event.key == '4':
-            app.selectedBlock = 'leaves'
-        elif event.key == '5':
-            app.selectedBlock = 'log'
+        if len(event.key) == 1 and event.key.isdigit():
+            idx = int(event.key)
+            if idx == 0: idx = 10
+            app.hotbarIdx = idx - 1
         elif event.key == 'w':
             app.w = True
         elif event.key == 's':
@@ -207,8 +217,6 @@ def appStarted(app):
 
     app.btnBg = createSizedBackground(app, 200, 40)
 
-    app.state = GameState.TITLE
-
     app.tickTimes = [0.0] * 10
     app.tickTimeIdx = 0
 
@@ -222,7 +230,9 @@ def appStarted(app):
     app.playerVel = [0.0, 0.0, 0.0]
     app.playerWalkSpeed = 0.2
     app.playerReach = 4.0
-    app.selectedBlock = 'air'
+    app.hotbarIdx = 0
+
+
     app.gravity = 0.10
 
     app.cameraYaw = 0
@@ -260,6 +270,25 @@ def appStarted(app):
     app.prevMouse = None
 
     setMouseCapture(app, False)
+
+def pickUpItem(app, newName):
+    # Prioritize adding it into an existing slot first
+    for (i, (name, qty)) in enumerate(app.inventory):
+        if qty < 0 and name == newName:
+            # It just stacks into an infinite slot
+            return
+        elif qty > 0 and name == newName:
+            app.inventory[i] = (name, qty + 1)
+            return
+
+    for (i, (_, qty)) in enumerate(app.inventory):
+        if qty == 0:
+            app.inventory[i] = (newName, 1)
+            return
+    
+    # TODO: Full inventory??
+    1 / 0
+    
 
 def loadResources(app):
     vertices = [

@@ -528,14 +528,19 @@ def drawTextOutlined(canvas, x, y, **kwargs):
 
 def drawHotbar(app, canvas):
     texWidth = app.itemTextures['air'].width + 6
-    width = len(app.itemTextures) * texWidth
+    width = len(app.inventory) * texWidth
 
     leftX = app.width / 2 - width / 2
 
     margin = 10
 
-    for (i, (name, tex)) in enumerate(app.itemTextures.items()):
-        if app.selectedBlock == name:
+    for (i, (name, qty)) in enumerate(app.inventory):
+        # Don't draw empty slots
+        if qty == 0: continue
+
+        tex = app.itemTextures[name]
+
+        if app.hotbarIdx == i:
             canvas.create_rectangle(leftX + (i - 0.5) * texWidth,
                 app.height - margin - texWidth,
                 leftX + (i + 0.5) * texWidth,
@@ -544,6 +549,12 @@ def drawHotbar(app, canvas):
         image = getCachedImage(tex)
         canvas.create_image(leftX + i * texWidth, app.height - margin - 3, image=image, anchor='s')
 
+        if qty > 0:
+            cornerX = leftX + i * texWidth + 0.3 * texWidth
+            cornerY = app.height - margin - 3 - 0.1 * texWidth
+
+            canvas.create_text(cornerX + 1, cornerY + 1, text=str(qty), font='Arial 12 bold', fill='black')
+            canvas.create_text(cornerX, cornerY, text=str(qty), font='Arial 12 bold', fill='white')
 
 def drawHud(app, canvas, startTime):
     # Indicates the center of the screen

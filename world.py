@@ -85,7 +85,7 @@ class Chunk:
 
     def generate(self, app):
         # x and y and z
-        self.blocks = np.full((16, 16, 16), 'air')
+        self.blocks = np.full((16, 16, 16), 'air', dtype=object)
         self.lightLevels = np.full((16, 16, 16), 7)
         self.instances = [None] * self.blocks.size
 
@@ -622,6 +622,10 @@ def updateLight(app, blockPos: BlockPos):
 
             if nextLight > existingLight:
                 heapq.heappush(queue, (-nextLight, nextPos))
+
+def getBlock(app, blockPos: BlockPos) -> str:
+    (chunkPos, localPos) = toChunkLocal(blockPos)
+    return app.chunks[chunkPos].blocks[localPos.x, localPos.y, localPos.z]
     
 def removeBlock(app, blockPos: BlockPos):
     setBlock(app, blockPos, 'air')
