@@ -38,28 +38,171 @@ def createSizedBackground(app, width: int, height: int):
 
     return newCobble
 
+class Mode:
+    finished: bool = False
+
+    def __init__(self): pass
+
+    def mousePressed(self, app, event): pass
+    def mouseReleased(self, app, event): pass
+    def timerFired(self, app): pass
+    def sizeChanged(self, app): pass
+    def redrawAll(self, app, canvas): pass
+
+class StartupMode(Mode):
+    loadStage: int = 0
+
+    def __init__(self, app):
+        loadResources(app)
+
+        app.timerDelay = 10
+
+        app.chunks = {
+            ChunkPos(0, 0, 0): Chunk(ChunkPos(0, 0, 0))
+        }
+
+        app.chunks[ChunkPos(0, 0, 0)].generate(app)
+    
+    def timerFired(self, app):
+        if self.loadStage < 20:
+            world.loadUnloadChunks(app, [0.0, 0.0, 0.0])
+        elif self.loadStage < 30:
+            world.tickChunks(app)
+        else:
+            app.mode = TitleMode(app)
+            
+        self.loadStage += 1
+    
+    def redrawAll(self, app, canvas):
+        leftX = app.width * 0.25
+        rightX = app.width * 0.75
+
+        height = 20
+
+        canvas.create_rectangle(leftX, app.height / 2 - height, rightX, app.height / 2 + height)
+
+        progress = self.loadStage / 30.0
+
+        midX = leftX + (rightX - leftX) * progress
+
+        canvas.create_rectangle(leftX, app.height / 2 - height, midX, app.height / 2 + height, fill='red')
+
+class TitleMode(Mode):
+    buttons: ButtonManager
+    titleText: Image
+
+    def __init__(self, app):
+        self.buttons = ButtonManager()
+
+        self.titleText = app.loadImage('assets/TitleText.png')
+        self.titleText = app.scaleImage(self.titleText, 3)
+
+        # FIXME: This does not work with resizing!
+        self.buttons.addButton('playSurvival', Button(app.width / 2, app.height / 2, background=app.btnBg, text="Play Survival")) # type: ignore
+
+    def timerFired(self, app):
+        app.cameraYaw += 0.01
+
+    def mousePressed(self, app, event):
+        self.buttons.onPress(event.x, event.y)
+    
+    def mouseReleased(self, app, event):
+        btn = self.buttons.onRelease(event.x, event.y)
+        if btn is not None:
+            print(f"Pressed {btn}")
+            if btn == 'playSurvival':
+                app.mode = PlayingMode(app)
+
+    def redrawAll(self, app, canvas):
+        render.redrawAll(app, canvas)
+
+        canvas.create_image(app.width / 2, 50, image=getCachedImage(self.titleText))
+        
+        self.buttons.draw(app, canvas)
+    
+def setMouseCapture(app, value: bool) -> None:
+    app.captureMouse = value
+    if app.captureMouse:
+        app._theRoot.config(cursor="none")
+    else:
+        app._theRoot.config(cursor="")
+
+
+class PlayingMode(Mode):
+    def __init__(self, app):
+        app.timerDelay = 30
+        setMouseCapture(app, True)
+
+    def redrawAll(self, app, canvas):
+        render.redrawAll(app, canvas)
+    
+    def timerFired(self, app):
+        world.tick(app)
+
+    def mousePressed(self, app, event):
+        block = world.lookedAtBlock(app)
+        if block is not None:
+            (pos, face) = block
+            if app.selectedBlock == 'air':
+                world.removeBlock(app, pos)
+            else:
+                [x, y, z] = pos
+                if face == 'left':
+                    x -= 1
+                elif face == 'right':
+                    x += 1
+                elif face == 'bottom':
+                    y -= 1
+                elif face == 'top':
+                    y += 1
+                elif face == 'back':
+                    z -= 1
+                elif face == 'front':
+                    z += 1
+                
+                world.addBlock(app, world.BlockPos(x, y, z), app.selectedBlock)
+    
+    def keyPressed(self, app, event):
+        if event.key == '1':
+            app.selectedBlock = 'air'
+        elif event.key == '2':
+            app.selectedBlock = 'grass'
+        elif event.key == '3':
+            app.selectedBlock = 'stone'
+        elif event.key == '4':
+            app.selectedBlock = 'leaves'
+        elif event.key == '5':
+            app.selectedBlock = 'log'
+        elif event.key == 'w':
+            app.w = True
+        elif event.key == 's':
+            app.s = True
+        elif event.key == 'a':
+            app.a = True
+        elif event.key == 'd':
+            app.d = True
+        elif event.key == 'Space' and app.playerOnGround:
+            app.playerVel[1] = 0.35
+        elif event.key == 'Escape':
+            setMouseCapture(app, not app.captureMouse)
+
+    def keyReleased(self, app, event):
+        if event.key == 'w':
+            app.w = False
+        elif event.key == 's':
+            app.s = False 
+        elif event.key == 'a':
+            app.a = False
+        elif event.key == 'd':
+            app.d = False
 
 # Initializes all the data needed to run 112craft
 def appStarted(app):
-    loadResources(app)
-
-    app.titleText = app.loadImage('assets/TitleText.png')
-    app.titleText = app.scaleImage(app.titleText, 3)
+    app.mode = StartupMode(app)
 
     app.btnBg = createSizedBackground(app, 200, 40)
 
     app.state = GameState.TITLE
-
-    # ---------------
-    # World variables
-    # ---------------
-    app.chunks = {
-        ChunkPos(0, 0, 0): Chunk(ChunkPos(0, 0, 0))
-    }
-
-    app.chunks[ChunkPos(0, 0, 0)].generate(app)
-
-    app.timerDelay = 30
 
     app.tickTimes = [0.0] * 10
     app.tickTimeIdx = 0
@@ -99,7 +242,6 @@ def appStarted(app):
     app.csToCanvasMat = render.csToCanvasMat(app.vpDist, app.vpWidth,
                         app.vpHeight, app.width, app.height)
 
-
     # ---------------
     # Input Variables
     # ---------------
@@ -112,12 +254,7 @@ def appStarted(app):
 
     app.prevMouse = None
 
-    app.captureMouse = False
-
-    app.buttons = ButtonManager()
-
-    # FIXME: This does not work with resizing!
-    app.buttons.addButton('playSurvival', Button(app.width / 2, app.height / 2, background=app.btnBg, text="Play Survival")) # type: ignore
+    setMouseCapture(app, False)
 
 def loadResources(app):
     vertices = [
@@ -197,42 +334,24 @@ def loadResources(app):
 
     app.cube = render.Model(vertices, faces)
 
+def keyPressed(app, event):
+    app.mode.keyPressed(app, event)
+
+def keyReleased(app, event):
+    app.mode.keyReleased(app, event)
+
+def mousePressed(app, event):
+    app.mode.mousePressed(app, event)
+
+def mouseReleased(app, event):
+    app.mode.mouseReleased(app, event)
+
+def timerFired(app):
+    app.mode.timerFired(app)
+
 def sizeChanged(app):
     app.csToCanvasMat = render.csToCanvasMat(app.vpDist, app.vpWidth, app.vpHeight,
                         app.width, app.height)
-
-def mousePressed(app, event):
-    app.buttons.onPress(event.x, event.y)
-
-    block = world.lookedAtBlock(app)
-    if block is not None:
-        (pos, face) = block
-        if app.selectedBlock == 'air':
-            world.removeBlock(app, pos)
-        else:
-            [x, y, z] = pos
-            if face == 'left':
-                x -= 1
-            elif face == 'right':
-                x += 1
-            elif face == 'bottom':
-                y -= 1
-            elif face == 'top':
-                y += 1
-            elif face == 'back':
-                z -= 1
-            elif face == 'front':
-                z += 1
-            
-            world.addBlock(app, world.BlockPos(x, y, z), app.selectedBlock)
-
-def mouseReleased(app, event):
-    btn = app.buttons.onRelease(event.x, event.y)
-    if btn is not None:
-        print(f"Pressed {btn}")
-        if btn == 'playSurvival':
-            app.state = GameState.PLAYING
-            app.buttons.buttons = {}
 
 def mouseDragged(app, event):
     mouseMovedOrDragged(app, event)
@@ -263,56 +382,6 @@ def mouseMovedOrDragged(app, event):
         app._theRoot.event_generate('<Motion>', warp=True, x=x, y=y)
         app.prevMouse = (x, y)
 
-def timerFired(app):
-    if app.state == GameState.TITLE:
-        app.cameraYaw += 0.01
-
-    world.tick(app)
-
-def keyPressed(app, event):
-    if app.state == GameState.TITLE: return
-
-    if event.key == '1':
-        app.selectedBlock = 'air'
-    elif event.key == '2':
-        app.selectedBlock = 'grass'
-    elif event.key == '3':
-        app.selectedBlock = 'stone'
-    elif event.key == '4':
-        app.selectedBlock = 'leaves'
-    elif event.key == '5':
-        app.selectedBlock = 'log'
-    elif event.key == 'w':
-        app.w = True
-    elif event.key == 's':
-        app.s = True
-    elif event.key == 'a':
-        app.a = True
-    elif event.key == 'd':
-        app.d = True
-    elif event.key == 'Space' and app.playerOnGround:
-        app.playerVel[1] = 0.35
-    elif event.key == 'Escape':
-        app.captureMouse = not app.captureMouse
-        if app.captureMouse:
-            app._theRoot.config(cursor="none")
-        else:
-            app._theRoot.config(cursor="")
-
-def keyReleased(app, event):
-    if event.key == 'w':
-        app.w = False
-    elif event.key == 's':
-        app.s = False 
-    elif event.key == 'a':
-        app.a = False
-    elif event.key == 'd':
-        app.d = False
-
-def onPlayClicked(app):
-    print("foobar")
-    app.state = GameState.PLAYING
-
 def getCachedImage(image):
 # From:
 # https://www.kosbie.net/cmu/fall-19/15-112/notes/notes-animations-part2.html
@@ -321,12 +390,8 @@ def getCachedImage(image):
     return image.cachedPhotoImage
 
 def redrawAll(app, canvas):
-    render.redrawAll(app, canvas)
+    app.mode.redrawAll(app, canvas)
 
-    if app.state == GameState.TITLE:
-        canvas.create_image(app.width / 2, 50, image=getCachedImage(app.titleText))
-    
-    app.buttons.draw(app, canvas)
 
 # =========================================================================== #
 # ------------------------- IDK WHAT TO NAME THIS --------------------------- #

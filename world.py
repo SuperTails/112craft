@@ -340,8 +340,8 @@ def loadChunk(app, pos: ChunkPos):
     app.chunks[pos] = Chunk(pos)
     app.chunks[pos].generate(app)
 
-def loadUnloadChunks(app):
-    (chunkPos, _) = toChunkLocal(nearestBlockPos(app.cameraPos[0], app.cameraPos[1], app.cameraPos[2]))
+def loadUnloadChunks(app, centerPos):
+    (chunkPos, _) = toChunkLocal(nearestBlockPos(centerPos[0], centerPos[1], centerPos[2]))
     (x, _, z) = chunkPos
 
     # Unload chunks
@@ -399,7 +399,7 @@ def tickChunks(app):
 def tick(app):
     startTime = time.time()
 
-    loadUnloadChunks(app)
+    loadUnloadChunks(app, app.cameraPos)
 
     tickChunks(app)
 
