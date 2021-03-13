@@ -372,13 +372,12 @@ def cullInstance(app, toCamMat: ndarray, inst: Instance, blockPos: Optional[Bloc
             g *= brightness
             b *= brightness
 
-            '''
-            avg = (r + g + b) / 3.0
-            desaturation = min(vertices[face[0]][2] / 8.0, 1.0)**2
-            r += (0.0 - r) * desaturation
-            g += (128.0 - g) * desaturation
-            b += (255.0 - b) * desaturation
-            '''
+            if blockPos == app.breakingBlockPos and app.breakingBlock != 0.0:
+                avg = (r + g + b) / 3.0
+                desaturation = app.breakingBlock
+                r += (avg - r) * desaturation
+                g += (avg - g) * desaturation
+                b += (avg - b) * desaturation
 
             r = max(0.0, min(255.0, r))
             g = max(0.0, min(255.0, g))

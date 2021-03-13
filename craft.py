@@ -132,6 +132,9 @@ def setMouseCapture(app, value: bool) -> None:
 
 
 class PlayingMode(Mode):
+    lookedAtBlock = world.BlockPos(0, 0, 0)
+    mouseHeld: bool = False
+
     def __init__(self, app, creative: bool):
         app.timerDelay = 30
         setMouseCapture(app, True)
@@ -149,17 +152,40 @@ class PlayingMode(Mode):
         render.redrawAll(app, canvas)
     
     def timerFired(self, app):
+        self.lookedAtBlock = world.lookedAtBlock(app)
+        
+        if self.mouseHeld and app.hotbarIdx == 0 and self.lookedAtBlock is not None:
+            pos = self.lookedAtBlock[0]
+            if app.creative:
+                app.breakingBlockPos = pos
+                app.breakingBlock = 1.0
+            else:
+                if app.breakingBlockPos == pos: 
+                    app.breakingBlock += 0.1
+                else:
+                    app.breakingBlockPos = pos
+                    app.breakingBlock = 0.0
+            
+            if app.breakingBlock > 1.0:
+                app.breakingBlock = 1.0
+            
+            if app.breakingBlock == 1.0:
+                brokenName = world.getBlock(app, pos)
+                world.removeBlock(app, pos)
+                pickUpItem(app, brokenName)
+        else:
+            app.breakingBlock = 0.0
+
         world.tick(app)
 
     def mousePressed(self, app, event):
+        self.mouseHeld = True
+
         block = world.lookedAtBlock(app)
         if block is not None:
             (pos, face) = block
             if app.hotbarIdx == 0:
-                brokenName = world.getBlock(app, pos)
-                world.removeBlock(app, pos)
-
-                pickUpItem(app, brokenName)
+                pass
             else:
                 (name, qty) = app.inventory[app.hotbarIdx]
                 if qty == 0: return
@@ -182,6 +208,9 @@ class PlayingMode(Mode):
                     z += 1
 
                 world.addBlock(app, world.BlockPos(x, y, z), name)
+    
+    def mouseReleased(self, app, event):
+        self.mouseHeld = False
     
     def keyPressed(self, app, event):
         if len(event.key) == 1 and event.key.isdigit():
@@ -231,6 +260,9 @@ def appStarted(app):
     app.playerWalkSpeed = 0.2
     app.playerReach = 4.0
     app.hotbarIdx = 0
+
+    app.breakingBlock = 1.0
+    app.breakingBlockPos = world.BlockPos(0, 0, 0)
 
 
     app.gravity = 0.10
