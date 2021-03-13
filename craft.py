@@ -3,7 +3,7 @@ import numpy as np
 import math
 import render
 import world
-import time
+from button import Button, ButtonManager
 from world import Chunk, ChunkPos
 from typing import List
 from enum import Enum
@@ -46,9 +46,9 @@ def appStarted(app):
     app.titleText = app.loadImage('assets/TitleText.png')
     app.titleText = app.scaleImage(app.titleText, 3)
 
-    app.btnBg = createSizedBackground(app, 200, 50)
+    app.btnBg = createSizedBackground(app, 200, 40)
 
-    app.state = GameState.PLAYING
+    app.state = GameState.TITLE
 
     # ---------------
     # World variables
@@ -114,6 +114,10 @@ def appStarted(app):
 
     app.captureMouse = False
 
+    app.buttons = ButtonManager()
+
+    # FIXME: This does not work with resizing!
+    app.buttons.addButton('playSurvival', Button(app.width / 2, app.height / 2, background=app.btnBg, text="Play Survival")) # type: ignore
 
 def loadResources(app):
     vertices = [
@@ -198,6 +202,8 @@ def sizeChanged(app):
                         app.width, app.height)
 
 def mousePressed(app, event):
+    app.buttons.onPress(event.x, event.y)
+
     block = world.lookedAtBlock(app)
     if block is not None:
         (pos, face) = block
@@ -219,6 +225,14 @@ def mousePressed(app, event):
                 z += 1
             
             world.addBlock(app, world.BlockPos(x, y, z), app.selectedBlock)
+
+def mouseReleased(app, event):
+    btn = app.buttons.onRelease(event.x, event.y)
+    if btn is not None:
+        print(f"Pressed {btn}")
+        if btn == 'playSurvival':
+            app.state = GameState.PLAYING
+            app.buttons.buttons = {}
 
 def mouseDragged(app, event):
     mouseMovedOrDragged(app, event)
@@ -295,13 +309,24 @@ def keyReleased(app, event):
     elif event.key == 'd':
         app.d = False
 
+def onPlayClicked(app):
+    print("foobar")
+    app.state = GameState.PLAYING
+
+def getCachedImage(image):
+# From:
+# https://www.kosbie.net/cmu/fall-19/15-112/notes/notes-animations-part2.html
+    if ('cachedPhotoImage' not in image.__dict__):
+        image.cachedPhotoImage = ImageTk.PhotoImage(image)
+    return image.cachedPhotoImage
+
 def redrawAll(app, canvas):
     render.redrawAll(app, canvas)
 
     if app.state == GameState.TITLE:
-        canvas.create_image(app.width / 2, 50, image=ImageTk.PhotoImage(app.titleText))
-
-        canvas.create_image(app.width / 2, app.height / 2, image=ImageTk.PhotoImage(app.btnBg))
+        canvas.create_image(app.width / 2, 50, image=getCachedImage(app.titleText))
+    
+    app.buttons.draw(app, canvas)
 
 # =========================================================================== #
 # ------------------------- IDK WHAT TO NAME THIS --------------------------- #
@@ -310,7 +335,7 @@ def redrawAll(app, canvas):
 # P'A = |PB| * |OA| / (|OB|) 
 
 def main():
-    runApp(width=600, height=400, mvcCheck=False)
+    runApp(width=600, height=400, mvcCheck=True)
 
 if __name__ == '__main__':
     main()
