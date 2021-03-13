@@ -1,13 +1,7 @@
 from cmu_112_graphics import *
 from typing import Callable, List, Optional
+from render import getCachedImage
 import math
-
-def getCachedImage(image):
-# From:
-# https://www.kosbie.net/cmu/fall-19/15-112/notes/notes-animations-part2.html
-    if ('cachedPhotoImage' not in image.__dict__):
-        image.cachedPhotoImage = ImageTk.PhotoImage(image)
-    return image.cachedPhotoImage
 
 def createSizedBackground(app, width: int, height: int):
     cobble = app.loadImage('assets/CobbleBackground.png')

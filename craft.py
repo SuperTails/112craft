@@ -1,4 +1,6 @@
 from cmu_112_graphics import *
+from PIL import ImageDraw
+from PIL.ImageDraw import Draw
 import numpy as np
 import math
 import render
@@ -6,6 +8,7 @@ import world
 from button import Button, ButtonManager
 from world import Chunk, ChunkPos
 from typing import List
+from render import getCachedImage
 from enum import Enum
 
 # =========================================================================== #
@@ -48,6 +51,8 @@ class Mode:
     def timerFired(self, app): pass
     def sizeChanged(self, app): pass
     def redrawAll(self, app, canvas): pass
+    def keyPressed(self, app, event): pass
+    def keyReleased(self, app, event): pass
 
 class StartupMode(Mode):
     loadStage: int = 0
@@ -114,7 +119,7 @@ class TitleMode(Mode):
                 app.mode = PlayingMode(app)
 
     def redrawAll(self, app, canvas):
-        render.redrawAll(app, canvas)
+        render.redrawAll(app, canvas, doDrawHud=False)
 
         canvas.create_image(app.width / 2, 50, image=getCachedImage(self.titleText))
         
@@ -334,6 +339,15 @@ def loadResources(app):
 
     app.cube = render.Model(vertices, faces)
 
+    app.itemTextures = {
+        'air': app.loadImage('assets/AirItem.png')
+    }
+
+    for (name, tex) in app.textures.items():
+        newTex = render.drawItemFromBlock(25, tex)
+        app.itemTextures[name] = newTex
+
+
 def keyPressed(app, event):
     app.mode.keyPressed(app, event)
 
@@ -382,22 +396,10 @@ def mouseMovedOrDragged(app, event):
         app._theRoot.event_generate('<Motion>', warp=True, x=x, y=y)
         app.prevMouse = (x, y)
 
-def getCachedImage(image):
-# From:
-# https://www.kosbie.net/cmu/fall-19/15-112/notes/notes-animations-part2.html
-    if ('cachedPhotoImage' not in image.__dict__):
-        image.cachedPhotoImage = ImageTk.PhotoImage(image)
-    return image.cachedPhotoImage
 
 def redrawAll(app, canvas):
     app.mode.redrawAll(app, canvas)
 
-
-# =========================================================================== #
-# ------------------------- IDK WHAT TO NAME THIS --------------------------- #
-# =========================================================================== #
-
-# P'A = |PB| * |OA| / (|OB|) 
 
 def main():
     runApp(width=600, height=400, mvcCheck=True)

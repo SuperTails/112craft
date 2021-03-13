@@ -6,6 +6,8 @@ from math import sin, cos
 from numpy import ndarray
 from typing import List, Tuple, Optional, Any
 from world import BlockPos, adjacentBlockPos
+from cmu_112_graphics import ImageTk
+from PIL import Image, ImageDraw
 
 # =========================================================================== #
 # ---------------------------- RENDERING ------------------------------------ #
@@ -524,29 +526,31 @@ def drawTextOutlined(canvas, x, y, **kwargs):
     canvas.create_text(x + 1, y + 1, fill='black', **kwargs)
     canvas.create_text(x, y, fill='white', **kwargs)
 
+def drawHotbar(app, canvas):
+    texWidth = app.itemTextures['air'].width + 6
+    width = len(app.itemTextures) * texWidth
 
-def redrawAll(app, canvas):
-    startTime = time.time()
-    
-    canvas.create_rectangle(0.0, 0.0, app.width, app.height, fill='#0080FF')
+    leftX = app.width / 2 - width / 2
 
-    renderInstances(app, canvas)
+    margin = 10
 
-    origin = wsToCanvas(app, np.array([[0.0], [0.0], [0.0]]))
-    xAxis = wsToCanvas(app, np.array([[1.0], [0.0], [0.0]]))
-    yAxis = wsToCanvas(app, np.array([[0.0], [1.0], [0.0]]))
-    zAxis = wsToCanvas(app, np.array([[0.0], [0.0], [1.0]]))
+    for (i, (name, tex)) in enumerate(app.itemTextures.items()):
+        if app.selectedBlock == name:
+            canvas.create_rectangle(leftX + (i - 0.5) * texWidth,
+                app.height - margin - texWidth,
+                leftX + (i + 0.5) * texWidth,
+                app.height - margin)
 
-    xpoint = wsToCamMat(app.cameraPos, app.cameraYaw, app.cameraPitch) @ toHomogenous(np.array([[1.0], [0.0], [0.0]]))
-    xpoint = toCartesian(xpoint)
-    # print(f"x point: {xpoint}")
+        image = getCachedImage(tex)
+        canvas.create_image(leftX + i * texWidth, app.height - margin - 3, image=image, anchor='s')
 
-    canvas.create_line(origin[0], origin[1], xAxis[0], xAxis[1], fill='red')
-    canvas.create_line(origin[0], origin[1], yAxis[0], yAxis[1], fill='green')
-    canvas.create_line(origin[0], origin[1], zAxis[0], zAxis[1], fill='blue')
 
+def drawHud(app, canvas, startTime):
+    # Indicates the center of the screen
     canvas.create_oval(app.width / 2 - 1, app.height / 2 - 1, 
         app.width / 2 + 1, app.height / 2 + 1)
+
+    drawHotbar(app, canvas)
 
     tickTime = sum(app.tickTimes) / len(app.tickTimes) * 1000.0
 
@@ -568,3 +572,86 @@ def redrawAll(app, canvas):
     chunkZ = int(app.cameraPos[2] / 16)
 
     drawTextOutlined(canvas, 10, 55, text=f'Chunk coords: {chunkX}, {chunkY}, {chunkZ}', anchor='nw')
+
+def redrawAll(app, canvas, doDrawHud=True):
+    startTime = time.time()
+    
+    # The sky
+    canvas.create_rectangle(0.0, 0.0, app.width, app.height, fill='#0080FF')
+
+    # The world
+    renderInstances(app, canvas)
+
+    #origin = wsToCanvas(app, np.array([[0.0], [0.0], [0.0]]))
+    #xAxis = wsToCanvas(app, np.array([[1.0], [0.0], [0.0]]))
+    #yAxis = wsToCanvas(app, np.array([[0.0], [1.0], [0.0]]))
+    #zAxis = wsToCanvas(app, np.array([[0.0], [0.0], [1.0]]))
+
+    #xpoint = wsToCamMat(app.cameraPos, app.cameraYaw, app.cameraPitch) @ toHomogenous(np.array([[1.0], [0.0], [0.0]]))
+    #xpoint = toCartesian(xpoint)
+    # print(f"x point: {xpoint}")
+
+    #canvas.create_line(origin[0], origin[1], xAxis[0], xAxis[1], fill='red')
+    #canvas.create_line(origin[0], origin[1], yAxis[0], yAxis[1], fill='green')
+    #canvas.create_line(origin[0], origin[1], zAxis[0], zAxis[1], fill='blue')
+
+    if doDrawHud: drawHud(app, canvas, startTime)
+
+def drawItemFromBlock(size: int, textures: List[Color]) -> Image:
+    sz = size
+
+    im = Image.new('RGBA', (sz, sz))
+    draw = ImageDraw.Draw(im)
+
+    midX = (sz - 1) / 2
+
+    partH = sz / 5
+
+    fill = '#000'
+
+    bottomLeft = (0, partH * 4)
+    bottomMiddle = (midX, sz - 1)
+    bottomRight = (sz - 1, partH * 4)
+
+    centerLeft = (0, partH)
+    centerMiddle = (midX, partH * 2)
+    centerRight = (sz - 1, partH)
+
+    top = (midX, 0)
+
+    # 2, 6, 10
+
+    color = textures[2]
+    draw.polygon([bottomMiddle, bottomLeft, centerLeft], fill=color)
+    color = textures[3]
+    draw.polygon([bottomMiddle, centerLeft, centerMiddle], fill=color)
+
+    color = textures[6]
+    draw.polygon([bottomMiddle, bottomRight, centerRight], fill=color)
+    color = textures[7]
+    draw.polygon([bottomMiddle, centerRight, centerMiddle], fill=color)
+
+    color = textures[10]
+    draw.polygon([centerMiddle, centerLeft, centerRight], fill=color)
+    color = textures[11]
+    draw.polygon([centerLeft, centerRight, top], fill=color)
+
+    draw.line([bottomMiddle, bottomLeft], fill=fill) # Bottom left
+    draw.line([bottomMiddle, bottomRight], fill=fill) # Bottom right
+    draw.line([bottomMiddle, centerMiddle], fill=fill) # Center vertical
+    draw.line([bottomLeft, centerLeft], fill=fill) # Left vertical
+    draw.line([bottomRight, centerRight], fill=fill) # Right vertical
+    draw.line([centerLeft, top], fill=fill) # Very top left
+    draw.line([centerRight, top], fill=fill) # Very top right
+    draw.line([centerMiddle, centerLeft], fill=fill) # Top left
+    draw.line([centerMiddle, centerRight], fill=fill) # Top right
+
+    return im
+
+def getCachedImage(image):
+# From:
+# https://www.kosbie.net/cmu/fall-19/15-112/notes/notes-animations-part2.html
+    if ('cachedPhotoImage' not in image.__dict__):
+        image.cachedPhotoImage = ImageTk.PhotoImage(image)
+    return image.cachedPhotoImage
+
