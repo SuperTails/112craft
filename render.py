@@ -56,7 +56,7 @@ class Instance:
         self.trans = trans
         self.texture = texture
 
-        self._worldSpaceVertices = list(map(toHomogenous, self.worldSpaceVerticesUncached()))
+        self._worldSpaceVertices = [toHomogenous(v) for v in self.worldSpaceVerticesUncached()]
         self.visibleFaces = [True] * len(model.faces)
 
     def worldSpaceVertices(self) -> List[ndarray]:
@@ -339,7 +339,7 @@ def clip(app, vertices: List[Any], face: Face) -> List[Face]:
 # Then, the faces are clipped, which may remove, modify, or split faces
 # Then a list of faces, their vertices, and their colors are returned
 def cullInstance(app, toCamMat: ndarray, inst: Instance, blockPos: Optional[BlockPos]) -> List[Tuple[Any, Face, Color]]:
-    vertices = list(map(lambda v: toCamMat @ v, inst.worldSpaceVertices()))
+    vertices = [toCamMat @ v for v in inst.worldSpaceVertices()]
 
     faces = []
 
@@ -399,6 +399,13 @@ def cullInstance(app, toCamMat: ndarray, inst: Instance, blockPos: Optional[Bloc
 
     return faces
 
+def blockPosIsVisible2(app, camX, camY, camZ, lookX, lookY, lookZ, pos: BlockPos) -> bool:
+    [blockX, blockY, blockZ] = world.blockToWorld(pos)
+
+    dot = lookX * (blockX - camX) + lookY * (blockY - camY) + lookZ * (blockZ - camZ)
+
+    return dot >= 0
+
 def blockPosIsVisible(app, pos: BlockPos) -> bool:
     pitch = app.cameraPitch
     yaw = app.cameraYaw 
@@ -408,13 +415,14 @@ def blockPosIsVisible(app, pos: BlockPos) -> bool:
     lookZ = cos(pitch)*cos(-yaw)
 
     [camX, camY, camZ] = app.cameraPos
-    [blockX, blockY, blockZ] = world.blockToWorld(pos)
 
     # This is only a conservative estimate, so we move the camera "back"
     # to make sure we don't miss blocks behind us
     camX -= lookX
     camY -= lookY
     camZ -= lookZ
+
+    [blockX, blockY, blockZ] = world.blockToWorld(pos)
 
     dot = lookX * (blockX - camX) + lookY * (blockY - camY) + lookZ * (blockZ - camZ)
 
@@ -433,6 +441,19 @@ def renderInstances(app, canvas):
 # Forward: 35ms
 
 def drawToFaces(app):
+    pitch = app.cameraPitch
+    yaw = app.cameraYaw 
+
+    lookX = cos(pitch)*sin(-yaw)
+    lookY = sin(pitch)
+    lookZ = cos(pitch)*cos(-yaw)
+
+    [camX, camY, camZ] = app.cameraPos
+
+    look = np.array([lookX, lookY, lookZ], dtype=float)
+
+    offsetLook = lookX * camX + lookY * camY + lookZ * camZ
+
     toCamMat = wsToCamMat(app.cameraPos, app.cameraYaw, app.cameraPitch)
     faces = []
     for chunkPos in app.chunks:
@@ -446,12 +467,13 @@ def drawToFaces(app):
                         wy = chunk.pos[1] * 16 + (i // 16) % 16
                         wz = chunk.pos[2] * 16 + (i % 16)
                         blockPos = BlockPos(wx, wy, wz)
-                        if blockPosIsVisible(app, blockPos):
-                            (x, y, z) = blockPos
-                            x -= app.cameraPos[0]
-                            y -= app.cameraPos[1]
-                            z -= app.cameraPos[2]
-                            if x**2 + y**2 + z**2 <= app.renderDistanceSq:
+                        #if blockPosIsVisible(app, blockPos):
+                        if blockPosIsVisible2(app, camX, camY, camZ, lookX, lookY, lookZ, blockPos):
+                            #(x, y, z) = blockPos
+                            wx -= app.cameraPos[0]
+                            wy -= app.cameraPos[1]
+                            wz -= app.cameraPos[2]
+                            if wx**2 + wy**2 + wz**2 <= app.renderDistanceSq:
                                 faces += cullInstance(app, toCamMat, inst, blockPos)
     return faces
 
@@ -460,7 +482,7 @@ def drawToCanvas(app, canvas, faces):
 
     for i in range(len(faces)):
         if type(faces[i][0]) != type((0, 0)):
-            verts = list(map(lambda v: toCartesian(mat @ v), faces[i][0]))
+            verts = [toCartesian(mat @ v) for v in faces[i][0]]
             faces[i][0] = (verts, True)
 
         ((vertices, _), face, color) = faces[i]
