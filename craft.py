@@ -268,7 +268,7 @@ def appStarted(app):
     app.vpWidth = 3.0 / 4.0
     app.vpHeight = app.vpWidth * app.height / app.width 
     app.wireframe = False
-    app.renderDistanceSq = 15**2
+    app.renderDistanceSq = 11**2
 
     app.horizFov = math.atan(app.vpWidth / app.vpDist)
     app.vertFov = math.atan(app.vpHeight / app.vpDist)

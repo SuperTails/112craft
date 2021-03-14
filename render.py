@@ -76,12 +76,15 @@ def toHomogenous(cartesian: ndarray) -> ndarray:
     # This one line change makes the world load *twice as fast*
     return np.array([[cartesian[0, 0]], [cartesian[1, 0]], [cartesian[2, 0]], [1.0]])
 
-def toCartesian(cartesian: ndarray) -> ndarray:
-    assert(cartesian.shape[1] == 1)
+def toCartesian(c: ndarray) -> ndarray:
+    f = c[2][0]
 
-    cart = cartesian.ravel()
+    return np.array([ c[0][0] / f, c[1][0] / f ])
 
-    return cart[:-1] / cart[-1]
+def toCartesianList(c: ndarray):
+    f = c[2][0]
+
+    return ( c[0][0] / f, c[1][0] / f )
 
 def rotateX(ang):
     return np.array([
@@ -358,9 +361,9 @@ def cullInstance(app, toCamMat: ndarray, inst: Instance, blockPos: Optional[Bloc
                 skipNext = True
                 continue
 
-            if not blockFaceVisible(app, blockPos, faceIdx):
-                skipNext = True
-                continue
+            #if not blockFaceVisible(app, blockPos, faceIdx):
+            #    skipNext = True
+            #    continue
 
             light = blockFaceLight(app, blockPos, faceIdx)
             r = int(color[1:3], base=16)
@@ -463,29 +466,48 @@ def drawToFaces(app):
     check4 = makeBlockChecker(app, app.cameraPitch - (app.vertFov / 2), app.cameraYaw)
     check5 = makeBlockChecker(app, app.cameraPitch + (app.vertFov / 2), app.cameraYaw)
 
+    [camX, camY, camZ] = app.cameraPos
+
+    renderDist = math.sqrt(app.renderDistanceSq) + 1
+
     toCamMat = wsToCamMat(app.cameraPos, app.cameraYaw, app.cameraPitch)
     faces = []
     for chunkPos in app.chunks:
         chunk = app.chunks[chunkPos]
         if chunk.isVisible:
+            [cx, cy, cz] = chunk.pos
+            cx *= 16
+            cy *= 16
+            cz *= 16
+
             for (i, inst) in enumerate(chunk.instances):
                 if inst is not None:
                     (inst, unburied) = inst
                     if unburied:
-                        wx = chunk.pos[0] * 16 + (i // 256)
-                        wy = chunk.pos[1] * 16 + (i // 16) % 16
-                        wz = chunk.pos[2] * 16 + (i % 16)
+                        #wx = chunk.pos[0] * 16 + (i // 256)
+                        #wy = chunk.pos[1] * 16 + (i // 16) % 16
+                        #wz = chunk.pos[2] * 16 + (i % 16)
+
+                        wx = cx + (i // 256)
+                        wy = cy + (i // 16) % 16
+                        wz = cz + (i % 16)
+
+                        if abs(wx - camX) >= renderDist: continue
+                        if abs(wz - camZ) >= renderDist: continue
+
                         blockPos = BlockPos(wx, wy, wz)
+
                         # View frustrum culling
                         #if not check1(app, blockPos): continue
                         if not check2(app, blockPos): continue
                         if not check3(app, blockPos): continue
                         if not check4(app, blockPos): continue
                         if not check5(app, blockPos): continue
+
                         wx -= app.cameraPos[0]
                         wy -= app.cameraPos[1]
                         wz -= app.cameraPos[2]
-                        if wx**2 + wy**2 + wz**2 <= app.renderDistanceSq:
+                        if wx**2 + wz**2 <= app.renderDistanceSq:
                             faces += cullInstance(app, toCamMat, inst, blockPos)
     return faces
 
@@ -494,7 +516,7 @@ def drawToCanvas(app, canvas, faces):
 
     for i in range(len(faces)):
         if type(faces[i][0]) != type((0, 0)):
-            verts = [toCartesian(mat @ v) for v in faces[i][0]]
+            verts = [toCartesianList(mat @ v) for v in faces[i][0]]
             faces[i][0] = (verts, True)
 
         ((vertices, _), face, color) = faces[i]
@@ -503,51 +525,52 @@ def drawToCanvas(app, canvas, faces):
         v1 = vertices[face[1]]
         v2 = vertices[face[2]]
 
-        if app.wireframe:
-            edges = [(v0, v1), (v0, v2), (v1, v2)]
+        #if app.wireframe:
+        #    edges = [(v0, v1), (v0, v2), (v1, v2)]
 
-            for (v0, v1) in edges:            
-                canvas.create_line(v0[0], v0[1], v1[0], v1[1], fill=color)
-        else:
-            canvas.create_polygon(v0[0], v0[1], v1[0], v1[1], v2[0], v2[1], fill=color)
-            '''
-            vs = [v0, v1, v2]
+        #    for (v0, v1) in edges:            
+        #        canvas.create_line(v0[0], v0[1], v1[0], v1[1], fill=color)
+        #else:
+        canvas.create_polygon(v0[0], v0[1], v1[0], v1[1], v2[0], v2[1], fill=color)
 
-            if vs[1][1] <= vs[0][1] and vs[1][1] <= vs[2][1]:
-                vs[0], vs[1] = vs[1], vs[0]
-            elif vs[2][1] <= vs[0][1] and vs[2][1] <= vs[1][1]:
-                vs[0], vs[2] = vs[2], vs[0]
-            
-            if vs[2][1] <= vs[1][1]:
-                vs[1], vs[2] = vs[2], vs[1]
+'''
+vs = [v0, v1, v2]
 
-            yMin = int(vs[0][1])
-            yMid = int(vs[1][1])
-            yMax = int(vs[2][1])
+if vs[1][1] <= vs[0][1] and vs[1][1] <= vs[2][1]:
+    vs[0], vs[1] = vs[1], vs[0]
+elif vs[2][1] <= vs[0][1] and vs[2][1] <= vs[1][1]:
+    vs[0], vs[2] = vs[2], vs[0]
 
-            print(yMin, yMid, yMax)
+if vs[2][1] <= vs[1][1]:
+    vs[1], vs[2] = vs[2], vs[1]
 
-            if yMin == yMid or yMid == yMax:
-                continue
+yMin = int(vs[0][1])
+yMid = int(vs[1][1])
+yMax = int(vs[2][1])
 
-            tallSlope = (vs[2][0] - vs[0][0]) / (yMax - yMin)
-            shortSlope1 = (vs[1][0] - vs[0][0]) / (yMid - yMin)
-            shortSlope2 = (vs[2][0] - vs[1][0]) / (yMax - yMid)
+print(yMin, yMid, yMax)
 
-            for y in range(yMin, yMax + 1):
-                tallX = vs[0][0] + tallSlope * (y - yMin)
+if yMin == yMid or yMid == yMax:
+    continue
 
-                if y < yMid:
-                    shortX = vs[0][0] + shortSlope1 * (y - yMin)
-                else:
-                    shortX = vs[1][0] + shortSlope2 * (y - yMin)
-                
-                minX = int(min(tallX, shortX))
-                maxX = int(max(tallX, shortX))
+tallSlope = (vs[2][0] - vs[0][0]) / (yMax - yMin)
+shortSlope1 = (vs[1][0] - vs[0][0]) / (yMid - yMin)
+shortSlope2 = (vs[2][0] - vs[1][0]) / (yMax - yMid)
 
-                #for x in range(minX, maxX + 1):
-                canvas.create_rectangle(minX, y, maxX, y, outline=color)
-            '''
+for y in range(yMin, yMax + 1):
+    tallX = vs[0][0] + tallSlope * (y - yMin)
+
+    if y < yMid:
+        shortX = vs[0][0] + shortSlope1 * (y - yMin)
+    else:
+        shortX = vs[1][0] + shortSlope2 * (y - yMin)
+    
+    minX = int(min(tallX, shortX))
+    maxX = int(max(tallX, shortX))
+
+    #for x in range(minX, maxX + 1):
+    canvas.create_rectangle(minX, y, maxX, y, outline=color)
+'''
 
 frameTimes = [0.0] * 10
 frameTimeIdx = 0
