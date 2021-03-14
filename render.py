@@ -1,5 +1,6 @@
 import math
 import time
+from tkinter.constants import X
 import world
 import numpy as np
 from math import sin, cos
@@ -512,11 +513,24 @@ def drawToFaces(app):
     return faces
 
 def drawToCanvas(app, canvas, faces):
-    mat = app.csToCanvasMat
+    wv = app.csToCanvasMat[0, 0]
+    hv = app.csToCanvasMat[1, 1]
+    x = app.csToCanvasMat[0, 2]
+    y = app.csToCanvasMat[1, 2]
+
+    def csToCanvas(v):
+        a = v[0, 0]
+        b = v[1, 0]
+        c = v[2, 0]
+
+        x1 = a * wv / c + x 
+        y1 = b * hv / c + y
+        return (x1, y1)
 
     for i in range(len(faces)):
         if type(faces[i][0]) != type((0, 0)):
-            verts = [toCartesianList(mat @ v) for v in faces[i][0]]
+            #verts = [toCartesianList(mat @ v) for v in faces[i][0]]
+            verts = [csToCanvas(v) for v in faces[i][0]]
             faces[i][0] = (verts, True)
 
         ((vertices, _), face, color) = faces[i]

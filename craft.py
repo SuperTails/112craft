@@ -106,7 +106,8 @@ class TitleMode(Mode):
         self.buttons.addButton('playCreative', Button(app.width / 2, app.height * 0.55, background=app.btnBg, text="Play Creative")) # type: ignore
 
     def timerFired(self, app):
-        app.cameraYaw += 0.01
+        pass
+        #app.cameraYaw += 0.01
 
     def mousePressed(self, app, event):
         self.buttons.onPress(event.x, event.y)
@@ -268,7 +269,7 @@ def appStarted(app):
     app.vpWidth = 3.0 / 4.0
     app.vpHeight = app.vpWidth * app.height / app.width 
     app.wireframe = False
-    app.renderDistanceSq = 11**2
+    app.renderDistanceSq = 20**2
 
     app.horizFov = math.atan(app.vpWidth / app.vpDist)
     app.vertFov = math.atan(app.vpHeight / app.vpDist)
