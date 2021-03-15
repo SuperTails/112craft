@@ -505,9 +505,9 @@ def drawToFaces(app):
                         if not check4(app, blockPos): continue
                         if not check5(app, blockPos): continue
 
-                        wx -= app.cameraPos[0]
-                        wy -= app.cameraPos[1]
-                        wz -= app.cameraPos[2]
+                        wx -= camX
+                        wy -= camY
+                        wz -= camZ
                         if wx**2 + wz**2 <= app.renderDistanceSq:
                             faces += cullInstance(app, toCamMat, inst, blockPos)
     return faces
@@ -535,9 +535,9 @@ def drawToCanvas(app, canvas, faces):
 
         ((vertices, _), face, color) = faces[i]
 
-        v0 = vertices[face[0]]
-        v1 = vertices[face[1]]
-        v2 = vertices[face[2]]
+        (x0, y0) = vertices[face[0]]
+        (x1, y1) = vertices[face[1]]
+        (x2, y2) = vertices[face[2]]
 
         #if app.wireframe:
         #    edges = [(v0, v1), (v0, v2), (v1, v2)]
@@ -545,7 +545,8 @@ def drawToCanvas(app, canvas, faces):
         #    for (v0, v1) in edges:            
         #        canvas.create_line(v0[0], v0[1], v1[0], v1[1], fill=color)
         #else:
-        canvas.create_polygon(v0[0], v0[1], v1[0], v1[1], v2[0], v2[1], fill=color)
+
+        canvas.create_polygon(x0, y0, x1, y1, x2, y2, fill=color)
 
 '''
 vs = [v0, v1, v2]
