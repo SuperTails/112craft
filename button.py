@@ -23,27 +23,47 @@ class Button:
     x: int
     y: int
 
+    xFrac: float
+    yFrac: float
+
     width: int
     height: int
 
     background: Image.Image
     text: str
 
-    def __init__(self, x: int, y: int, background: Image.Image, text: str, anchor='c'):
-        if anchor == 'c':
-            (width, height) = background.size
+    def __init__(self, app, x: float, y: float, background: Image.Image, text: str):
+        """Creates a button.
 
-            self.x = x - width // 2
-            self.y = y - height // 2
+        The x and y are proportions of the screen width and height, e.g.
+        x=0.1 and y=0.9 would put the center of the button in the bottom-left
+        corner of the canvas.
 
-            self.width = width
-            self.height = height
+        `background` is the image to be displayed on the button, and 
+        `text` will be displayed on top of that image
+        """
 
-            self.background = background
-            self.text = text
-        else:
-            # TODO: Other anchors, if necessary
-            1 / 0
+        (width, height) = background.size
+
+        self.width = width
+        self.height = height
+
+        self.background = background
+        self.text = text
+
+        self.xFrac = x
+        self.yFrac = y
+
+        self.canvasSizeChanged(app)
+
+    def canvasSizeChanged(self, app): 
+        """Recalculates where this button should be on the screen.
+
+        This should be called when the canvas resizes.
+        """
+
+        self.x = int(self.xFrac * app.width) - self.width // 2
+        self.y = int(self.yFrac * app.height) - self.height // 2
 
     def isOver(self, x: int, y: int) -> bool:
         '''Returns True if the given position is inside this button'''
@@ -85,6 +105,9 @@ class ButtonManager:
         else:
             return None
                 
+    def canvasSizeChanged(self, app) -> None:
+        for button in self.buttons.values():
+            button.canvasSizeChanged(app)
     
     def draw(self, app, canvas) -> None:
         for button in self.buttons.values():

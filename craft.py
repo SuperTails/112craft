@@ -1,11 +1,11 @@
-from cmu_112_graphics import *
+from cmu_112_graphics import Image, runApp
 from PIL import ImageDraw
 from PIL.ImageDraw import Draw
 import numpy as np
 import math
 import render
 import world
-from button import Button, ButtonManager
+from button import Button, ButtonManager, createSizedBackground
 from world import Chunk, ChunkPos
 from typing import List
 from render import getCachedImage
@@ -22,23 +22,12 @@ from player import Player
 # I've incorporated Minecraft into every year of my education so far,
 # and I don't plan to stop any time soon.
 
-def createSizedBackground(app, width: int, height: int):
-    cobble = app.loadImage('assets/CobbleBackground.png')
-    cobble = app.scaleImage(cobble, 2)
-    cWidth, cHeight = cobble.size
-
-    newCobble = Image.new(cobble.mode, (width, height))
-    for xIdx in range(math.ceil(width / cWidth)):
-        for yIdx in range(math.ceil(height / cHeight)):
-            xOffset = xIdx * cWidth
-            yOffset = yIdx * cHeight
-
-            newCobble.paste(cobble, (xOffset, yOffset))
-
-    return newCobble
-
 class Mode:
-    finished: bool = False
+    """Represents some state of the game that can accept events.
+
+    For example, the title screen is a mode, a loading screen is a mode,
+    the actual gameplay is a mode, etc.
+    """
 
     def __init__(self): pass
 
@@ -101,9 +90,11 @@ class TitleMode(Mode):
         self.titleText = app.loadImage('assets/TitleText.png')
         self.titleText = app.scaleImage(self.titleText, 3)
 
-        # FIXME: This does not work with resizing!
-        self.buttons.addButton('playSurvival', Button(app.width / 2, app.height * 0.4, background=app.btnBg, text="Play Survival")) # type: ignore
-        self.buttons.addButton('playCreative', Button(app.width / 2, app.height * 0.55, background=app.btnBg, text="Play Creative")) # type: ignore
+        survivalButton = Button(app, 0.5, 0.4, app.btnBg, "Play Survival")
+        creativeButton = Button(app, 0.5, 0.55, app.btnBg, "Play Creative")
+
+        self.buttons.addButton('playSurvival', survivalButton) # type: ignore
+        self.buttons.addButton('playCreative', creativeButton) # type: ignore
 
     def timerFired(self, app):
         app.cameraYaw += 0.01
@@ -126,6 +117,9 @@ class TitleMode(Mode):
         canvas.create_image(app.width / 2, 50, image=getCachedImage(self.titleText))
         
         self.buttons.draw(app, canvas)
+    
+    def sizeChanged(self, app):
+        self.buttons.canvasSizeChanged(app)
     
 def setMouseCapture(app, value: bool) -> None:
     """If True, locks the mouse to the center of the window and hides it.
@@ -399,6 +393,8 @@ def timerFired(app):
 def sizeChanged(app):
     app.csToCanvasMat = render.csToCanvasMat(app.vpDist, app.vpWidth, app.vpHeight,
                         app.width, app.height)
+    
+    app.mode.sizeChanged(app)
 
 def mouseDragged(app, event):
     mouseMovedOrDragged(app, event)
