@@ -535,38 +535,58 @@ def drawTextOutlined(canvas, x, y, **kwargs):
     canvas.create_text(x, y, fill='white', **kwargs)
 
 def drawHotbar(app, canvas):
-    player = app.mode.player
+    # FIXME: 
+    if hasattr(app.mode, 'player'):
+        player = app.mode.player
+    else:
+        player = app.mode.submode.player
 
-    texWidth = app.itemTextures['air'].width + 6
-    width = len(player.inventory) * texWidth
+    slotWidth = app.itemTextures['air'].width + 7
+    width = 9 * slotWidth
 
     leftX = app.width / 2 - width / 2
 
     margin = 10
 
-    for (i, slot) in enumerate(player.inventory):
-        # Don't draw empty slots
-        if slot.isEmpty(): continue
+    for (i, slot) in enumerate(player.inventory[:9]):
+        x = (i - 4) * slotWidth + app.width / 2
 
+        y = app.height - margin - slotWidth / 2
+
+        drawSlot(app, canvas, x, y, slot)
+    
+    x = (player.hotbarIdx - 4) * slotWidth + app.width / 2
+    y = app.height - margin - slotWidth
+    canvas.create_rectangle(x - slotWidth / 2, y,
+        x + slotWidth / 2,
+        y + slotWidth,
+        outline='white')
+
+
+def drawSlot(app, canvas, x, y, slot):
+    """x and y are the *center* of the slot"""
+
+    slotWidth = app.itemTextures['air'].width + 6
+
+    canvas.create_rectangle(x - slotWidth / 2, y - slotWidth / 2,
+        x + slotWidth / 2,
+        y + slotWidth / 2,
+        fill='#444', outline='#333')
+
+    if not slot.isEmpty():
         tex = app.itemTextures[slot.item]
-
-        if player.hotbarIdx == i:
-            canvas.create_rectangle(leftX + (i - 0.5) * texWidth,
-                app.height - margin - texWidth,
-                leftX + (i + 0.5) * texWidth,
-                app.height - margin)
-
         image = getCachedImage(tex)
-        canvas.create_image(leftX + i * texWidth, app.height - margin - 3, image=image, anchor='s')
+        canvas.create_image(x, y, image=image)
 
         # Slots that are infinite just don't have a number displayed
         if not slot.isInfinite():
-            cornerX = leftX + i * texWidth + 0.3 * texWidth
-            cornerY = app.height - margin - 3 - 0.1 * texWidth
+            cornerX = x + 0.3 * slotWidth
+            cornerY = y + 0.2 * slotWidth
 
             qty = slot.amount
 
             drawTextOutlined(canvas, cornerX, cornerY, text=str(qty), font='Arial 12 bold')
+
 
 def drawHud(app, canvas, startTime):
     # Indicates the center of the screen

@@ -130,7 +130,6 @@ def setMouseCapture(app, value: bool) -> None:
 
     app.captureMouse = value
 
-
 class PlayingMode(Mode):
     lookedAtBlock = None
     mouseHeld: bool = False
@@ -201,8 +200,10 @@ class PlayingMode(Mode):
             app.a = True
         elif event.key == 'd':
             app.d = True
+        elif event.key == 'e':
+            app.mode = InventoryMode(app.mode)
         elif event.key == 'Space':
-            if hasattr(app.mode, 'player') and app.mode.player.onGround:
+            if self.player.onGround:
                 app.mode.player.velocity[1] = 0.35
         elif event.key == 'Escape':
             setMouseCapture(app, not app.captureMouse)
@@ -216,6 +217,21 @@ class PlayingMode(Mode):
             app.a = False
         elif event.key == 'd':
             app.d = False
+
+class InventoryMode(Mode):
+    submode: Mode
+
+    def __init__(self, submode: Mode):
+        self.submode = submode
+
+    def redrawAll(self, app, canvas):
+        self.submode.redrawAll(app, canvas)
+
+        canvas.create_text(100, 100, text="HELLO WORLD")
+    
+    def keyPressed(self, app, event):
+        if event.key == 'e':
+            app.mode = self.submode
 
 # Initializes all the data needed to run 112craft
 def appStarted(app):

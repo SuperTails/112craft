@@ -32,36 +32,39 @@ def generateTree(app, basePos: BlockPos, doUpdates=True):
     y = basePos.y
     z = basePos.z
 
+    l = doUpdates
+    b = doUpdates
+
     # Place bottom logs
-    setBlock(app, basePos, 'log', doUpdateLight=doUpdates, doUpdateBuried=doUpdates)
+    setBlock(app, basePos, 'log', doUpdateLight=l, doUpdateBuried=b)
     y += 1
-    setBlock(app, BlockPos(x, y, z), 'log', doUpdateLight=doUpdates, doUpdateBuried=doUpdates)
+    setBlock(app, BlockPos(x, y, z), 'log', doUpdateLight=l, doUpdateBuried=b)
     # Place log and leaves around it
     for _ in range(2):
         y += 1
-        setBlock(app, BlockPos(x, y, z), 'log', doUpdateLight=doUpdates, doUpdateBuried=doUpdates)
+        setBlock(app, BlockPos(x, y, z), 'log', doUpdateLight=l, doUpdateBuried=b)
         for xOffset in range(-2, 2+1):
             for zOffset in range(-2, 2+1):
                 if abs(xOffset) == 2 and abs(zOffset) == 2: continue
                 if xOffset == 0 and zOffset == 0: continue
 
-                setBlock(app, BlockPos(x + xOffset, y, z + zOffset), 'leaves', doUpdateLight=doUpdates, doUpdateBuried=doUpdates)
+                setBlock(app, BlockPos(x + xOffset, y, z + zOffset), 'leaves', doUpdateLight=l, doUpdateBuried=b)
     
     # Narrower top part
     y += 1
-    setBlock(app, BlockPos(x - 1, y, z), 'leaves', doUpdateLight=doUpdates, doUpdateBuried=doUpdates)
-    setBlock(app, BlockPos(x + 1, y, z), 'leaves', doUpdateLight=doUpdates, doUpdateBuried=doUpdates)
-    setBlock(app, BlockPos(x, y, z - 1), 'leaves', doUpdateLight=doUpdates, doUpdateBuried=doUpdates)
-    setBlock(app, BlockPos(x, y, z + 1), 'leaves', doUpdateLight=doUpdates, doUpdateBuried=doUpdates)
-    setBlock(app, BlockPos(x, y, z), 'log', doUpdateLight=doUpdates, doUpdateBuried=doUpdates)
+    setBlock(app, BlockPos(x - 1, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+    setBlock(app, BlockPos(x + 1, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+    setBlock(app, BlockPos(x, y, z - 1), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+    setBlock(app, BlockPos(x, y, z + 1), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+    setBlock(app, BlockPos(x, y, z), 'log', doUpdateLight=l, doUpdateBuried=b)
 
     # Top cap of just leaves
     y += 1
-    setBlock(app, BlockPos(x - 1, y, z), 'leaves', doUpdateLight=doUpdates, doUpdateBuried=doUpdates)
-    setBlock(app, BlockPos(x + 1, y, z), 'leaves', doUpdateLight=doUpdates, doUpdateBuried=doUpdates)
-    setBlock(app, BlockPos(x, y, z - 1), 'leaves', doUpdateLight=doUpdates, doUpdateBuried=doUpdates)
-    setBlock(app, BlockPos(x, y, z + 1), 'leaves', doUpdateLight=doUpdates, doUpdateBuried=doUpdates)
-    setBlock(app, BlockPos(x, y, z), 'leaves', doUpdateLight=doUpdates, doUpdateBuried=doUpdates)
+    setBlock(app, BlockPos(x - 1, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+    setBlock(app, BlockPos(x + 1, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+    setBlock(app, BlockPos(x, y, z - 1), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+    setBlock(app, BlockPos(x, y, z + 1), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+    setBlock(app, BlockPos(x, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
 
 
 class WorldgenStage(IntEnum):
@@ -88,7 +91,7 @@ class Chunk:
     def generate(self, app, seed):
         # x and y and z
         self.blocks = np.full((16, 16, 16), 'air', dtype=object)
-        self.lightLevels = np.full((16, 16, 16), 7)
+        self.lightLevels = np.full((16, 16, 16), 0)
         self.instances = [None] * self.blocks.size
 
         minVal = 100.0
@@ -602,6 +605,9 @@ def updateLight(app, blockPos: BlockPos):
         
         for faceIdx in range(0, 12, 2):
             gPos = adjacentBlockPos(blockPos, faceIdx)
+
+            if not coordsInBounds(app, gPos):
+                continue
 
             lightLevel = getLightLevel(app, gPos)
 

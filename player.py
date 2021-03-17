@@ -39,15 +39,15 @@ class Player:
         self.creative = creative
 
         if self.creative:
-            if len(app.itemTextures) > 9:
+            if len(app.itemTextures) > 27:
                 # TODO:
                 1 / 0
 
             self.inventory = [Slot(name, -1) for name in app.itemTextures]
-            while len(self.inventory) < 9:
+            while len(self.inventory) < 27:
                 self.inventory.append(Slot('', 0))
         else:
-            self.inventory = [Slot('', 0)] * 9
+            self.inventory = [Slot('', 0)] * 27
             # First slot is always reserved for breaking blocks
             self.inventory[0] = Slot('air', -1)
     
