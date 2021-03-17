@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from dataclasses import dataclass
 from world import ItemId, BlockPos
 
@@ -18,6 +18,17 @@ class Slot:
     
     def isEmpty(self) -> bool:
         return self.amount == 0
+    
+    def tryMergeWith(self, other: 'Slot') -> Optional['Slot']:
+        if self.isEmpty():
+            return other
+        elif other.isEmpty():
+            return self
+        elif self.item == other.item:
+            # TODO: Stack sizes
+            return Slot(self.item, self.amount + other.amount)
+        else:
+            return None
 
 class Player:
     height: float = 1.5
@@ -51,22 +62,25 @@ class Player:
             # First slot is always reserved for breaking blocks
             self.inventory[0] = Slot('air', -1)
     
-    def pickUpItem(self, app, newItem: ItemId):
+    def pickUpItem(self, app, newItem: Slot):
         """Adds an item to the player's inventory."""
 
         # Prioritize existing stacks of the item first
         for (i, slot) in enumerate(self.inventory):
-            if slot.isInfinite() and slot.item == newItem:
+            if slot.isInfinite() and slot.item == newItem.item:
                 # It just stacks into an infinite slot, so no change
                 return
-            elif slot.amount > 0 and slot.item == newItem:
-                self.inventory[i].amount += 1
+            elif newItem.isInfinite() and slot.item == newItem.item:
+                # ditto
+                return 
+            elif slot.amount > 0 and slot.item == newItem.item:
+                self.inventory[i].amount += newItem.amount
                 return
 
         # If that fails, then just add the item to the next open space
         for (i, slot) in enumerate(self.inventory):
             if slot.isEmpty():
-                self.inventory[i] = Slot(newItem, 1)
+                self.inventory[i] = newItem
                 return
         
         # TODO: Full inventory??

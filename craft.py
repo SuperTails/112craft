@@ -219,10 +219,13 @@ class PlayingMode(Mode):
             app.d = False
 
 class InventoryMode(Mode):
-    submode: Mode
+    submode: PlayingMode
     heldItem: Slot = Slot('', 0)
+    craftOutput: Slot = Slot('', 0)
 
-    def __init__(self, app, submode: Mode):
+    craftInputs: List[List[Slot]] = [[Slot('', 0), Slot('', 0)], [Slot('', 0), Slot('', 0)]]
+
+    def __init__(self, app, submode: PlayingMode):
         setMouseCapture(app, False)
         self.submode = submode
 
@@ -231,12 +234,22 @@ class InventoryMode(Mode):
 
         render.drawMainInventory(app, canvas)
 
+        (_, _, w) = render.getSlotCenterAndSize(app, 0)
+        for (rowIdx, row) in enumerate(self.craftInputs):
+            for (colIdx, col) in enumerate(row):
+                x = colIdx * w + 350
+                y = rowIdx * w + 100
+                render.drawSlot(app, canvas, x, y, col)
+        
+        render.drawSlot(app, canvas, 460, 100 + w / 2, self.craftOutput)
+
         if app.mousePos is not None:
             render.drawSlot(app, canvas, app.mousePos[0], app.mousePos[1],
                 self.heldItem, drawBackground=False)
-
     
     def mousePressed(self, app, event):
+        (_, _, w) = render.getSlotCenterAndSize(app, 0)
+
         clickedSlot = None
         for i in range(36):
             (x, y, w) = render.getSlotCenterAndSize(app, i)
@@ -248,10 +261,61 @@ class InventoryMode(Mode):
         if clickedSlot is not None and clickedSlot != 0:
             player = self.submode.player
             self.heldItem, player.inventory[clickedSlot] = player.inventory[clickedSlot], self.heldItem
+            return
+        
+        for rowIdx in range(2):
+            done = False
+            for colIdx in range(2):
+                x = colIdx * w + 350
+                y = rowIdx * w + 100
+                x0, y0 = x - w/2, y - w/2
+                x1, y1 = x + w/2, y + w/2
+                if x0 < event.x and event.x < x1 and y0 < event.y and event.y < y1:
+                    player = self.submode.player
+                    self.heldItem, self.craftInputs[rowIdx][colIdx] = self.craftInputs[rowIdx][colIdx], self.heldItem
+                    done = True
+                    break
+            if done: break
+        
+        x = 470
+        y = 100 + w / 2
+        x0, y0 = x - w/2, y - w/2
+        x1, y1 = x + w/2, y + w/2
+
+        if x0 < event.x and event.x < x1 and y0 < event.y and event.y < y1:
+            merged = self.heldItem.tryMergeWith(self.craftOutput)
+            if merged is not None:
+                if self.craftInputs[0][0].amount > 0: 
+                    self.craftInputs[0][0].amount -= 1
+                if self.craftInputs[0][1].amount > 0: 
+                    self.craftInputs[0][1].amount -= 1
+                if self.craftInputs[1][0].amount > 0: 
+                    self.craftInputs[1][0].amount -= 1
+                if self.craftInputs[1][1].amount > 0: 
+                    self.craftInputs[1][1].amount -= 1
+
+                self.heldItem = merged
             
-    
+        
+        toid = lambda s: None if s.isEmpty() else s.item
+
+        c = [
+            [toid(self.craftInputs[0][0]), toid(self.craftInputs[0][1])],
+            [toid(self.craftInputs[1][0]), toid(self.craftInputs[1][1])]
+        ]
+
+        self.craftOutput = Slot('', 0)
+
+        for r in app.recipes:
+            if r.isCraftedBy(c):
+                self.craftOutput = r.outputs
+                break
+ 
     def keyPressed(self, app, event):
         if event.key == 'e':
+            for r in range(2):
+                for c in range(2):
+                    self.submode.player.pickUpItem(app, self.craftInputs[r][c])
             app.mode = self.submode
             setMouseCapture(app, True)
 
@@ -327,10 +391,54 @@ def updateBlockBreaking(app, mode: PlayingMode):
         if app.breakingBlock >= hardness:
             brokenName = world.getBlock(app, pos)
             world.removeBlock(app, pos)
-            mode.player.pickUpItem(app, brokenName)
+            mode.player.pickUpItem(app, Slot(brokenName, 1))
     else:
         app.breakingBlock = 0.0
 
+class Recipe:
+    inputs: List[List[Optional[world.ItemId]]]
+    outputs: Slot
+
+    def __init__(self, grid: List[str], outputs: Slot, maps: dict[str, world.ItemId]):
+        self.inputs = []
+        for row in grid:
+            newRow = []
+            for col in row:
+                if col == '-':
+                    newRow.append(None)
+                else:
+                    newRow.append(maps[col])
+            self.inputs.append(newRow)
+        self.outputs = outputs
+
+    def isCraftedBy(self, ingredients: List[List[Optional[world.ItemId]]]):
+        dim = len(ingredients)
+
+        rowOffset = 0
+
+        for r in range(dim):
+            if any(map(lambda c: c is not None, ingredients[r])):
+                rowOffset = r
+                break
+
+        colOffset = 0
+
+        for c in range(dim):
+            if any(map(lambda r: r[c] is not None, ingredients)):
+                colOffset = c
+                break
+
+        for rowIdx in range(dim):
+            for colIdx in range(dim):
+                if rowIdx + rowOffset >= dim or colIdx + colOffset >= dim:
+                    ingr = None
+                else:
+                    ingr = ingredients[rowIdx + rowOffset][colIdx + colOffset]
+
+                if self.inputs[rowIdx][colIdx] != ingr:
+                    return False
+
+        return True
 
 def loadResources(app):
     vertices = [
@@ -414,6 +522,36 @@ def loadResources(app):
         'planks': 2.0,
         'bedrock': float('inf'),
     }
+
+    app.recipes = [
+        Recipe(
+            [
+                'l--',
+                '---',
+                '---'
+            ],
+            Slot('planks', 4),
+            { 'l': 'log' }
+        ),
+        Recipe(
+            [
+                'p--',
+                'p--',
+                '---'
+            ],
+            Slot('stick', 4),
+            { 'p': 'planks' }
+        ),
+        Recipe(
+            [
+                'pp-',
+                'pp-',
+                '---'
+            ],
+            Slot('crafting_table', 1),
+            { 'p': 'planks' }
+        )
+    ]
 
     # Vertices in CCW order
     faces: List[render.Face] = [

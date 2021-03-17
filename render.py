@@ -608,8 +608,8 @@ def drawSlot(app, canvas, x, y, slot, drawBackground=True):
         image = getCachedImage(tex)
         canvas.create_image(x, y, image=image)
 
-        # Slots that are infinite just don't have a number displayed
-        if not slot.isInfinite():
+        # Slots that are infinite or with a single item just don't have a number displayed
+        if not slot.isInfinite() and slot.amount != 1:
             cornerX = x + 0.3 * slotWidth
             cornerY = y + 0.2 * slotWidth
 
