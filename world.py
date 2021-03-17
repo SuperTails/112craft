@@ -542,6 +542,9 @@ def updateLight(app, blockPos: BlockPos):
             if coordsOccupied(app, gPos):
                 continue
 
+            if not coordsInBounds(app, gPos):
+                continue
+
             lightLevel = getLightLevel(app, gPos)
 
             heapq.heappush(exSources, (-lightLevel, gPos))

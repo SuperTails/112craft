@@ -1,6 +1,6 @@
 from typing import List
 from dataclasses import dataclass
-from world import ItemId
+from world import ItemId, BlockPos
 
 @dataclass
 class Slot:
@@ -71,4 +71,3 @@ class Player:
         
         # TODO: Full inventory??
         1 / 0
-        

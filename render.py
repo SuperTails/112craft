@@ -216,8 +216,11 @@ def blockFaceLight(app, blockPos: BlockPos, faceIdx: int) -> int:
     """Returns the light level of the given face of the block"""
 
     pos = adjacentBlockPos(blockPos, faceIdx)
-    (chunk, (x, y, z)) = world.getChunk(app, pos)
-    return chunk.lightLevels[x, y, z]
+    if world.coordsInBounds(app, pos):
+        (chunk, (x, y, z)) = world.getChunk(app, pos)
+        return chunk.lightLevels[x, y, z]
+    else:
+        return 7
 
 def isBackBlockFace(app, blockPos: BlockPos, faceIdx: int) -> bool:
     """Returns True if the given face of the block is facing away from the camera"""

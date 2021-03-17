@@ -160,12 +160,6 @@ class PlayingMode(Mode):
         if block is not None:
             (pos, face) = block
             if self.player.hotbarIdx != 0:
-                slot = self.player.inventory[self.player.hotbarIdx]
-                if slot.amount == 0: return
-                
-                if slot.amount > 0:
-                    slot.amount -= 1
-
                 [x, y, z] = pos
                 if face == 'left':
                     x -= 1
@@ -179,8 +173,17 @@ class PlayingMode(Mode):
                     z -= 1
                 elif face == 'front':
                     z += 1
+                pos = world.BlockPos(x, y, z)
 
-                world.addBlock(app, world.BlockPos(x, y, z), slot.item)
+                if not world.coordsInBounds(app, pos): return
+
+                slot = self.player.inventory[self.player.hotbarIdx]
+                if slot.amount == 0: return
+                
+                if slot.amount > 0:
+                    slot.amount -= 1
+
+                world.addBlock(app, pos, slot.item)
     
     def mouseReleased(self, app, event):
         self.mouseHeld = False
