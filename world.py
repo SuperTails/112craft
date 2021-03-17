@@ -107,7 +107,12 @@ class Chunk:
 
                 for yIdx in range(0, topY):
                     self.lightLevels[xIdx, yIdx, zIdx] = 0
-                    blockId = 'grass' if yIdx == topY - 1 else 'stone'
+                    if yIdx == 0:
+                        blockId = 'bedrock'
+                    elif yIdx == topY - 1:
+                        blockId = 'grass'
+                    else:
+                        blockId = 'stone'
                     self.setBlock(app, BlockPos(xIdx, yIdx, zIdx), blockId, doUpdateLight=False, doUpdateBuried=False)
         
         #print(f"minval: {minVal}, maxVal: {maxVal}")

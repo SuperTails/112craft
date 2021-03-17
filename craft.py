@@ -132,7 +132,7 @@ def setMouseCapture(app, value: bool) -> None:
 
 
 class PlayingMode(Mode):
-    lookedAtBlock = world.BlockPos(0, 0, 0)
+    lookedAtBlock = None
     mouseHeld: bool = False
 
     player: Player
@@ -148,28 +148,8 @@ class PlayingMode(Mode):
     
     def timerFired(self, app):
         self.lookedAtBlock = world.lookedAtBlock(app)
-        
-        if self.mouseHeld and self.player.hotbarIdx == 0 and self.lookedAtBlock is not None:
-            pos = self.lookedAtBlock[0]
-            if self.player.creative:
-                app.breakingBlockPos = pos
-                app.breakingBlock = 1.0
-            else:
-                if app.breakingBlockPos == pos: 
-                    app.breakingBlock += 0.1
-                else:
-                    app.breakingBlockPos = pos
-                    app.breakingBlock = 0.0
-            
-            if app.breakingBlock > 1.0:
-                app.breakingBlock = 1.0
-            
-            if app.breakingBlock == 1.0:
-                brokenName = world.getBlock(app, pos)
-                world.removeBlock(app, pos)
-                self.player.pickUpItem(app, brokenName)
-        else:
-            app.breakingBlock = 0.0
+
+        updateBlockBreaking(app, self)
 
         world.tick(app)
 
@@ -287,6 +267,29 @@ def appStarted(app):
 
     setMouseCapture(app, False)
 
+def updateBlockBreaking(app, mode: PlayingMode):
+    if mode.mouseHeld and mode.player.hotbarIdx == 0 and mode.lookedAtBlock is not None:
+        pos = mode.lookedAtBlock[0]
+        if mode.player.creative:
+            app.breakingBlockPos = pos
+            app.breakingBlock = 1000.0
+        else:
+            if app.breakingBlockPos == pos: 
+                app.breakingBlock += 0.1
+            else:
+                app.breakingBlockPos = pos
+                app.breakingBlock = 0.0
+        
+        blockId = world.getBlock(app, pos)
+        hardness = app.hardnesses[blockId]       
+
+        if app.breakingBlock >= hardness:
+            brokenName = world.getBlock(app, pos)
+            world.removeBlock(app, pos)
+            mode.player.pickUpItem(app, brokenName)
+    else:
+        app.breakingBlock = 0.0
+
 
 def loadResources(app):
     vertices = [
@@ -335,11 +338,40 @@ def loadResources(app):
         '#705525', '#70502A',
     ]
 
+    bedrockTexture = [
+        '#0A0A10', '#0E0A10',
+        '#0A1010', '#0A0A10',
+        '#0A0A18', '#0E1010',
+        '#100A10', '#080A10',
+        '#0A0810', '#0A0A18',
+        '#0A0A1E', '#100A10',
+    ]
+
+    planksTexture = [
+        '#BE9A60', '#B4915D',
+        '#AC8C53', '#9C814B',
+        '#937240', '#7B6036',
+        '#7B6036', '#654E2B', 
+        '#9C814B', '#BE9A60',
+        '#B4915D', '#AC8C53'
+    ]
+
     app.textures = {
         'grass': grassTexture,
         'stone': stoneTexture,
         'leaves': leavesTexture,
         'log': logTexture,
+        'bedrock': bedrockTexture,
+        'planks': planksTexture,
+    }
+
+    app.hardnesses = {
+        'grass': 1.0,
+        'stone': 5.0,
+        'leaves': 0.5,
+        'log': 2.0,
+        'planks': 2.0,
+        'bedrock': float('inf'),
     }
 
     # Vertices in CCW order

@@ -346,7 +346,8 @@ def cullInstance(app, toCamMat: ndarray, inst: Instance, blockPos: Optional[Bloc
 
             if blockPos == app.breakingBlockPos and app.breakingBlock != 0.0:
                 avg = (r + g + b) / 3.0
-                desaturation = app.breakingBlock
+                hardness = app.hardnesses[world.getBlock(app, blockPos)]
+                desaturation = app.breakingBlock / hardness
                 r += (avg - r) * desaturation
                 g += (avg - g) * desaturation
                 b += (avg - b) * desaturation
