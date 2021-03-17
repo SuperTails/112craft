@@ -52,6 +52,8 @@ class Player:
             self.inventory[0] = Slot('air', -1)
     
     def pickUpItem(self, app, newItem: ItemId):
+        """Adds an item to the player's inventory."""
+
         # Prioritize existing stacks of the item first
         for (i, slot) in enumerate(self.inventory):
             if slot.isInfinite() and slot.item == newItem:

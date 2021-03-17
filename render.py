@@ -10,10 +10,6 @@ from world import BlockPos, adjacentBlockPos
 from cmu_112_graphics import ImageTk # type: ignore
 from PIL import Image, ImageDraw
 
-# =========================================================================== #
-# ---------------------------- RENDERING ------------------------------------ #
-# =========================================================================== #
-
 # Author: Carson Swoveland (cswovela)
 # Part of a term project for 15112
 
@@ -21,6 +17,12 @@ from PIL import Image, ImageDraw
 #   1. It's a minecraft block
 #   2. It sounds clever and unique
 #   3. You can warm your hands by the heat of your CPU 
+
+
+# =========================================================================== #
+# ------------------------- IMPORTANT TYPES --------------------------------- #
+# =========================================================================== #
+
 
 Color = str
 
@@ -33,21 +35,24 @@ class Model:
 
     def __init__(self, vertices: List[ndarray], faces: List[Face]):
         self.vertices = vertices
-
-        self.faces = []
-        for face in faces:
-            if len(face) == 4:
-                # FIXME:
-                1 / 0
-            elif len(face) == 3:
-                self.faces.append(face)
-            else:
-                raise Exception("Invalid number of vertices for face")
+        self.faces = faces
 
 class Instance:
+    """An actual occurrence of a Model in the world.
+
+    An Instance is essentially a Model that has been given a texture
+    and a position in the world, so it can actually be displayed.
+    """
+
     model: Model
+
+    # The model's translation (i.e. position)
     trans: ndarray
+
     texture: List[Color]
+
+    # A cache of what faces are visible, to speed up rendering.
+    # This is only used for block models.
     visibleFaces: List[bool]
 
     _worldSpaceVertices: List[ndarray]
@@ -64,11 +69,13 @@ class Instance:
         return self._worldSpaceVertices
     
     def worldSpaceVerticesUncached(self) -> List[ndarray]:
-        result = []
-        for vertex in self.model.vertices:
-            result.append(vertex + self.trans)
-        return result
-    
+        return [vertex + self.trans for vertex in self.model.vertices]
+
+
+# =========================================================================== #
+# ---------------------- COORDINATE CONVERSIONS ----------------------------- #
+# =========================================================================== #
+
 def toHomogenous(cartesian: ndarray) -> ndarray:
     #assert(cartesian.shape[1] == 1)
 
@@ -87,47 +94,18 @@ def toCartesianList(c: ndarray):
 
     return ( c[0][0] / f, c[1][0] / f )
 
-def rotateX(ang):
-    return np.array([
-        [1.0, 0.0, 0.0, 0.0],
-        [0.0, math.cos(ang), -math.sin(ang), 0.0],
-        [0.0, math.sin(ang), math.cos(ang), 0.0],
-        [0.0, 0.0, 0.0, 1.0]
-    ])
-
-def rotateY(ang):
-    return np.array([
-        [math.cos(ang), 0.0, math.sin(ang), 0.0],
-        [0.0, 1.0, 0.0, 0.0],
-        [-math.sin(ang), 0.0, math.cos(ang), 0.0],
-        [0.0, 0.0, 0.0, 1.0]
-    ])
-
-def rotateZ(ang):
-    return np.array([
-        [math.cos(ang), -math.sin(ang), 0.0, 0.0],
-        [math.sin(ang), math.cos(ang), 0.0, 0.0],
-        [0.0, 0.0, 1.0, 0.0],
-        [0.0, 0.0, 0.0, 1.0]
-    ])
-
-def translationMat(x, y, z):
-    return np.array([
-        [1.0, 0.0, 0.0, x],
-        [0.0, 1.0, 0.0, y],
-        [0.0, 0.0, 1.0, z],
-        [0.0, 0.0, 0.0, 1.0]])
-
-def wsToCanvasMat(camPos, yaw, pitch, vpDist, vpWidth, vpHeight,
+def worldToCanvasMat(camPos, yaw, pitch, vpDist, vpWidth, vpHeight,
     canvWidth, canvHeight):
-    vpToCanv = vpToCanvasMat(vpWidth, vpHeight, canvWidth, canvHeight)
-    return vpToCanv @ camToVpMat(vpDist) @ wsToCamMat(camPos, yaw, pitch)
+    vpToCanv = viewToCanvasMat(vpWidth, vpHeight, canvWidth, canvHeight)
+    return vpToCanv @ cameraToViewMat(vpDist) @ worldToCameraMat(camPos, yaw, pitch)
 
 def csToCanvasMat(vpDist, vpWidth, vpHeight, canvWidth, canvHeight):
-    vpToCanv = vpToCanvasMat(vpWidth, vpHeight, canvWidth, canvHeight)
-    return vpToCanv @ camToVpMat(vpDist)
+    vpToCanv = viewToCanvasMat(vpWidth, vpHeight, canvWidth, canvHeight)
+    return vpToCanv @ cameraToViewMat(vpDist)
 
-def wsToCamMat(camPos, yaw, pitch):
+def worldToCameraMat(camPos, yaw, pitch):
+    """Calculates a matrix that converts from world space to camera space"""
+
     # Original technique from
     # https://gamedev.stackexchange.com/questions/168542/camera-view-matrix-from-position-yaw-pitch-worldup
     # (My axes are oriented differently, so the matrix is different)
@@ -159,15 +137,17 @@ def wsToCamMat(camPos, yaw, pitch):
 
     # This is the manually-calculated inverse of the matrix shown above
     cam = np.array([
-        [cos(y), 0.0, -sin(y), c*sin(y) - a*cos(y)],
-        [-sin(p)*sin(y), cos(p), -sin(p)*cos(y), c*sin(p)*cos(y) + a*sin(p)*sin(y) - b*cos(p)],
-        [cos(p)*sin(y), sin(p), cos(p)*cos(y), -b*sin(p) - a*sin(y)*cos(p) - c*cos(y)*cos(p)],
-        [0.0, 0.0, 0.0, 1.0]
+        [        cos(y),    0.0,        -sin(y),                         c*sin(y)-a*cos(y)],
+        [-sin(p)*sin(y), cos(p), -sin(p)*cos(y),  c*sin(p)*cos(y)+a*sin(p)*sin(y)-b*cos(p)],
+        [ cos(p)*sin(y), sin(p),  cos(p)*cos(y), -b*sin(p)-a*sin(y)*cos(p)-c*cos(y)*cos(p)],
+        [           0.0,    0.0,            0.0,                                       1.0]
     ])
 
     return cam
 
-def vpToCanvasMat(vpWidth, vpHeight, canvWidth, canvHeight):
+def viewToCanvasMat(vpWidth, vpHeight, canvWidth, canvHeight):
+    """Calculates a matrix that converts from the view plane to the canvas"""
+
     w = canvWidth / vpWidth
     h = -canvHeight / vpHeight
 
@@ -179,14 +159,9 @@ def vpToCanvasMat(vpWidth, vpHeight, canvWidth, canvHeight):
         [0.0, h, y],
         [0.0, 0.0, 1.0]])
 
-def wsToCam(point, camPos):
-    x = point[0] - camPos[0]
-    y = point[1] - camPos[1]
-    z = point[2] - camPos[2]
+def cameraToViewMat(vpDist):
+    """Calculates a matrix that converts from camera space to the view plane"""
 
-    return [x, y, z]
-
-def camToVpMat(vpDist):
     vpd = vpDist
 
     return np.array([
@@ -195,33 +170,26 @@ def camToVpMat(vpDist):
         [0.0, 0.0, 1.0, 0.0]
     ])
 
-def camToVp(point, vpDist):
-    vpX = point[0] * vpDist / point[2]
-    vpY = point[1] * vpDist / point[2]
-
-    return [vpX, vpY]
-
-def vpToCanvas(point, vpWidth, vpHeight, canvWidth, canvHeight):
-    canvX = (point[0] / vpWidth + 0.5) * canvWidth
-    canvY = (-point[1] / vpHeight + 0.5) * canvHeight
-
-    return [canvX, canvY]
-
-def wsToCanvas(app, point):
+def worldToCanvas(app, point):
     point = toHomogenous(point)
-    mat = wsToCanvasMat(app.cameraPos, app.cameraYaw, app.cameraPitch,
+    mat = worldToCanvasMat(app.cameraPos, app.cameraYaw, app.cameraPitch,
         app.vpDist, app.vpWidth, app.vpHeight, app.width, app.height)
 
     point = mat @ point
 
     point = toCartesian(point)
 
-    # point = wsToCam(point, app.cameraPos)
-    # point = camToVp(point, app.vpDist)
-    #point = vpToCanvas(point, app.vpWidth, app.vpHeight, app.width, app.height)
     return point
 
+
+# =========================================================================== #
+# ---------------------- COORDINATE CONVERSIONS ----------------------------- #
+# =========================================================================== #
+
+
 def faceNormal(v0, v1, v2):
+    """Returns the normal vector for the face represented by v0, v1, v2"""
+
     v0 = toCartesian(v0)
     v1 = toCartesian(v1)
     v2 = toCartesian(v2)
@@ -231,8 +199,12 @@ def faceNormal(v0, v1, v2):
     cross = np.cross(a, b)
     return cross
 
-# Vertices must be in camera space
 def isBackFace(v0, v1, v2) -> bool:
+    """
+    If v0, v1, v2 are vertices in camera space, returns True if the
+    face they represent is facing away from the camera.
+    """
+
     # From https://en.wikipedia.org/wiki/Back-face_culling
 
     normal = faceNormal(v0, v1, v2)
@@ -240,21 +212,16 @@ def isBackFace(v0, v1, v2) -> bool:
 
     return -np.dot(v0, normal) >= 0
 
-def blockFaceVisible(app, blockPos: BlockPos, faceIdx: int) -> bool:
-    (x, y, z) = adjacentBlockPos(blockPos, faceIdx)
-
-    if world.coordsOccupied(app, BlockPos(x, y, z)):
-        return False
-
-    return True
-
 def blockFaceLight(app, blockPos: BlockPos, faceIdx: int) -> int:
+    """Returns the light level of the given face of the block"""
+
     pos = adjacentBlockPos(blockPos, faceIdx)
     (chunk, (x, y, z)) = world.getChunk(app, pos)
     return chunk.lightLevels[x, y, z]
 
 def isBackBlockFace(app, blockPos: BlockPos, faceIdx: int) -> bool:
-    # Left 
+    """Returns True if the given face of the block is facing away from the camera"""
+
     faceIdx //= 2
     (x, y, z) = world.blockToWorld(blockPos)
     xDiff = app.cameraPos[0] - x
@@ -331,18 +298,23 @@ def clip(app, vertices: List[Any], face: Face) -> List[Face]:
 
         return [clippedFace]
 
-# This converts the instance's vertices to points in camera space, and then:
-# For all blocks, the following happens:
-#       - Faces pointing away from the camera are removed
-#       - Faces that are hidden 'underground' are removed
-#       - The color of each face is adjusted based on lighting
-#       - ~~A "fog" is applied~~ NOT IMPLEMENTED!
-# For anything else:
-#       - Normal back face culling is applied
-# 
-# Then, the faces are clipped, which may remove, modify, or split faces
-# Then a list of faces, their vertices, and their colors are returned
 def cullInstance(app, toCamMat: ndarray, inst: Instance, blockPos: Optional[BlockPos]) -> List[Tuple[Any, Face, Color]]:
+    """
+    This converts the instance's vertices to points in camera space, and then:
+
+    For all blocks, the following happens:
+        - Faces pointing away from the camera are removed
+        - Faces that are hidden 'underground' are removed
+        - The color of each face is adjusted based on lighting
+        - ~~A "fog" is applied~~ NOT IMPLEMENTED! TODO:
+
+    For anything else:
+        - Normal back face culling is applied
+    
+    Then the faces are clipped, which may remove, modify, or split faces.
+    Then a list of faces, their vertices, and their colors are returned
+    """
+
     vertices = [toCamMat @ v for v in inst.worldSpaceVertices()]
 
     faces = []
@@ -361,10 +333,6 @@ def cullInstance(app, toCamMat: ndarray, inst: Instance, blockPos: Optional[Bloc
             if isBackBlockFace(app, blockPos, faceIdx):
                 skipNext = True
                 continue
-
-            #if not blockFaceVisible(app, blockPos, faceIdx):
-            #    skipNext = True
-            #    continue
 
             light = blockFaceLight(app, blockPos, faceIdx)
             r = int(color[1:3], base=16)
@@ -403,12 +371,12 @@ def cullInstance(app, toCamMat: ndarray, inst: Instance, blockPos: Optional[Bloc
 
     return faces
 
-def blockPosIsVisible2(app, camX, camY, camZ, lookX, lookY, lookZ, pos: BlockPos) -> bool:
+def blockPosIsVisible2(camX, camY, camZ, lookX, lookY, lookZ, pos: BlockPos) -> bool:
     [blockX, blockY, blockZ] = world.blockToWorld(pos)
 
     dot = lookX * (blockX - camX) + lookY * (blockY - camY) + lookZ * (blockZ - camZ)
 
-    return dot >= 0
+    return dot >= 0.0
 
 def blockPosIsVisible(app, pos: BlockPos) -> bool:
     pitch = app.cameraPitch
@@ -444,7 +412,7 @@ def renderInstances(app, canvas):
 # Straight down: 40ms
 # Forward: 35ms
 
-def makeBlockChecker(app, pitch, yaw):
+def makeFrustrumCullCheck(app, pitch, yaw):
     lookX = cos(pitch)*sin(-yaw)
     lookY = sin(pitch)
     lookZ = cos(pitch)*cos(-yaw)
@@ -455,61 +423,63 @@ def makeBlockChecker(app, pitch, yaw):
     camY -= lookY
     camZ -= lookZ
 
-    def wrapper(app, blockPos):
-        return blockPosIsVisible2(app, camX, camY, camZ, lookX, lookY, lookZ, blockPos)
+    def wrapper(blockPos):
+        return blockPosIsVisible2(camX, camY, camZ, lookX, lookY, lookZ, blockPos)
     
     return wrapper
 
 def drawToFaces(app):
-    check1 = makeBlockChecker(app, app.cameraPitch, app.cameraYaw)
-    check2 = makeBlockChecker(app, app.cameraPitch, app.cameraYaw + (app.horizFov / 2))
-    check3 = makeBlockChecker(app, app.cameraPitch, app.cameraYaw - (app.horizFov / 2))
-    check4 = makeBlockChecker(app, app.cameraPitch - (app.vertFov / 2), app.cameraYaw)
-    check5 = makeBlockChecker(app, app.cameraPitch + (app.vertFov / 2), app.cameraYaw)
+    # These perform view frustrum culling. The functions are precalculated at
+    # the beginning of the loop because that causes *insanely* good speedups.
+    check1 = makeFrustrumCullCheck(app, app.cameraPitch, app.cameraYaw)
+    check2 = makeFrustrumCullCheck(app, app.cameraPitch, app.cameraYaw + (app.horizFov / 2))
+    check3 = makeFrustrumCullCheck(app, app.cameraPitch, app.cameraYaw - (app.horizFov / 2))
+    check4 = makeFrustrumCullCheck(app, app.cameraPitch - (app.vertFov / 2), app.cameraYaw)
+    check5 = makeFrustrumCullCheck(app, app.cameraPitch + (app.vertFov / 2), app.cameraYaw)
 
     [camX, camY, camZ] = app.cameraPos
 
     renderDist = math.sqrt(app.renderDistanceSq) + 1
 
-    toCamMat = wsToCamMat(app.cameraPos, app.cameraYaw, app.cameraPitch)
+    toCamMat = worldToCameraMat(app.cameraPos, app.cameraYaw, app.cameraPitch)
     faces = []
-    for chunkPos in app.chunks:
-        chunk = app.chunks[chunkPos]
-        if chunk.isVisible:
-            [cx, cy, cz] = chunk.pos
-            cx *= 16
-            cy *= 16
-            cz *= 16
+    for chunk in app.chunks.values():
+        if not chunk.isVisible: continue 
 
-            for (i, inst) in enumerate(chunk.instances):
-                if inst is not None:
-                    (inst, unburied) = inst
-                    if unburied:
-                        #wx = chunk.pos[0] * 16 + (i // 256)
-                        #wy = chunk.pos[1] * 16 + (i // 16) % 16
-                        #wz = chunk.pos[2] * 16 + (i % 16)
+        [cx, cy, cz] = chunk.pos
+        cx *= 16
+        cy *= 16
+        cz *= 16
 
-                        wx = cx + (i // 256)
-                        wy = cy + (i // 16) % 16
-                        wz = cz + (i % 16)
+        for (i, inst) in enumerate(chunk.instances):
+            if inst is not None:
+                (inst, unburied) = inst
+                if unburied:
+                    #wx = chunk.pos[0] * 16 + (i // 256)
+                    #wy = chunk.pos[1] * 16 + (i // 16) % 16
+                    #wz = chunk.pos[2] * 16 + (i % 16)
 
-                        if abs(wx - camX) >= renderDist: continue
-                        if abs(wz - camZ) >= renderDist: continue
+                    wx = cx + (i // 256)
+                    wy = cy + (i // 16) % 16
+                    wz = cz + (i % 16)
 
-                        blockPos = BlockPos(wx, wy, wz)
+                    if abs(wx - camX) >= renderDist: continue
+                    if abs(wz - camZ) >= renderDist: continue
 
-                        # View frustrum culling
-                        #if not check1(app, blockPos): continue
-                        if not check2(app, blockPos): continue
-                        if not check3(app, blockPos): continue
-                        if not check4(app, blockPos): continue
-                        if not check5(app, blockPos): continue
+                    blockPos = BlockPos(wx, wy, wz)
 
-                        wx -= camX
-                        wy -= camY
-                        wz -= camZ
-                        if wx**2 + wz**2 <= app.renderDistanceSq:
-                            faces += cullInstance(app, toCamMat, inst, blockPos)
+                    # View frustrum culling
+                    #if not check1(blockPos): continue
+                    if not check2(blockPos): continue
+                    if not check3(blockPos): continue
+                    if not check4(blockPos): continue
+                    if not check5(blockPos): continue
+
+                    wx -= camX
+                    wy -= camY
+                    wz -= camZ
+                    if wx**2 + wz**2 <= app.renderDistanceSq:
+                        faces += cullInstance(app, toCamMat, inst, blockPos)
     return faces
 
 def drawToCanvas(app, canvas, faces):
@@ -529,7 +499,6 @@ def drawToCanvas(app, canvas, faces):
 
     for i in range(len(faces)):
         if type(faces[i][0]) != type((0, 0)):
-            #verts = [toCartesianList(mat @ v) for v in faces[i][0]]
             verts = [csToCanvas(v) for v in faces[i][0]]
             faces[i][0] = (verts, True)
 
@@ -548,52 +517,16 @@ def drawToCanvas(app, canvas, faces):
 
         canvas.create_polygon(x0, y0, x1, y1, x2, y2, fill=color)
 
-'''
-vs = [v0, v1, v2]
-
-if vs[1][1] <= vs[0][1] and vs[1][1] <= vs[2][1]:
-    vs[0], vs[1] = vs[1], vs[0]
-elif vs[2][1] <= vs[0][1] and vs[2][1] <= vs[1][1]:
-    vs[0], vs[2] = vs[2], vs[0]
-
-if vs[2][1] <= vs[1][1]:
-    vs[1], vs[2] = vs[2], vs[1]
-
-yMin = int(vs[0][1])
-yMid = int(vs[1][1])
-yMax = int(vs[2][1])
-
-print(yMin, yMid, yMax)
-
-if yMin == yMid or yMid == yMax:
-    continue
-
-tallSlope = (vs[2][0] - vs[0][0]) / (yMax - yMin)
-shortSlope1 = (vs[1][0] - vs[0][0]) / (yMid - yMin)
-shortSlope2 = (vs[2][0] - vs[1][0]) / (yMax - yMid)
-
-for y in range(yMin, yMax + 1):
-    tallX = vs[0][0] + tallSlope * (y - yMin)
-
-    if y < yMid:
-        shortX = vs[0][0] + shortSlope1 * (y - yMin)
-    else:
-        shortX = vs[1][0] + shortSlope2 * (y - yMin)
-    
-    minX = int(min(tallX, shortX))
-    maxX = int(max(tallX, shortX))
-
-    #for x in range(minX, maxX + 1):
-    canvas.create_rectangle(minX, y, maxX, y, outline=color)
-'''
-
 frameTimes = [0.0] * 10
 frameTimeIdx = 0
 
-# This is simply a shim function that calls `create_text` twice, with
-# the text colored black, then white.
-# This makes it more easily legible on both dark and light backgrounds.
 def drawTextOutlined(canvas, x, y, **kwargs):
+    """
+    This is simply a shim function that calls `create_text` twice,
+    with the text colored black, then white.
+    This makes it more easily legible on both dark and light backgrounds.
+    """
+
     canvas.create_text(x + 1, y + 1, fill='black', **kwargs)
     canvas.create_text(x, y, fill='white', **kwargs)
 
@@ -668,12 +601,12 @@ def redrawAll(app, canvas, doDrawHud=True):
     # The world
     renderInstances(app, canvas)
 
-    #origin = wsToCanvas(app, np.array([[0.0], [0.0], [0.0]]))
-    #xAxis = wsToCanvas(app, np.array([[1.0], [0.0], [0.0]]))
-    #yAxis = wsToCanvas(app, np.array([[0.0], [1.0], [0.0]]))
-    #zAxis = wsToCanvas(app, np.array([[0.0], [0.0], [1.0]]))
+    #origin = worldToCanvas(app, np.array([[0.0], [0.0], [0.0]]))
+    #xAxis = worldToCanvas(app, np.array([[1.0], [0.0], [0.0]]))
+    #yAxis = worldToCanvas(app, np.array([[0.0], [1.0], [0.0]]))
+    #zAxis = worldToCanvas(app, np.array([[0.0], [0.0], [1.0]]))
 
-    #xpoint = wsToCamMat(app.cameraPos, app.cameraYaw, app.cameraPitch) @ toHomogenous(np.array([[1.0], [0.0], [0.0]]))
+    #xpoint = worldToCameraMat(app.cameraPos, app.cameraYaw, app.cameraPitch) @ toHomogenous(np.array([[1.0], [0.0], [0.0]]))
     #xpoint = toCartesian(xpoint)
     # print(f"x point: {xpoint}")
 

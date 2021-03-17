@@ -119,7 +119,7 @@ class Chunk:
 
         treePos = []
 
-        for treeIdx in range(2):
+        for treeIdx in range(3):
             treeX = random.randint(1, 15)
             treeZ = random.randint(1, 15)
 
