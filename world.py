@@ -91,7 +91,7 @@ class Chunk:
     def generate(self, app, seed):
         # x and y and z
         self.blocks = np.full((16, 16, 16), 'air', dtype=object)
-        self.lightLevels = np.full((16, 16, 16), 0)
+        self.lightLevels = np.full((16, 16, 16), 7)
         self.instances = [None] * self.blocks.size
 
         minVal = 100.0
