@@ -534,6 +534,38 @@ def drawTextOutlined(canvas, x, y, **kwargs):
     canvas.create_text(x + 1, y + 1, fill='black', **kwargs)
     canvas.create_text(x, y, fill='white', **kwargs)
 
+def getSlotCenterAndSize(app, slotIdx) -> Tuple[int, int, int]:
+    slotWidth = app.itemTextures['air'].width + 7
+    if slotIdx < 9:
+        margin = 10
+        x = (slotIdx - 4) * slotWidth + app.width / 2
+        y = app.height - margin - slotWidth / 2
+        return (x, y, slotWidth)
+    else:
+        rowNum = (36 // 9) - 1
+        rowIdx = (slotIdx // 9) - 1
+        x = ((slotIdx % 9) - 4) * slotWidth + app.width / 2
+        y = app.height / 2 - (rowIdx - (rowNum - 1) / 2) * slotWidth 
+        return (x, y, slotWidth)
+
+
+def drawMainInventory(app, canvas):
+    # FIXME: 
+    if hasattr(app.mode, 'player'):
+        player = app.mode.player
+    else:
+        player = app.mode.submode.player
+
+    slotWidth = app.itemTextures['air'].width + 7
+
+    for i in range(9, 36):
+        slot = player.inventory[i]
+
+        (x, y, _) = getSlotCenterAndSize(app, i)
+
+        drawSlot(app, canvas, x, y, slot)
+
+
 def drawHotbar(app, canvas):
     # FIXME: 
     if hasattr(app.mode, 'player'):
@@ -542,9 +574,6 @@ def drawHotbar(app, canvas):
         player = app.mode.submode.player
 
     slotWidth = app.itemTextures['air'].width + 7
-    width = 9 * slotWidth
-
-    leftX = app.width / 2 - width / 2
 
     margin = 10
 
@@ -563,15 +592,16 @@ def drawHotbar(app, canvas):
         outline='white')
 
 
-def drawSlot(app, canvas, x, y, slot):
+def drawSlot(app, canvas, x, y, slot, drawBackground=True):
     """x and y are the *center* of the slot"""
 
     slotWidth = app.itemTextures['air'].width + 6
 
-    canvas.create_rectangle(x - slotWidth / 2, y - slotWidth / 2,
-        x + slotWidth / 2,
-        y + slotWidth / 2,
-        fill='#444', outline='#333')
+    if drawBackground:
+        canvas.create_rectangle(x - slotWidth / 2, y - slotWidth / 2,
+            x + slotWidth / 2,
+            y + slotWidth / 2,
+            fill='#8b8b8b', outline='#373737')
 
     if not slot.isEmpty():
         tex = app.itemTextures[slot.item]

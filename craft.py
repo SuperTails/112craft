@@ -7,10 +7,10 @@ import render
 import world
 from button import Button, ButtonManager, createSizedBackground
 from world import Chunk, ChunkPos
-from typing import List
+from typing import List, Optional
 from render import getCachedImage
 from enum import Enum
-from player import Player
+from player import Player, Slot
 
 # =========================================================================== #
 # ----------------------------- THE APP ------------------------------------- #
@@ -201,7 +201,7 @@ class PlayingMode(Mode):
         elif event.key == 'd':
             app.d = True
         elif event.key == 'e':
-            app.mode = InventoryMode(app.mode)
+            app.mode = InventoryMode(app, app.mode)
         elif event.key == 'Space':
             if self.player.onGround:
                 app.mode.player.velocity[1] = 0.35
@@ -220,18 +220,40 @@ class PlayingMode(Mode):
 
 class InventoryMode(Mode):
     submode: Mode
+    heldItem: Slot = Slot('', 0)
 
-    def __init__(self, submode: Mode):
+    def __init__(self, app, submode: Mode):
+        setMouseCapture(app, False)
         self.submode = submode
 
     def redrawAll(self, app, canvas):
         self.submode.redrawAll(app, canvas)
 
-        canvas.create_text(100, 100, text="HELLO WORLD")
+        render.drawMainInventory(app, canvas)
+
+        if app.mousePos is not None:
+            render.drawSlot(app, canvas, app.mousePos[0], app.mousePos[1],
+                self.heldItem, drawBackground=False)
+
+    
+    def mousePressed(self, app, event):
+        clickedSlot = None
+        for i in range(36):
+            (x, y, w) = render.getSlotCenterAndSize(app, i)
+            x0, y0 = x - w/2, y - w/2
+            x1, y1 = x + w/2, y + w/2
+            if x0 < event.x and event.x < x1 and y0 < event.y and event.y < y1:
+                clickedSlot = i
+        
+        if clickedSlot is not None and clickedSlot != 0:
+            player = self.submode.player
+            self.heldItem, player.inventory[clickedSlot] = player.inventory[clickedSlot], self.heldItem
+            
     
     def keyPressed(self, app, event):
         if event.key == 'e':
             app.mode = self.submode
+            setMouseCapture(app, True)
 
 # Initializes all the data needed to run 112craft
 def appStarted(app):
@@ -456,6 +478,9 @@ def mouseMoved(app, event):
 def mouseMovedOrDragged(app, event):
     if not app.captureMouse:
         app.prevMouse = None
+        app.mousePos = (event.x, event.y)
+    else:
+        app.mousePos = None
 
     if app.prevMouse is not None:
         xChange = -(event.x - app.prevMouse[0])
