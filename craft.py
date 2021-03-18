@@ -5,9 +5,10 @@ import numpy as np
 import math
 import render
 import world
+import copy
 from button import Button, ButtonManager, createSizedBackground
 from world import Chunk, ChunkPos
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from render import getCachedImage
 from enum import Enum
 from player import Player, Slot
@@ -32,7 +33,9 @@ class Mode:
     def __init__(self): pass
 
     def mousePressed(self, app, event): pass
+    def rightMousePressed(self, app, event): pass
     def mouseReleased(self, app, event): pass
+    def rightMouseReleased(self, app, event): pass
     def timerFired(self, app): pass
     def sizeChanged(self, app): pass
     def redrawAll(self, app, canvas): pass
@@ -155,34 +158,39 @@ class PlayingMode(Mode):
     def mousePressed(self, app, event):
         self.mouseHeld = True
 
+    def rightMousePressed(self, app, event):
         block = world.lookedAtBlock(app)
         if block is not None:
             (pos, face) = block
-            if self.player.hotbarIdx != 0:
-                [x, y, z] = pos
-                if face == 'left':
-                    x -= 1
-                elif face == 'right':
-                    x += 1
-                elif face == 'bottom':
-                    y -= 1
-                elif face == 'top':
-                    y += 1
-                elif face == 'back':
-                    z -= 1
-                elif face == 'front':
-                    z += 1
-                pos = world.BlockPos(x, y, z)
+            [x, y, z] = pos
+            if face == 'left':
+                x -= 1
+            elif face == 'right':
+                x += 1
+            elif face == 'bottom':
+                y -= 1
+            elif face == 'top':
+                y += 1
+            elif face == 'back':
+                z -= 1
+            elif face == 'front':
+                z += 1
+            pos2 = world.BlockPos(x, y, z)
 
-                if not world.coordsInBounds(app, pos): return
+            if not world.coordsInBounds(app, pos2): return
 
+            if world.getBlock(app, pos) == 'crafting_table':
+                app.mode = InventoryMode(app, self, name='crafting_table')
+            else:
                 slot = self.player.inventory[self.player.hotbarIdx]
                 if slot.amount == 0: return
                 
                 if slot.amount > 0:
                     slot.amount -= 1
+                
+                if slot.item not in app.textures: return
 
-                world.addBlock(app, pos, slot.item)
+                world.addBlock(app, pos2, slot.item)
     
     def mouseReleased(self, app, event):
         self.mouseHeld = False
@@ -201,7 +209,7 @@ class PlayingMode(Mode):
         elif event.key == 'd':
             app.d = True
         elif event.key == 'e':
-            app.mode = InventoryMode(app, app.mode)
+            app.mode = InventoryMode(app, self, name='inventory')
         elif event.key == 'Space':
             if self.player.onGround:
                 app.mode.player.velocity[1] = 0.35
@@ -217,105 +225,239 @@ class PlayingMode(Mode):
             app.a = False
         elif event.key == 'd':
             app.d = False
+        
+class CraftingGui:
+    craftInputs: List[List[Slot]]
+    craftOutput: Slot
 
-class InventoryMode(Mode):
-    submode: PlayingMode
-    heldItem: Slot = Slot('', 0)
-    craftOutput: Slot = Slot('', 0)
+    def __init__(self, size: int):
+        self.craftInputs = [[Slot('', 0) for _ in range(size)] for _ in range(size)]
+        self.craftOutput = Slot('', 0)
 
-    craftInputs: List[List[Slot]] = [[Slot('', 0), Slot('', 0)], [Slot('', 0), Slot('', 0)]]
+    def onClick(self, app, isRight, mx, my):
+        clickedSlot = self.clickedCraftInputIdx(app, mx, my)
+        print(f"clicked craft slot {clickedSlot}")
+        if clickedSlot is not None:
+            (rowIdx, colIdx) = clickedSlot
+            if isRight:
+                app.mode.onRightClickIntoNormalSlot(app, self.craftInputs[rowIdx][colIdx])
+            else:
+                app.mode.onLeftClickIntoNormalSlot(app, self.craftInputs[rowIdx][colIdx])
+        
+        if self.clickedCraftOutput(app, mx, my):
+            merged = app.mode.heldItem.tryMergeWith(self.craftOutput)
+            if merged is not None:
+                for r in range(len(self.craftInputs)):
+                    for c in range(len(self.craftInputs)):
+                        if self.craftInputs[r][c].amount > 0:
+                            self.craftInputs[r][c].amount -= 1
 
-    def __init__(self, app, submode: PlayingMode):
-        setMouseCapture(app, False)
-        self.submode = submode
+                app.mode.heldItem = merged
+                print(f"set held item to {merged}")
+        
+
+        toid = lambda s: None if s.isEmpty() else s.item
+
+        c = [[toid(i) for i in row] for row in self.craftInputs]
+
+        self.craftOutput = Slot('', 0)
+
+        for r in app.recipes:
+            if r.isCraftedBy(c):
+                self.craftOutput = copy.copy(r.outputs)
+                break
+        
+        print(f"output is {self.craftOutput}")
+
+    
+    def clickedCraftOutput(self, a, b, c): 1 / 0
+
+    def clickedCraftInputIdx(self, app, mx, my): 1 / 0
+
+
+class InventoryCraftingGui(CraftingGui):
+    def __init__(self):
+        super().__init__(2)
 
     def redrawAll(self, app, canvas):
-        self.submode.redrawAll(app, canvas)
-
-        render.drawMainInventory(app, canvas)
-
         (_, _, w) = render.getSlotCenterAndSize(app, 0)
         for (rowIdx, row) in enumerate(self.craftInputs):
             for (colIdx, col) in enumerate(row):
                 x = colIdx * w + 350
                 y = rowIdx * w + 100
                 render.drawSlot(app, canvas, x, y, col)
-        
+
         render.drawSlot(app, canvas, 460, 100 + w / 2, self.craftOutput)
-
-        if app.mousePos is not None:
-            render.drawSlot(app, canvas, app.mousePos[0], app.mousePos[1],
-                self.heldItem, drawBackground=False)
     
-    def mousePressed(self, app, event):
+    def clickedCraftInputIdx(self, app, mx, my) -> Optional[Tuple[int, int]]:
         (_, _, w) = render.getSlotCenterAndSize(app, 0)
-
-        clickedSlot = None
-        for i in range(36):
-            (x, y, w) = render.getSlotCenterAndSize(app, i)
-            x0, y0 = x - w/2, y - w/2
-            x1, y1 = x + w/2, y + w/2
-            if x0 < event.x and event.x < x1 and y0 < event.y and event.y < y1:
-                clickedSlot = i
-        
-        if clickedSlot is not None and clickedSlot != 0:
-            player = self.submode.player
-            self.heldItem, player.inventory[clickedSlot] = player.inventory[clickedSlot], self.heldItem
-            return
-        
         for rowIdx in range(2):
-            done = False
             for colIdx in range(2):
                 x = colIdx * w + 350
                 y = rowIdx * w + 100
                 x0, y0 = x - w/2, y - w/2
                 x1, y1 = x + w/2, y + w/2
-                if x0 < event.x and event.x < x1 and y0 < event.y and event.y < y1:
-                    player = self.submode.player
-                    self.heldItem, self.craftInputs[rowIdx][colIdx] = self.craftInputs[rowIdx][colIdx], self.heldItem
-                    done = True
-                    break
-            if done: break
+                if x0 < mx and mx < x1 and y0 < my and my < y1:
+                    return (rowIdx, colIdx)
+        return None
+    
+    def clickedCraftOutput(self, app, mx, my) -> bool:
+        (_, _, w) = render.getSlotCenterAndSize(app, 0)
         
         x = 470
         y = 100 + w / 2
         x0, y0 = x - w/2, y - w/2
         x1, y1 = x + w/2, y + w/2
 
-        if x0 < event.x and event.x < x1 and y0 < event.y and event.y < y1:
-            merged = self.heldItem.tryMergeWith(self.craftOutput)
-            if merged is not None:
-                if self.craftInputs[0][0].amount > 0: 
-                    self.craftInputs[0][0].amount -= 1
-                if self.craftInputs[0][1].amount > 0: 
-                    self.craftInputs[0][1].amount -= 1
-                if self.craftInputs[1][0].amount > 0: 
-                    self.craftInputs[1][0].amount -= 1
-                if self.craftInputs[1][1].amount > 0: 
-                    self.craftInputs[1][1].amount -= 1
+        return x0 < mx and mx < x1 and y0 < my and my < y1
+    
 
-                self.heldItem = merged
-            
+class CraftingTableGui(CraftingGui):
+    def __init__(self):
+        super().__init__(3)
+
+    def clickedCraftInputIdx(self, app, mx, my) -> Optional[Tuple[int, int]]:
+        (_, _, w) = render.getSlotCenterAndSize(app, 0)
+        for rowIdx in range(3):
+            for colIdx in range(3):
+                (x, y) = self.craftSlotCenter(app, rowIdx, colIdx)
+                x0, y0 = x - w/2, y - w/2
+                x1, y1 = x + w/2, y + w/2
+                if x0 < mx and mx < x1 and y0 < my and my < y1:
+                    return (rowIdx, colIdx)
+        return None
+    
+    def craftOutputCenter(self, app) -> Tuple[int, int]:
+        (_, _, w) = render.getSlotCenterAndSize(app, 0)
         
-        toid = lambda s: None if s.isEmpty() else s.item
+        return (app.width // 2 + w * 2, 70 + w)
+    
+    def craftSlotCenter(self, app, rowIdx, colIdx) -> Tuple[int, int]:
+        (_, _, w) = render.getSlotCenterAndSize(app, 0)
 
-        c = [
-            [toid(self.craftInputs[0][0]), toid(self.craftInputs[0][1])],
-            [toid(self.craftInputs[1][0]), toid(self.craftInputs[1][1])]
-        ]
+        x = app.width / 2 + (colIdx - 3) * w
+        y = 70 + rowIdx * w
 
+        return (x, y)
+    
+    def clickedCraftOutput(self, app, mx, my) -> bool:
+        (_, _, w) = render.getSlotCenterAndSize(app, 0)
+        
+        (x, y) = self.craftOutputCenter(app)
+        x0, y0 = x - w/2, y - w/2
+        x1, y1 = x + w/2, y + w/2
+
+        return x0 < mx and mx < x1 and y0 < my and my < y1
+    
+    def redrawAll(self, app, canvas):
+        (_, _, w) = render.getSlotCenterAndSize(app, 0)
+        for (rowIdx, row) in enumerate(self.craftInputs):
+            for (colIdx, col) in enumerate(row):
+                (x, y) = self.craftSlotCenter(app, rowIdx, colIdx)
+                render.drawSlot(app, canvas, x, y, col)
+        
+        (x, y) = self.craftOutputCenter(app)
+
+        render.drawSlot(app, canvas, x, y, self.craftOutput)
+
+class InventoryMode(Mode):
+    submode: PlayingMode
+    heldItem: Slot = Slot('', 0)
+
+    def __init__(self, app, submode: PlayingMode, name: str):
+        setMouseCapture(app, False)
+        self.submode = submode
+        self.heldItem = Slot('', 0)
         self.craftOutput = Slot('', 0)
 
-        for r in app.recipes:
-            if r.isCraftedBy(c):
-                self.craftOutput = r.outputs
-                break
+        if name == 'inventory':
+            self.gui = InventoryCraftingGui()
+        elif name == 'crafting_table':
+            self.gui = CraftingTableGui()
+        else:
+            1 / 0
+
+    def redrawAll(self, app, canvas):
+        self.submode.redrawAll(app, canvas)
+
+        render.drawMainInventory(app, canvas)
+
+        self.gui.redrawAll(app, canvas)
+        
+        if app.mousePos is not None:
+            render.drawSlot(app, canvas, app.mousePos[0], app.mousePos[1],
+                self.heldItem, drawBackground=False)
+    
+    def mousePressed(self, app, event):
+        self.someMousePressed(app, event, False)
+    
+    def rightMousePressed(self, app, event):
+        self.someMousePressed(app, event, True)
+    
+    def clickedInventorySlotIdx(self, app, mx, my) -> Optional[int]:
+        for i in range(36):
+            (x, y, w) = render.getSlotCenterAndSize(app, i)
+            x0, y0 = x - w/2, y - w/2
+            x1, y1 = x + w/2, y + w/2
+            if x0 < mx and mx < x1 and y0 < my and my < y1:
+                return i
+        
+        return None
+    
+    def onRightClickIntoNormalSlot(self, app, normalSlot):
+        if self.heldItem.isEmpty():
+            # Picks up half of the slot
+            if normalSlot.isInfinite():
+                amountTaken = 1
+            else:
+                amountTaken = math.ceil(normalSlot.amount / 2)
+                normalSlot.amount -= amountTaken
+            self.heldItem = Slot(normalSlot.item, amountTaken)
+        else:
+            newStack = normalSlot.tryMergeWith(Slot(self.heldItem.item, 1))
+            if newStack is not None:
+                if not self.heldItem.isInfinite():
+                    self.heldItem.amount -= 1
+                normalSlot.item = newStack.item
+                normalSlot.amount = newStack.amount
+    
+    def onLeftClickIntoNormalSlot(self, app, normalSlot):
+        newStack = self.heldItem.tryMergeWith(normalSlot)
+        if newStack is None or self.heldItem.isEmpty():
+            tempItem = self.heldItem.item
+            tempAmount = self.heldItem.amount
+            self.heldItem.item = normalSlot.item
+            self.heldItem.amount = normalSlot.amount
+            normalSlot.item = tempItem
+            normalSlot.amount = tempAmount
+        else:
+            self.heldItem = Slot('', 0)
+            normalSlot.item = newStack.item
+            normalSlot.amount = newStack.amount
+
+    def someMousePressed(self, app, event, isRight: bool):
+        (_, _, w) = render.getSlotCenterAndSize(app, 0)
+
+        clickedSlot = self.clickedInventorySlotIdx(app, event.x, event.y) 
+        print(f"clicked inv slot {clickedSlot}")
+        if clickedSlot is not None:
+            player = self.submode.player
+            if isRight:
+                self.onRightClickIntoNormalSlot(app, player.inventory[clickedSlot])
+            else:
+                self.onLeftClickIntoNormalSlot(app, player.inventory[clickedSlot])
+
+        
+        self.gui.onClick(app, isRight, event.x, event.y)
  
     def keyPressed(self, app, event):
         if event.key == 'e':
-            for r in range(2):
-                for c in range(2):
-                    self.submode.player.pickUpItem(app, self.craftInputs[r][c])
+            dim = len(self.gui.craftInputs)
+            for r in range(dim):
+                for c in range(dim):
+                    self.submode.player.pickUpItem(app, self.gui.craftInputs[r][c])
+            self.submode.player.pickUpItem(app, self.heldItem)
+            self.heldItem = Slot('', 0)
             app.mode = self.submode
             setMouseCapture(app, True)
 
@@ -373,7 +515,7 @@ def appStarted(app):
     setMouseCapture(app, False)
 
 def updateBlockBreaking(app, mode: PlayingMode):
-    if mode.mouseHeld and mode.player.hotbarIdx == 0 and mode.lookedAtBlock is not None:
+    if mode.mouseHeld and mode.lookedAtBlock is not None:
         pos = mode.lookedAtBlock[0]
         if mode.player.creative:
             app.breakingBlockPos = pos
@@ -505,6 +647,15 @@ def loadResources(app):
         '#B4915D', '#AC8C53'
     ]
 
+    craftingTableTexture = [
+        '#A36F45', '#443C34',
+        '#715836', '#727274',
+        '#482E18', '#888173',
+        '#534423', '#B7B5B2',
+        '#AB673C', '#71381B',
+        '#B4915D', '#AC8C53'
+    ]
+
     app.textures = {
         'grass': grassTexture,
         'stone': stoneTexture,
@@ -512,6 +663,7 @@ def loadResources(app):
         'log': logTexture,
         'bedrock': bedrockTexture,
         'planks': planksTexture,
+        'crafting_table': craftingTableTexture,
     }
 
     app.hardnesses = {
@@ -578,7 +730,8 @@ def loadResources(app):
     app.cube = render.Model(vertices, faces)
 
     app.itemTextures = {
-        'air': app.loadImage('assets/AirItem.png')
+        'air': app.loadImage('assets/AirItem.png'),
+        'stick': app.loadImage('assets/Stick.png')
     }
 
     for (name, tex) in app.textures.items():
@@ -592,8 +745,14 @@ def keyPressed(app, event):
 def keyReleased(app, event):
     app.mode.keyReleased(app, event)
 
+def rightMousePressed(app, event):
+    app.mode.rightMousePressed(app, event)
+
 def mousePressed(app, event):
     app.mode.mousePressed(app, event)
+
+def rightMouseReleased(app, event):
+    app.mode.rightMouseReleased(app, event)
 
 def mouseReleased(app, event):
     app.mode.mouseReleased(app, event)

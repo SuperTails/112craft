@@ -1,6 +1,7 @@
 from typing import List, Optional
 from dataclasses import dataclass
 from world import ItemId, BlockPos
+import copy
 
 @dataclass
 class Slot:
@@ -21,9 +22,9 @@ class Slot:
     
     def tryMergeWith(self, other: 'Slot') -> Optional['Slot']:
         if self.isEmpty():
-            return other
+            return copy.copy(other)
         elif other.isEmpty():
-            return self
+            return copy.copy(self)
         elif self.item == other.item:
             # TODO: Stack sizes
             return Slot(self.item, self.amount + other.amount)
@@ -58,12 +59,12 @@ class Player:
             while len(self.inventory) < 36:
                 self.inventory.append(Slot('', 0))
         else:
-            self.inventory = [Slot('', 0)] * 36
-            # First slot is always reserved for breaking blocks
-            self.inventory[0] = Slot('air', -1)
+            self.inventory = [Slot('', 0) for _ in range(36)]
     
     def pickUpItem(self, app, newItem: Slot):
         """Adds an item to the player's inventory."""
+
+        if newItem.isEmpty(): return
 
         # Prioritize existing stacks of the item first
         for (i, slot) in enumerate(self.inventory):
