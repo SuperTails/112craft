@@ -3,6 +3,7 @@ import time
 from tkinter.constants import X
 import world
 import numpy as np
+from resources import getHardnessAgainst
 from math import sin, cos
 from numpy import ndarray
 from typing import List, Tuple, Optional, Any
@@ -253,7 +254,7 @@ def isBackBlockFace(app, blockPos: BlockPos, faceIdx: int) -> bool:
 # FIXME: This does NOT preserve the CCW vertex ordering!
 # And also adds stuff to `vertices`
 def clip(app, vertices: List[Any], face: Face) -> List[Face]:
-    outOfView = lambda idx: vertices[idx][2] < app.vpDist
+    def outOfView(idx): return vertices[idx][2] < app.vpDist
 
     numVisible = (not outOfView(face[0])) + (
         (not outOfView(face[1])) + (not outOfView(face[2])))
@@ -349,7 +350,15 @@ def cullInstance(app, toCamMat: ndarray, inst: Instance, blockPos: Optional[Bloc
 
             if blockPos == app.breakingBlockPos and app.breakingBlock != 0.0:
                 avg = (r + g + b) / 3.0
-                hardness = app.hardnesses[world.getBlock(app, blockPos)]
+
+                toolSlot = app.mode.player.inventory[app.mode.player.hotbarIdx]
+                if toolSlot.isEmpty():
+                    tool = ''
+                else:
+                    tool = toolSlot.item
+
+                hardness = getHardnessAgainst(app, world.getBlock(app, blockPos), tool)
+
                 desaturation = app.breakingBlock / hardness
                 r += (avg - r) * desaturation
                 g += (avg - g) * desaturation
@@ -407,7 +416,7 @@ def blockPosIsVisible(app, pos: BlockPos) -> bool:
 def renderInstances(app, canvas):
     faces = drawToFaces(app)
 
-    zCoord = lambda d: -(d[0][d[1][0]][2] + d[0][d[1][1]][2] + d[0][d[1][2]][2])
+    def zCoord(d): return -(d[0][d[1][0]][2] + d[0][d[1][1]][2] + d[0][d[1][2]][2])
     
     faces.sort(key=zCoord)
 

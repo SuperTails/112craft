@@ -8,7 +8,7 @@ def getPerlinVectors(gridX, gridY, seed):
     vectors = [(1,1,0),(-1,1,0),(1,-1,0),(-1,-1,0),(1,0,1),(-1,0,1),(1,0,-1),
                (-1,0,-1),(0,1,1),(0,-1,1),(0,1,-1),(0,-1,-1)]
     
-    combine = lambda gx, gy: hash((gx, gy, seed))
+    def combine(gx, gy): hash((gx, gy, seed))
 
     random.seed(combine(gridX, gridY))
     vtl = random.choice(vectors)
@@ -57,8 +57,8 @@ def getPerlinValue(x, y, width, seed):
     # And then we interpolate between the values depending on how close we
     # are to each value. We use this `slope` function because linear
     # interpolation looks fairly jagged.
-    slope = lambda t: 6 * t**5 - 15 * t**4 + 10 * t**3
-    interp = lambda a, b, t: b * slope(t) + (1.0 - slope(t)) * a
+    def slope(t): return 6 * t**5 - 15 * t**4 + 10 * t**3
+    def interp(a, b, t): return b * slope(t) + (1.0 - slope(t)) * a
 
     top = interp(dtl, dtr, x)
     bot = interp(dbl, dbr, x)

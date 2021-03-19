@@ -12,6 +12,7 @@ from typing import List, Optional, Tuple
 from render import getCachedImage
 from enum import Enum
 from player import Player, Slot
+from resources import loadResources, getHardnessAgainst
 
 # =========================================================================== #
 # ----------------------------- THE APP ------------------------------------- #
@@ -185,10 +186,10 @@ class PlayingMode(Mode):
                 slot = self.player.inventory[self.player.hotbarIdx]
                 if slot.amount == 0: return
                 
+                if slot.item not in app.textures: return
+
                 if slot.amount > 0:
                     slot.amount -= 1
-                
-                if slot.item not in app.textures: return
 
                 world.addBlock(app, pos2, slot.item)
     
@@ -256,7 +257,7 @@ class CraftingGui:
                 print(f"set held item to {merged}")
         
 
-        toid = lambda s: None if s.isEmpty() else s.item
+        def toid(s): return None if s.isEmpty() else s.item
 
         c = [[toid(i) for i in row] for row in self.craftInputs]
 
@@ -269,10 +270,11 @@ class CraftingGui:
         
         print(f"output is {self.craftOutput}")
 
-    
-    def clickedCraftOutput(self, a, b, c): 1 / 0
+    def clickedCraftOutput(self, a, b, c) -> bool:
+        raise Exception("Attempt to check output in abstract class")
 
-    def clickedCraftInputIdx(self, app, mx, my): 1 / 0
+    def clickedCraftInputIdx(self, app, mx, my) -> Optional[Tuple[int, int]]:
+        raise Exception("Attempt to check input in abstract class")
 
 
 class InventoryCraftingGui(CraftingGui):
@@ -363,12 +365,15 @@ class CraftingTableGui(CraftingGui):
 class InventoryMode(Mode):
     submode: PlayingMode
     heldItem: Slot = Slot('', 0)
+    player: Player
 
     def __init__(self, app, submode: PlayingMode, name: str):
         setMouseCapture(app, False)
         self.submode = submode
         self.heldItem = Slot('', 0)
         self.craftOutput = Slot('', 0)
+
+        self.player = submode.player
 
         if name == 'inventory':
             self.gui = InventoryCraftingGui()
@@ -528,7 +533,14 @@ def updateBlockBreaking(app, mode: PlayingMode):
                 app.breakingBlock = 0.0
         
         blockId = world.getBlock(app, pos)
-        hardness = app.hardnesses[blockId]       
+
+        toolSlot = mode.player.inventory[mode.player.hotbarIdx]
+        if toolSlot.isEmpty():
+            tool = ''
+        else:
+            tool = toolSlot.item
+
+        hardness = getHardnessAgainst(app, blockId, tool)
 
         if app.breakingBlock >= hardness:
             brokenName = world.getBlock(app, pos)
@@ -536,207 +548,6 @@ def updateBlockBreaking(app, mode: PlayingMode):
             mode.player.pickUpItem(app, Slot(brokenName, 1))
     else:
         app.breakingBlock = 0.0
-
-class Recipe:
-    inputs: List[List[Optional[world.ItemId]]]
-    outputs: Slot
-
-    def __init__(self, grid: List[str], outputs: Slot, maps: dict[str, world.ItemId]):
-        self.inputs = []
-        for row in grid:
-            newRow = []
-            for col in row:
-                if col == '-':
-                    newRow.append(None)
-                else:
-                    newRow.append(maps[col])
-            self.inputs.append(newRow)
-        self.outputs = outputs
-
-    def isCraftedBy(self, ingredients: List[List[Optional[world.ItemId]]]):
-        dim = len(ingredients)
-
-        rowOffset = 0
-
-        for r in range(dim):
-            if any(map(lambda c: c is not None, ingredients[r])):
-                rowOffset = r
-                break
-
-        colOffset = 0
-
-        for c in range(dim):
-            if any(map(lambda r: r[c] is not None, ingredients)):
-                colOffset = c
-                break
-
-        for rowIdx in range(dim):
-            for colIdx in range(dim):
-                if rowIdx + rowOffset >= dim or colIdx + colOffset >= dim:
-                    ingr = None
-                else:
-                    ingr = ingredients[rowIdx + rowOffset][colIdx + colOffset]
-
-                if self.inputs[rowIdx][colIdx] != ingr:
-                    return False
-
-        return True
-
-def loadResources(app):
-    vertices = [
-        np.array([[-1.0], [-1.0], [-1.0]]) / 2.0,
-        np.array([[-1.0], [-1.0], [1.0]]) / 2.0,
-        np.array([[-1.0], [1.0], [-1.0]]) / 2.0,
-        np.array([[-1.0], [1.0], [1.0]]) / 2.0,
-        np.array([[1.0], [-1.0], [-1.0]]) / 2.0,
-        np.array([[1.0], [-1.0], [1.0]]) / 2.0,
-        np.array([[1.0], [1.0], [-1.0]]) / 2.0,
-        np.array([[1.0], [1.0], [1.0]]) / 2.0
-    ]
-
-    grassTexture = [
-        '#FF0000', '#FF0000',
-        '#A52A2A', '#A52A2A',
-        '#A52A2A', '#A52A2A',
-        '#A52A2A', '#A52A2A',
-        '#A52A2A', '#A52A2A',
-        '#00FF00', '#00EE00']
-    
-    stoneTexture = [
-        '#AAAAAA', '#AAAABB',
-        '#AAAACC', '#AABBBB',
-        '#AACCCC', '#88AAAA',
-        '#AA88AA', '#888888',
-        '#AA88CC', '#778888',
-        '#BBCCAA', '#BBBBBB'
-    ]
-
-    leavesTexture = [
-        '#206000', '#256505',
-        '#257000', '#256505',
-        '#206010', '#206505',
-        '#206505', '#256005',
-        '#306005', '#256500',
-        '#206500', '#306505',
-    ]
-
-    logTexture = [
-        '#705020', '#655020',
-        '#705520', '#655025',
-        '#705025', '#705020',
-        '#755020', '#705A2A',
-        '#755520', '#7A4A20',
-        '#705525', '#70502A',
-    ]
-
-    bedrockTexture = [
-        '#0A0A10', '#0E0A10',
-        '#0A1010', '#0A0A10',
-        '#0A0A18', '#0E1010',
-        '#100A10', '#080A10',
-        '#0A0810', '#0A0A18',
-        '#0A0A1E', '#100A10',
-    ]
-
-    planksTexture = [
-        '#BE9A60', '#B4915D',
-        '#AC8C53', '#9C814B',
-        '#937240', '#7B6036',
-        '#7B6036', '#654E2B', 
-        '#9C814B', '#BE9A60',
-        '#B4915D', '#AC8C53'
-    ]
-
-    craftingTableTexture = [
-        '#A36F45', '#443C34',
-        '#715836', '#727274',
-        '#482E18', '#888173',
-        '#534423', '#B7B5B2',
-        '#AB673C', '#71381B',
-        '#B4915D', '#AC8C53'
-    ]
-
-    app.textures = {
-        'grass': grassTexture,
-        'stone': stoneTexture,
-        'leaves': leavesTexture,
-        'log': logTexture,
-        'bedrock': bedrockTexture,
-        'planks': planksTexture,
-        'crafting_table': craftingTableTexture,
-    }
-
-    app.hardnesses = {
-        'grass': 1.0,
-        'stone': 5.0,
-        'leaves': 0.5,
-        'log': 2.0,
-        'planks': 2.0,
-        'bedrock': float('inf'),
-    }
-
-    app.recipes = [
-        Recipe(
-            [
-                'l--',
-                '---',
-                '---'
-            ],
-            Slot('planks', 4),
-            { 'l': 'log' }
-        ),
-        Recipe(
-            [
-                'p--',
-                'p--',
-                '---'
-            ],
-            Slot('stick', 4),
-            { 'p': 'planks' }
-        ),
-        Recipe(
-            [
-                'pp-',
-                'pp-',
-                '---'
-            ],
-            Slot('crafting_table', 1),
-            { 'p': 'planks' }
-        )
-    ]
-
-    # Vertices in CCW order
-    faces: List[render.Face] = [
-        # Left
-        (0, 2, 1),
-        (1, 2, 3),
-        # Right
-        (4, 5, 6),
-        (6, 5, 7),
-        # Near
-        (0, 4, 2),
-        (2, 4, 6),
-        # Far
-        (5, 1, 3),
-        (5, 3, 7),
-        # Bottom
-        (0, 1, 4),
-        (4, 1, 5),
-        # Top
-        (3, 2, 6),
-        (3, 6, 7),
-    ]
-
-    app.cube = render.Model(vertices, faces)
-
-    app.itemTextures = {
-        'air': app.loadImage('assets/AirItem.png'),
-        'stick': app.loadImage('assets/Stick.png')
-    }
-
-    for (name, tex) in app.textures.items():
-        newTex = render.drawItemFromBlock(25, tex)
-        app.itemTextures[name] = newTex
 
 
 def keyPressed(app, event):
