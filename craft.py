@@ -163,20 +163,8 @@ class PlayingMode(Mode):
         block = world.lookedAtBlock(app)
         if block is not None:
             (pos, face) = block
-            [x, y, z] = pos
-            if face == 'left':
-                x -= 1
-            elif face == 'right':
-                x += 1
-            elif face == 'bottom':
-                y -= 1
-            elif face == 'top':
-                y += 1
-            elif face == 'back':
-                z -= 1
-            elif face == 'front':
-                z += 1
-            pos2 = world.BlockPos(x, y, z)
+            faceIdx = ['left', 'right', 'back', 'front', 'bottom', 'top'].index(face) * 2
+            pos2 = world.adjacentBlockPos(pos, faceIdx)
 
             if not world.coordsInBounds(app, pos2): return
 
@@ -211,6 +199,7 @@ class PlayingMode(Mode):
             app.d = True
         elif event.key == 'e':
             app.mode = InventoryMode(app, self, name='inventory')
+            app.w = app.s = app.a = app.d = False
         elif event.key == 'Space':
             if self.player.onGround:
                 app.mode.player.velocity[1] = 0.35
