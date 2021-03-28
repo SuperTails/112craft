@@ -8,7 +8,7 @@ def getPerlinVectors(gridX, gridY, seed):
     vectors = [(1,1,0),(-1,1,0),(1,-1,0),(-1,-1,0),(1,0,1),(-1,0,1),(1,0,-1),
                (-1,0,-1),(0,1,1),(0,-1,1),(0,1,-1),(0,-1,-1)]
     
-    def combine(gx, gy): hash((gx, gy, seed))
+    def combine(gx, gy): return hash((gx, gy, seed))
 
     random.seed(combine(gridX, gridY))
     vtl = random.choice(vectors)
