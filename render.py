@@ -10,6 +10,7 @@ from typing import List, Tuple, Optional, Any
 from world import BlockPos, adjacentBlockPos
 from cmu_112_graphics import ImageTk # type: ignore
 from PIL import Image, ImageDraw
+from OpenGL.GL import * #type:ignore
 
 # Author: Carson Swoveland (cswovela)
 # Part of a term project for 15112
@@ -37,6 +38,15 @@ class Model:
     def __init__(self, vertices: List[ndarray], faces: List[Face]):
         self.vertices = vertices
         self.faces = faces
+    
+class CubeInstance:
+    trans: ndarray
+
+    texture: int
+
+    def __init__(self, trans: ndarray, texture: int):
+        self.trans = trans
+        self.texture = texture
 
 class Instance:
     """An actual occurrence of a Model in the world.
@@ -142,9 +152,12 @@ def worldToCameraMat(camPos, yaw, pitch):
         [-sin(p)*sin(y), cos(p), -sin(p)*cos(y),  c*sin(p)*cos(y)+a*sin(p)*sin(y)-b*cos(p)],
         [ cos(p)*sin(y), sin(p),  cos(p)*cos(y), -b*sin(p)-a*sin(y)*cos(p)-c*cos(y)*cos(p)],
         [           0.0,    0.0,            0.0,                                       1.0]
-    ])
+    ], dtype='float32')
 
     return cam
+
+def glViewMat(camPos, yaw, pitch):
+    return worldToCameraMat(camPos, yaw, pitch).transpose()
 
 def viewToCanvasMat(vpWidth, vpHeight, canvWidth, canvHeight):
     """Calculates a matrix that converts from the view plane to the canvas"""
@@ -414,13 +427,114 @@ def blockPosIsVisible(app, pos: BlockPos) -> bool:
     return dot >= 0
 
 def renderInstances(app, canvas):
-    faces = drawToFaces(app)
+    check1 = makeFrustrumCullCheck(app, app.cameraPitch, app.cameraYaw)
+    check2 = makeFrustrumCullCheck(app, app.cameraPitch, app.cameraYaw + (app.horizFov / 2))
+    check3 = makeFrustrumCullCheck(app, app.cameraPitch, app.cameraYaw - (app.horizFov / 2))
+    check4 = makeFrustrumCullCheck(app, app.cameraPitch - (app.vertFov / 2), app.cameraYaw)
+    check5 = makeFrustrumCullCheck(app, app.cameraPitch + (app.vertFov / 2), app.cameraYaw)
+    #faces = drawToFaces(app)
 
-    def zCoord(d): return -(d[0][d[1][0]][2] + d[0][d[1][1]][2] + d[0][d[1][2]][2])
+    #def zCoord(d): return -(d[0][d[1][0]][2] + d[0][d[1][1]][2] + d[0][d[1][2]][2])
     
-    faces.sort(key=zCoord)
+    #faces.sort(key=zCoord)
 
-    drawToCanvas(app, canvas, faces)
+    #drawToCanvas(app, canvas, faces)
+
+    view = glViewMat(app.cameraPos, app.cameraYaw, app.cameraPitch)
+
+    th = math.tan(0.5 * 0.785);
+    zf = 100.0;
+    zn = 0.1;
+
+    projection = np.array([
+        [1.0 / th, 0.0, 0.0, 0.0],
+        [0.0, 1.0 / th, 0.0, 0.0],
+        [0.0, 0.0, zf / (zf - zn), 1.0],
+        [0.0, 0.0, -(zf * zn) / (zf - zn), 0.0],
+    ], dtype='float32')
+
+    app.program.useProgram()
+    glUniformMatrix4fv(app.program.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
+    glUniformMatrix4fv(app.program.getUniformLocation("projection"), 1, GL_FALSE, projection) #type:ignore
+
+    glActiveTexture(GL_TEXTURE0)
+
+    glBindVertexArray(app.cubeVao)
+
+    modelUniformLoc = app.program.getUniformLocation("model")
+
+    '''
+    model = np.array([
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [1.0, 1.0, 1.0, 1.0],
+    ], dtype='float32')
+
+    glUniformMatrix4fv(modelUniformLoc, 1, GL_FALSE, model) #type:ignore
+    '''
+
+    modelKinds = {
+        'grass': [],
+        'stone': [],
+        'leaves': [],
+        'log': [],
+        'bedrock': [],
+    }
+
+    for chunk in app.chunks.values():
+        if not chunk.isVisible: continue 
+
+        [cx, cy, cz] = chunk.pos
+        cx *= 16
+        cy *= 16
+        cz *= 16
+
+        for i, inst in enumerate(chunk.instances):
+            if inst is None: continue
+
+            inst, unburied = inst
+            if unburied:
+                #wx = chunk.pos[0] * 16 + (i // 256)
+                #wy = chunk.pos[1] * 16 + (i // 16) % 16
+                #wz = chunk.pos[2] * 16 + (i % 16)
+
+                bx = i // 256
+                by = (i // 16) % 16
+                bz = (i % 16)
+
+                wx = cx + (i // 256)
+                wy = cy + (i // 16) % 16
+                wz = cz + (i % 16)
+
+                blockPos = BlockPos(wx, wy, wz)
+
+                if not check1(blockPos): continue
+                if not check2(blockPos): continue
+                if not check3(blockPos): continue
+                if not check4(blockPos): continue
+                if not check5(blockPos): continue
+
+                bid = chunk.blocks[bx, by, bz]
+
+                modelKinds[bid].append([wx, wy, wz, 0.0])
+    
+    for (bid, data) in modelKinds.items():
+        amt = len(data)
+
+        glBindTexture(GL_TEXTURE_2D, app.textures[bid])
+
+        glBindBuffer(GL_ARRAY_BUFFER, app.cubeBuffer)
+        glBufferData(GL_ARRAY_BUFFER, amt * 4 * 4, np.asarray(data, dtype='float32'), GL_DYNAMIC_DRAW)
+
+        doTheDraw(app, modelUniformLoc, amt)
+
+def doTheDraw(app, modelUniformLoc, amt):
+    #bId = chunk.blocks[i // 256, (i // 16) % 16, i % 16]
+    
+    #glDrawArrays(GL_TRIANGLES, 0, 36)
+    glDrawArraysInstanced(GL_TRIANGLES, 0, 36, amt)
+
 
 # Straight down: 40ms
 # Forward: 35ms
@@ -576,6 +690,9 @@ def drawMainInventory(app, canvas):
 
 
 def drawHotbar(app, canvas):
+    # TODO:
+    return
+
     # FIXME: 
     if hasattr(app.mode, 'player'):
         player = app.mode.player
@@ -604,9 +721,13 @@ def drawHotbar(app, canvas):
 def drawSlot(app, canvas, x, y, slot, drawBackground=True):
     """x and y are the *center* of the slot"""
 
+    # TODO:
+    return
+
     slotWidth = app.itemTextures['air'].width + 6
 
     if drawBackground:
+        pass
         canvas.create_rectangle(x - slotWidth / 2, y - slotWidth / 2,
             x + slotWidth / 2,
             y + slotWidth / 2,
@@ -659,10 +780,15 @@ def redrawAll(app, canvas, doDrawHud=True):
     startTime = time.time()
     
     # The sky
-    canvas.create_rectangle(0.0, 0.0, app.width, app.height, fill='#0080FF')
+    # TODO:
+    #canvas.create_rectangle(0.0, 0.0, app.width, app.height, fill='#0080FF')
 
     # The world
     renderInstances(app, canvas)
+
+    # TODO:
+    return
+    
 
     #origin = worldToCanvas(app, np.array([[0.0], [0.0], [0.0]]))
     #xAxis = worldToCanvas(app, np.array([[1.0], [0.0], [0.0]]))

@@ -1,4 +1,5 @@
-from cmu_112_graphics import Image, runApp
+from openglapp import runApp
+from PIL import Image
 from PIL import ImageDraw
 from PIL.ImageDraw import Draw
 import numpy as np
@@ -6,6 +7,7 @@ import math
 import render
 import world
 import copy
+import glfw
 from button import Button, ButtonManager, createSizedBackground
 from world import Chunk, ChunkPos
 from typing import List, Optional, Tuple
@@ -71,6 +73,9 @@ class StartupMode(Mode):
         self.loadStage += 1
     
     def redrawAll(self, app, canvas):
+        # TODO:
+        return
+
         leftX = app.width * 0.25
         rightX = app.width * 0.75
 
@@ -86,13 +91,13 @@ class StartupMode(Mode):
 
 class TitleMode(Mode):
     buttons: ButtonManager
-    titleText: Image
+    titleText: Image.Image
 
     def __init__(self, app):
         self.buttons = ButtonManager()
 
-        self.titleText = app.loadImage('assets/TitleText.png')
-        self.titleText = app.scaleImage(self.titleText, 3)
+        self.titleText = Image.open('assets/TitleText.png')
+        self.titleText = self.titleText.resize((self.titleText.width * 3, self.titleText.height * 3), Image.NEAREST)
 
         survivalButton = Button(app, 0.5, 0.4, app.btnBg, "Play Survival")
         creativeButton = Button(app, 0.5, 0.55, app.btnBg, "Play Creative")
@@ -118,6 +123,9 @@ class TitleMode(Mode):
     def redrawAll(self, app, canvas):
         render.redrawAll(app, canvas, doDrawHud=False)
 
+        # TODO:
+        return
+
         canvas.create_image(app.width / 2, 50, image=getCachedImage(self.titleText))
         
         self.buttons.draw(app, canvas)
@@ -133,6 +141,11 @@ def setMouseCapture(app, value: bool) -> None:
     """
 
     app.captureMouse = value
+
+    if app.captureMouse:
+        glfw.set_input_mode(app.window, glfw.CURSOR, glfw.CURSOR_DISABLED)
+    else:
+        glfw.set_input_mode(app.window, glfw.CURSOR, glfw.CURSOR_NORMAL)
 
 class PlayingMode(Mode):
     lookedAtBlock = None
@@ -189,15 +202,15 @@ class PlayingMode(Mode):
             keyNum = int(event.key)
             if keyNum != 0:
                 self.player.hotbarIdx = keyNum - 1
-        elif event.key == 'w':
+        elif event.key == 'W':
             app.w = True
-        elif event.key == 's':
+        elif event.key == 'S':
             app.s = True
-        elif event.key == 'a':
+        elif event.key == 'A':
             app.a = True
-        elif event.key == 'd':
+        elif event.key == 'D':
             app.d = True
-        elif event.key == 'e':
+        elif event.key == 'E':
             app.mode = InventoryMode(app, self, name='inventory')
             app.w = app.s = app.a = app.d = False
         elif event.key == 'Space':
@@ -207,13 +220,13 @@ class PlayingMode(Mode):
             setMouseCapture(app, not app.captureMouse)
 
     def keyReleased(self, app, event):
-        if event.key == 'w':
+        if event.key == 'W':
             app.w = False
-        elif event.key == 's':
+        elif event.key == 'S':
             app.s = False 
-        elif event.key == 'a':
+        elif event.key == 'A':
             app.a = False
-        elif event.key == 'd':
+        elif event.key == 'D':
             app.d = False
         
 class CraftingGui:
@@ -593,23 +606,14 @@ def mouseMovedOrDragged(app, event):
         app.cameraYaw += xChange * 0.01
 
     if app.captureMouse:
-        x = app.width / 2
-        y = app.height / 2
-        app._theRoot.event_generate('<Motion>', warp=True, x=x, y=y)
-        app.prevMouse = (x, y)
-
+        app.prevMouse = (event.x, event.y)
 
 def redrawAll(app, canvas):
-    if app.captureMouse:
-        canvas.configure(cursor='none')
-    else:
-        canvas.configure(cursor='arrow')
 
     app.mode.redrawAll(app, canvas)
 
-
 def main():
-    runApp(width=600, height=400, mvcCheck=True)
+    runApp(width=600, height=400)
 
 if __name__ == '__main__':
     main()

@@ -161,15 +161,6 @@ class Chunk:
                     self.updateBuriedStateAt(app, BlockPos(xIdx, yIdx, zIdx))
         
         self.worldgenStage = WorldgenStage.COMPLETE
-    
-    def iterInstances(self):
-        if self.isVisible and self.worldgenStage == WorldgenStage.COMPLETE:
-            for (i, instance) in enumerate(self.instances):
-                if instance is not None:
-                    wx = self.pos.x * 16 + (i // 256)
-                    wy = self.pos.y * 16 + (i // 16) % 16
-                    wz = self.pos.z * 16 + (i % 16)
-                    yield (BlockPos(wx, wy, wz), instance)
 
     def _coordsToIdx(self, pos: BlockPos) -> int:
         (xw, yw, zw) = self.blocks.shape
@@ -201,11 +192,12 @@ class Chunk:
         for faceIdx in range(0, 12, 2):
             adjPos = adjacentBlockPos(globalPos, faceIdx)
             if coordsOccupied(app, adjPos):
-                self.instances[idx][0].visibleFaces[faceIdx] = False
-                self.instances[idx][0].visibleFaces[faceIdx + 1] = False
+                #self.instances[idx][0].visibleFaces[faceIdx] = False
+                #self.instances[idx][0].visibleFaces[faceIdx + 1] = False
+                pass
             else:
-                self.instances[idx][0].visibleFaces[faceIdx] = True
-                self.instances[idx][0].visibleFaces[faceIdx + 1] = True
+                #self.instances[idx][0].visibleFaces[faceIdx] = True
+                #self.instances[idx][0].visibleFaces[faceIdx + 1] = True
                 uncovered = True
             
         self.instances[idx][1] = uncovered
@@ -225,7 +217,7 @@ class Chunk:
 
             [modelX, modelY, modelZ] = blockToWorld(self._globalBlockPos(blockPos))
 
-            self.instances[idx] = [render.Instance(app.cube, np.array([[modelX], [modelY], [modelZ]]), texture), True]
+            self.instances[idx] = [render.CubeInstance(np.array([[modelX], [modelY], [modelZ]]), texture), True]
             if doUpdateBuried:
                 self.updateBuriedStateAt(app, blockPos)
         

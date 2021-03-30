@@ -1,8 +1,11 @@
 import numpy as np
 import world
 import render
+from shader import ShaderProgram
+from PIL import Image
 from typing import List, Optional
 from player import Slot
+from OpenGL.GL import * #type:ignore
 
 class Recipe:
     inputs: List[List[Optional[world.ItemId]]]
@@ -49,90 +52,126 @@ class Recipe:
 
         return True
 
+def loadTexture(path: str) -> int:
+    texture = glGenTextures(1) #type:ignore
+    glBindTexture(GL_TEXTURE_2D, texture)
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+
+    grassTex = Image.open(path)
+    grassTex = grassTex.convert(mode='RGB')
+    grassTex = grassTex.transpose(Image.FLIP_TOP_BOTTOM)
+    grassArr = np.asarray(grassTex, dtype=np.uint8)
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, grassTex.width, grassTex.height, 0, GL_RGB, GL_UNSIGNED_BYTE, grassArr) #type:ignore
+    glGenerateMipmap(GL_TEXTURE_2D)
+
+    glBindTexture(GL_TEXTURE_2D, 0)
+
+    return texture
+
+def loadCubeVao():
+    vertices = np.array([
+    # Back face
+    -0.5, -0.5, -0.5,  3/4, 1/3, # Bottom-left
+     0.5,  0.5, -0.5,  4/4, 2/3, # top-right
+     0.5, -0.5, -0.5,  4/4, 1/3, # bottom-right         
+     0.5,  0.5, -0.5,  4/4, 2/3, # top-right
+    -0.5, -0.5, -0.5,  3/4, 1/3, # bottom-left
+    -0.5,  0.5, -0.5,  3/4, 2/3, # top-left
+    # Front face
+    -0.5, -0.5,  0.5,  3/4, 1/3, # bottom-left
+     0.5, -0.5,  0.5,  4/4, 1/3, # bottom-right
+     0.5,  0.5,  0.5,  4/4, 2/3, # top-right
+     0.5,  0.5,  0.5,  4/4, 2/3, # top-right
+    -0.5,  0.5,  0.5,  3/4, 2/3, # top-left
+    -0.5, -0.5,  0.5,  3/4, 1/3, # bottom-left
+    # Left face
+    -0.5,  0.5,  0.5,  1/4, 2/3, # top-right
+    -0.5,  0.5, -0.5,  0/4, 2/3, # top-left
+    -0.5, -0.5, -0.5,  0/4, 1/3, # bottom-left
+    -0.5, -0.5, -0.5,  0/4, 1/3, # bottom-left
+    -0.5, -0.5,  0.5,  1/4, 1/3, # bottom-right
+    -0.5,  0.5,  0.5,  1/4, 2/3, # top-right
+    # Right face
+     0.5,  0.5,  0.5,  2/4, 2/3, # top-left
+     0.5, -0.5, -0.5,  3/4, 1/3, # bottom-right
+     0.5,  0.5, -0.5,  3/4, 2/3, # top-right         
+     0.5, -0.5, -0.5,  3/4, 1/3, # bottom-right
+     0.5,  0.5,  0.5,  2/4, 2/3, # top-left
+     0.5, -0.5,  0.5,  2/4, 1/3, # bottom-left     
+    # Bottom face
+    -0.5, -0.5, -0.5,  3/4, 1/3, # top-right
+     0.5, -0.5, -0.5,  2/4, 1/3, # top-left
+     0.5, -0.5,  0.5,  2/4, 0/3, # bottom-left
+     0.5, -0.5,  0.5,  2/4, 0/3, # bottom-left
+    -0.5, -0.5,  0.5,  3/4, 0/3, # bottom-right
+    -0.5, -0.5, -0.5,  3/4, 1/3, # top-right
+    # Top face
+    -0.5,  0.5, -0.5,  1/4, 3/3, # top-left
+     0.5,  0.5,  0.5,  2/4, 2/3, # bottom-right
+     0.5,  0.5, -0.5,  2/4, 3/3, # top-right     
+     0.5,  0.5,  0.5,  2/4, 2/3, # bottom-right
+    -0.5,  0.5, -0.5,  1/4, 3/3, # top-left
+    -0.5,  0.5,  0.5,  1/4, 2/3, # bottom-left
+    ], dtype='float32')
+
+    vao: int = glGenVertexArrays(1) #type:ignore
+    vbo: int = glGenBuffers(1) #type:ignore
+
+    buffer = glGenBuffers(1) #type:ignore
+
+    glBindVertexArray(vao)
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo)
+    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * 4, ctypes.c_void_p(0))
+    glEnableVertexAttribArray(0)
+
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * 4, ctypes.c_void_p(3 * 4))
+    glEnableVertexAttribArray(1)
+
+    glBindBuffer(GL_ARRAY_BUFFER, buffer)
+
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 1 * (4 * 4), ctypes.c_void_p(0 * (4 * 4)))
+    glEnableVertexAttribArray(2)
+    #glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 4 * (4 * 4), ctypes.c_void_p(1 * (4 * 4)))
+    #glEnableVertexAttribArray(2)
+    #glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 4 * (4 * 4), ctypes.c_void_p(2 * (4 * 4)))
+    #glEnableVertexAttribArray(2)
+    #glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, 4 * (4 * 4), ctypes.c_void_p(3 * (4 * 4)))
+    #glEnableVertexAttribArray(2)
+
+    glVertexAttribDivisor(2, 1)
+    #glVertexAttribDivisor(3, 1)
+    #glVertexAttribDivisor(4, 1)
+    #glVertexAttribDivisor(5, 1)
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0)
+
+    glBindVertexArray(0)
+
+    return vao, buffer
+    
 
 def loadResources(app):
-    vertices = [
-        np.array([[-1.0], [-1.0], [-1.0]]) / 2.0,
-        np.array([[-1.0], [-1.0], [1.0]]) / 2.0,
-        np.array([[-1.0], [1.0], [-1.0]]) / 2.0,
-        np.array([[-1.0], [1.0], [1.0]]) / 2.0,
-        np.array([[1.0], [-1.0], [-1.0]]) / 2.0,
-        np.array([[1.0], [-1.0], [1.0]]) / 2.0,
-        np.array([[1.0], [1.0], [-1.0]]) / 2.0,
-        np.array([[1.0], [1.0], [1.0]]) / 2.0
-    ]
-
-    grassTexture = [
-        '#FF0000', '#FF0000',
-        '#A52A2A', '#A52A2A',
-        '#A52A2A', '#A52A2A',
-        '#A52A2A', '#A52A2A',
-        '#A52A2A', '#A52A2A',
-        '#00FF00', '#00EE00']
-    
-    stoneTexture = [
-        '#AAAAAA', '#AAAABB',
-        '#AAAACC', '#AABBBB',
-        '#AACCCC', '#88AAAA',
-        '#AA88AA', '#888888',
-        '#AA88CC', '#778888',
-        '#BBCCAA', '#BBBBBB'
-    ]
-
-    leavesTexture = [
-        '#206000', '#256505',
-        '#257000', '#256505',
-        '#206010', '#206505',
-        '#206505', '#256005',
-        '#306005', '#256500',
-        '#206500', '#306505',
-    ]
-
-    logTexture = [
-        '#705020', '#655020',
-        '#705520', '#655025',
-        '#705025', '#705020',
-        '#755020', '#705A2A',
-        '#755520', '#7A4A20',
-        '#705525', '#70502A',
-    ]
-
-    bedrockTexture = [
-        '#0A0A10', '#0E0A10',
-        '#0A1010', '#0A0A10',
-        '#0A0A18', '#0E1010',
-        '#100A10', '#080A10',
-        '#0A0810', '#0A0A18',
-        '#0A0A1E', '#100A10',
-    ]
-
-    planksTexture = [
-        '#BE9A60', '#B4915D',
-        '#AC8C53', '#9C814B',
-        '#937240', '#7B6036',
-        '#7B6036', '#654E2B', 
-        '#9C814B', '#BE9A60',
-        '#B4915D', '#AC8C53'
-    ]
-
-    craftingTableTexture = [
-        '#A36F45', '#443C34',
-        '#715836', '#727274',
-        '#482E18', '#888173',
-        '#534423', '#B7B5B2',
-        '#AB673C', '#71381B',
-        '#B4915D', '#AC8C53'
-    ]
+    app.cubeVao, app.cubeBuffer = loadCubeVao()
 
     app.textures = {
-        'grass': grassTexture,
-        'stone': stoneTexture,
-        'leaves': leavesTexture,
-        'log': logTexture,
-        'bedrock': bedrockTexture,
-        'planks': planksTexture,
-        'crafting_table': craftingTableTexture,
+        'grass': loadTexture('assets/grass.png'),
+        'stone': loadTexture('assets/missing.png'),
+        'leaves': loadTexture('assets/leaves.png'),
+        'log': loadTexture('assets/log.png'),
+        'bedrock': loadTexture('assets/missing.png'),
+        'planks': loadTexture('assets/missing.png'),
+        'crafting_table': loadTexture('assets/missing.png'),
     }
+
+    app.program = ShaderProgram('assets/shader.vert', 'assets/shader.frag')
 
     app.hardnesses = {
         'grass': ('shovel', 1.0),
@@ -232,20 +271,19 @@ def loadResources(app):
         (3, 6, 7),
     ]
 
-    app.cube = render.Model(vertices, faces)
-
     app.itemTextures = {
-        'air': app.loadImage('assets/AirItem.png'),
-        'stick': app.loadImage('assets/Stick.png'),
-        'wooden_pickaxe': app.loadImage('assets/WoodenPickaxe.png'),
-        'stone_pickaxe': app.loadImage('assets/StonePickaxe.png'),
-        'wooden_axe': app.loadImage('assets/WoodenAxe.png'),
-        'wooden_shovel': app.loadImage('assets/WoodenShovel.png'),
+        'air': Image.open('assets/AirItem.png'),
+        'stick': Image.open('assets/Stick.png'),
+        'wooden_pickaxe': Image.open('assets/WoodenPickaxe.png'),
+        'stone_pickaxe': Image.open('assets/StonePickaxe.png'),
+        'wooden_axe': Image.open('assets/WoodenAxe.png'),
+        'wooden_shovel': Image.open('assets/WoodenShovel.png'),
     }
 
-    for (name, tex) in app.textures.items():
-        newTex = render.drawItemFromBlock(25, tex)
-        app.itemTextures[name] = newTex
+    # TODO:
+    #for (name, tex) in app.textures.items():
+    #    newTex = render.drawItemFromBlock(25, tex)
+    #    app.itemTextures[name] = newTex
 
 def getHardnessAgainst(app, block: world.BlockId, tool: world.ItemId) -> float:
     (goodTool, base) = app.hardnesses[block]

@@ -1,11 +1,11 @@
 from typing import Callable, List, Optional
 from render import getCachedImage
-from cmu_112_graphics import Image
+from PIL import Image
 import math
 
 def createSizedBackground(app, width: int, height: int):
-    cobble = app.loadImage('assets/CobbleBackground.png')
-    cobble = app.scaleImage(cobble, 2)
+    cobble = Image.open('assets/CobbleBackground.png')
+    cobble = cobble.resize((cobble.width * 2, cobble.height * 2), resample=Image.NEAREST)
     cWidth, cHeight = cobble.size
 
     newCobble = Image.new(cobble.mode, (width, height))
@@ -74,6 +74,9 @@ class Button:
     def draw(self, app, canvas):
         centerX = self.x + (self.width // 2)
         centerY = self.y + (self.height // 2)
+
+        # TODO:
+        return
 
         canvas.create_rectangle(self.x - 1, self.y - 1, self.x + self.width, self.y + self.height, outline='#555')
         canvas.create_image(centerX, centerY, image=getCachedImage(self.background))
