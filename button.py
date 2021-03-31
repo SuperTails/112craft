@@ -1,5 +1,4 @@
 from typing import Callable, List, Optional
-from render import getCachedImage
 from PIL import Image
 import math
 
@@ -75,11 +74,8 @@ class Button:
         centerX = self.x + (self.width // 2)
         centerY = self.y + (self.height // 2)
 
-        # TODO:
-        return
-
         canvas.create_rectangle(self.x - 1, self.y - 1, self.x + self.width, self.y + self.height, outline='#555')
-        canvas.create_image(centerX, centerY, image=getCachedImage(self.background))
+        canvas.create_image(centerX, centerY, image=self.background)
         canvas.create_text(centerX, centerY, text=self.text, font='Arial 16 bold', fill='white')
 
 class ButtonManager:

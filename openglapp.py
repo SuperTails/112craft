@@ -3,6 +3,7 @@ import inspect
 import time
 from dataclasses import make_dataclass
 from OpenGL.GL import * # type:ignore
+from canvas import Canvas
 
 class App:
     _callersGlobals = dict()
@@ -10,6 +11,7 @@ class App:
     height: int
     mouseX: int = 0
     mouseY: int = 0
+    canvas: Canvas
 
     def __init__(self, width=300, height=300):
         if not glfw.init():
@@ -33,7 +35,10 @@ class App:
 
         glEnable(GL_DEPTH_TEST)
         glEnable(GL_CULL_FACE)
+        glEnable(GL_BLEND)
         glFrontFace(GL_CW)
+
+        self.canvas = Canvas(self.width, self.height)
 
         self.run()
     
@@ -66,7 +71,9 @@ class App:
             glClearColor(0.2, 0.3, 0.3, 1.0)
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT) #type:ignore
 
-            self._callFn('redrawAll', self, self.window)
+            self._callFn('redrawAll', self, self.window, self.canvas)
+
+            self.canvas.redraw()
 
             if time.time() - self.lastTimer > (self.timerDelay / 1000.0):
                 self.lastTimer = time.time()

@@ -453,15 +453,15 @@ def renderInstances(app, canvas):
         [0.0, 0.0, -(zf * zn) / (zf - zn), 0.0],
     ], dtype='float32')
 
-    app.program.useProgram()
-    glUniformMatrix4fv(app.program.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
-    glUniformMatrix4fv(app.program.getUniformLocation("projection"), 1, GL_FALSE, projection) #type:ignore
+    app.blockProgram.useProgram()
+    glUniformMatrix4fv(app.blockProgram.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
+    glUniformMatrix4fv(app.blockProgram.getUniformLocation("projection"), 1, GL_FALSE, projection) #type:ignore
 
-    glActiveTexture(GL_TEXTURE0)
+
 
     glBindVertexArray(app.cubeVao)
 
-    modelUniformLoc = app.program.getUniformLocation("model")
+    modelUniformLoc = app.blockProgram.getUniformLocation("model")
 
     '''
     model = np.array([
@@ -519,13 +519,46 @@ def renderInstances(app, canvas):
 
                 modelKinds[bid].append([wx, wy, wz, 0.0])
     
+    breakingBlockAmount = 0.0
+
+    if app.breakingBlock != 0.0 and hasattr(app.mode, 'player'):
+        avg = (255.0 * 3.0) / 3.0
+
+        toolSlot = app.mode.player.inventory[app.mode.player.hotbarIdx]
+        if toolSlot.isEmpty():
+            tool = ''
+        else:
+            tool = toolSlot.item
+
+        blockId = world.getBlock(app, app.breakingBlockPos)
+
+        if blockId != 'air':
+            hardness = getHardnessAgainst(app, blockId, tool)
+
+            breakingBlockAmount = app.breakingBlock / hardness
+
+
+    b = math.floor(breakingBlockAmount * 10.0)
+
+    glActiveTexture(GL_TEXTURE1)
+    glBindTexture(GL_TEXTURE_2D, app.breakTextures[b])
+
+    glUniform1i(app.blockProgram.getUniformLocation("blockTexture"), 0)
+    glUniform1i(app.blockProgram.getUniformLocation("breakTexture"), 1)
+
+    bp = app.breakingBlockPos
+    
+    glUniform4i(app.blockProgram.getUniformLocation("breakingBlockPos"), bp.x, bp.y, bp.z, 0)
+    glUniform1f(app.blockProgram.getUniformLocation("breakingBlockAmount"), breakingBlockAmount)
+    
     for (bid, data) in modelKinds.items():
         amt = len(data)
 
+        glActiveTexture(GL_TEXTURE0)
         glBindTexture(GL_TEXTURE_2D, app.textures[bid])
 
         glBindBuffer(GL_ARRAY_BUFFER, app.cubeBuffer)
-        glBufferData(GL_ARRAY_BUFFER, amt * 4 * 4, np.asarray(data, dtype='float32'), GL_DYNAMIC_DRAW)
+        glBufferData(GL_ARRAY_BUFFER, amt * 4 * 4, np.asarray(data, dtype='int32'), GL_DYNAMIC_DRAW)
 
         doTheDraw(app, modelUniformLoc, amt)
 
@@ -654,7 +687,7 @@ def drawTextOutlined(canvas, x, y, **kwargs):
     This makes it more easily legible on both dark and light backgrounds.
     """
 
-    canvas.create_text(x + 1, y + 1, fill='black', **kwargs)
+    canvas.create_text(x + 2, y + 2, fill='#444', **kwargs)
     canvas.create_text(x, y, fill='white', **kwargs)
 
 def getSlotCenterAndSize(app, slotIdx) -> Tuple[int, int, int]:
@@ -690,9 +723,6 @@ def drawMainInventory(app, canvas):
 
 
 def drawHotbar(app, canvas):
-    # TODO:
-    return
-
     # FIXME: 
     if hasattr(app.mode, 'player'):
         player = app.mode.player
@@ -720,9 +750,6 @@ def drawHotbar(app, canvas):
 
 def drawSlot(app, canvas, x, y, slot, drawBackground=True):
     """x and y are the *center* of the slot"""
-
-    # TODO:
-    return
 
     slotWidth = app.itemTextures['air'].width + 6
 
@@ -757,7 +784,7 @@ def drawHud(app, canvas, startTime):
 
     tickTime = sum(app.tickTimes) / len(app.tickTimes) * 1000.0
 
-    drawTextOutlined(canvas, 10, 25, text=f'Tick Time: {tickTime:.2f}ms', anchor='nw')
+    drawTextOutlined(canvas, 10, 30, text=f'Tick Time: {tickTime:.2f}ms', anchor='nw')
     
     global frameTimes
     global frameTimeIdx
@@ -774,7 +801,7 @@ def drawHud(app, canvas, startTime):
     chunkY = math.floor(app.cameraPos[1] / 16)
     chunkZ = math.floor(app.cameraPos[2] / 16)
 
-    drawTextOutlined(canvas, 10, 55, text=f'Chunk coords: {chunkX}, {chunkY}, {chunkZ}', anchor='nw')
+    drawTextOutlined(canvas, 10, 50, text=f'Chunk coords: {chunkX}, {chunkY}, {chunkZ}', anchor='nw')
 
 def redrawAll(app, canvas, doDrawHud=True):
     startTime = time.time()
@@ -785,10 +812,6 @@ def redrawAll(app, canvas, doDrawHud=True):
 
     # The world
     renderInstances(app, canvas)
-
-    # TODO:
-    return
-    
 
     #origin = worldToCanvas(app, np.array([[0.0], [0.0], [0.0]]))
     #xAxis = worldToCanvas(app, np.array([[1.0], [0.0], [0.0]]))

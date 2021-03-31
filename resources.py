@@ -52,7 +52,7 @@ class Recipe:
 
         return True
 
-def loadTexture(path: str) -> int:
+def loadTexture(path: str, tesselate=False) -> int:
     texture = glGenTextures(1) #type:ignore
     glBindTexture(GL_TEXTURE_2D, texture)
 
@@ -62,11 +62,18 @@ def loadTexture(path: str) -> int:
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
 
     grassTex = Image.open(path)
-    grassTex = grassTex.convert(mode='RGB')
+    grassTex = grassTex.convert(mode='RGBA')
+    if tesselate:
+        newTex = Image.new("RGBA", (16 * 4, 16 * 3))
+        for i in range(4):
+            newTex.paste(grassTex, (i * 16, 16))
+        newTex.paste(grassTex, (1 * 16, 0))
+        newTex.paste(grassTex, (2 * 16, 2 * 16))
+        grassTex = newTex
     grassTex = grassTex.transpose(Image.FLIP_TOP_BOTTOM)
     grassArr = np.asarray(grassTex, dtype=np.uint8)
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, grassTex.width, grassTex.height, 0, GL_RGB, GL_UNSIGNED_BYTE, grassArr) #type:ignore
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, grassTex.width, grassTex.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, grassArr) #type:ignore
     glGenerateMipmap(GL_TEXTURE_2D)
 
     glBindTexture(GL_TEXTURE_2D, 0)
@@ -171,7 +178,13 @@ def loadResources(app):
         'crafting_table': loadTexture('assets/missing.png'),
     }
 
-    app.program = ShaderProgram('assets/shader.vert', 'assets/shader.frag')
+    app.breakTextures = []
+    for i in range(10):
+        app.breakTextures.append(loadTexture(f'assets/destroy_stage_{i}.png', tesselate=True))
+
+    app.blockProgram = ShaderProgram('shaders/blockShader.vert', 'shaders/blockShader.frag')
+    
+    app.guiProgram = ShaderProgram('shaders/guiShader.vert', 'shaders/guiShader.frag')
 
     app.hardnesses = {
         'grass': ('shovel', 1.0),
@@ -280,9 +293,18 @@ def loadResources(app):
         'wooden_shovel': Image.open('assets/WoodenShovel.png'),
     }
 
-    # TODO:
+    textureNames = {
+        'grass': ('assets/grass.png'),
+        'stone': ('assets/missing.png'),
+        'leaves': ('assets/leaves.png'),
+        'log': ('assets/log.png'),
+        'bedrock': ('assets/missing.png'),
+        'planks': ('assets/missing.png'),
+        'crafting_table': ('assets/missing.png'),
+    }
+
     #for (name, tex) in app.textures.items():
-    #    newTex = render.drawItemFromBlock(25, tex)
+    #    newTex = render.drawItemFromBlock(25, tex['grass'])
     #    app.itemTextures[name] = newTex
 
 def getHardnessAgainst(app, block: world.BlockId, tool: world.ItemId) -> float:

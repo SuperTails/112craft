@@ -11,7 +11,6 @@ import glfw
 from button import Button, ButtonManager, createSizedBackground
 from world import Chunk, ChunkPos
 from typing import List, Optional, Tuple
-from render import getCachedImage
 from enum import Enum
 from player import Player, Slot
 from resources import loadResources, getHardnessAgainst
@@ -41,7 +40,7 @@ class Mode:
     def rightMouseReleased(self, app, event): pass
     def timerFired(self, app): pass
     def sizeChanged(self, app): pass
-    def redrawAll(self, app, canvas): pass
+    def redrawAll(self, app, window, canvas): pass
     def keyPressed(self, app, event): pass
     def keyReleased(self, app, event): pass
 
@@ -72,7 +71,7 @@ class StartupMode(Mode):
             
         self.loadStage += 1
     
-    def redrawAll(self, app, canvas):
+    def redrawAll(self, app, window, canvas):
         # TODO:
         return
 
@@ -120,13 +119,10 @@ class TitleMode(Mode):
             elif btn == 'playCreative':
                 app.mode = PlayingMode(app, True)
 
-    def redrawAll(self, app, canvas):
+    def redrawAll(self, app, window, canvas):
         render.redrawAll(app, canvas, doDrawHud=False)
 
-        # TODO:
-        return
-
-        canvas.create_image(app.width / 2, 50, image=getCachedImage(self.titleText))
+        canvas.create_image(app.width / 2, 50, image=self.titleText)
         
         self.buttons.draw(app, canvas)
     
@@ -159,7 +155,7 @@ class PlayingMode(Mode):
 
         self.player = Player(app, creative)
 
-    def redrawAll(self, app, canvas):
+    def redrawAll(self, app, window, canvas):
         render.redrawAll(app, canvas)
     
     def timerFired(self, app):
@@ -384,8 +380,8 @@ class InventoryMode(Mode):
         else:
             1 / 0
 
-    def redrawAll(self, app, canvas):
-        self.submode.redrawAll(app, canvas)
+    def redrawAll(self, app, window, canvas):
+        self.submode.redrawAll(app, window, canvas)
 
         render.drawMainInventory(app, canvas)
 
@@ -458,7 +454,7 @@ class InventoryMode(Mode):
         self.gui.onClick(app, isRight, event.x, event.y)
  
     def keyPressed(self, app, event):
-        if event.key == 'e':
+        if event.key == 'E':
             dim = len(self.gui.craftInputs)
             for r in range(dim):
                 for c in range(dim):
@@ -608,9 +604,8 @@ def mouseMovedOrDragged(app, event):
     if app.captureMouse:
         app.prevMouse = (event.x, event.y)
 
-def redrawAll(app, canvas):
-
-    app.mode.redrawAll(app, canvas)
+def redrawAll(app, window, canvas):
+    app.mode.redrawAll(app, window, canvas)
 
 def main():
     runApp(width=600, height=400)
