@@ -63,19 +63,10 @@ def loadTexture(path: str, tesselate=False) -> int:
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
 
-    grassTex = Image.open(path)
-    grassTex = grassTex.convert(mode='RGBA')
-    if tesselate:
-        newTex = Image.new("RGBA", (16 * 4, 16 * 3))
-        for i in range(4):
-            newTex.paste(grassTex, (i * 16, 16))
-        newTex.paste(grassTex, (1 * 16, 0))
-        newTex.paste(grassTex, (2 * 16, 2 * 16))
-        grassTex = newTex
-    grassTex = grassTex.transpose(Image.FLIP_TOP_BOTTOM)
-    grassArr = np.asarray(grassTex, dtype=np.uint8)
+    tex = loadBlockImage(path, tesselate)
+    arr = np.asarray(tex, dtype=np.uint8)
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, grassTex.width, grassTex.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, grassArr) #type:ignore
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex.width, tex.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, arr) #type:ignore
     glGenerateMipmap(GL_TEXTURE_2D)
 
     glBindTexture(GL_TEXTURE_2D, 0)
@@ -274,6 +265,18 @@ def loadTkTextures(app):
 
     app.cube = render.Model(vertices, faces)
 
+def loadBlockImage(path, tesselate=False):
+    tex = Image.open(path)
+    tex = tex.convert(mode='RGBA')
+    if tesselate:
+        newTex = Image.new("RGBA", (16 * 4, 16 * 3))
+        for i in range(4):
+            newTex.paste(tex, (i * 16, 16))
+        newTex.paste(tex, (1 * 16, 0))
+        newTex.paste(tex, (2 * 16, 2 * 16))
+        tex = newTex
+    tex = tex.transpose(Image.FLIP_TOP_BOTTOM)
+    return tex
 
 def loadGlTextures(app):
     app.cubeVao, app.cubeBuffer = loadCubeVao()
@@ -281,10 +284,11 @@ def loadGlTextures(app):
     app.glTextures = {
         'grass': loadTexture('assets/grass.png'),
         'stone': loadTexture('assets/stone.png', tesselate=True),
+        'cobblestone': loadTexture('assets/cobblestone.png', tesselate=True),
         'leaves': loadTexture('assets/leaves.png'),
         'log': loadTexture('assets/log.png'),
-        'bedrock': loadTexture('assets/missing.png'),
-        'planks': loadTexture('assets/missing.png'),
+        'bedrock': loadTexture('assets/bedrock.png', tesselate=True),
+        'planks': loadTexture('assets/oak_planks.png', tesselate=True),
         'crafting_table': loadTexture('assets/missing.png'),
     }
     
@@ -307,6 +311,7 @@ def loadResources(app):
     app.hardnesses = {
         'grass': ('shovel', 1.0),
         'stone': ('pickaxe', 5.0),
+        'cobblestone': ('pickaxe', 6.0),
         'leaves': (None, 0.5),
         'log': ('axe', 2.0),
         'planks': ('axe', 2.0),
@@ -393,18 +398,19 @@ def loadResources(app):
     app.glItemTextures = commonItemTextures
 
     textureNames = {
-        'grass': ('assets/grass.png'),
-        'stone': ('assets/missing.png'),
-        'leaves': ('assets/leaves.png'),
-        'log': ('assets/log.png'),
-        'bedrock': ('assets/missing.png'),
-        'planks': ('assets/missing.png'),
-        'crafting_table': ('assets/missing.png'),
+        'grass': ('assets/grass.png', False),
+        'stone': ('assets/stone.png', True),
+        'cobblestone': ('assets/cobblestone.png', True),
+        'leaves': ('assets/leaves.png', False),
+        'log': ('assets/log.png', False),
+        'bedrock': ('assets/bedrock.png', True),
+        'planks': ('assets/oak_planks.png', True),
+        'crafting_table': ('assets/missing.png', False),
     }
 
     for (name, _) in app.textures.items():
         if config.USE_OPENGL_BACKEND:
-            newGlTex = render.drawItemFromBlock2(25, Image.open(textureNames[name]))
+            newGlTex = render.drawItemFromBlock2(25, loadBlockImage(textureNames[name][0], tesselate=textureNames[name][1]))
             app.glItemTextures[name] = newGlTex
         else:
             newTkTex = render.drawItemFromBlock(25, app.tkTextures[name])

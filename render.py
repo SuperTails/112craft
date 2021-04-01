@@ -492,11 +492,13 @@ def renderInstancesGl(app, canvas):
         'stone': [],
         'leaves': [],
         'log': [],
+        'planks': [],
         'bedrock': [],
+        'cobblestone': [],
         'crafting_table': [],
     }
 
-    for chunk in app.chunks.values():
+    for chunk in app.world.chunks.values():
         if not chunk.isVisible: continue 
 
         [cx, cy, cz] = chunk.pos
@@ -616,7 +618,7 @@ def drawToFaces(app):
 
     toCamMat = worldToCameraMat(app.cameraPos, app.cameraYaw, app.cameraPitch)
     faces = []
-    for chunk in app.chunks.values():
+    for chunk in app.world.chunks.values():
         if not chunk.isVisible: continue 
 
         [cx, cy, cz] = chunk.pos

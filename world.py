@@ -7,6 +7,7 @@ import perlin
 import random
 import config
 import anvil
+import os
 from enum import IntEnum
 from math import cos, sin
 from numpy import ndarray
@@ -75,10 +76,11 @@ class WorldgenStage(IntEnum):
     POPULATED = 2,
     COMPLETE = 3,
 
-
 # -34, 70, -89
 # 2, 6, -6
 # at y = 70ish
+
+seen = set()
 
 class Chunk:
     pos: ChunkPos
@@ -118,24 +120,46 @@ class Chunk:
         except FileNotFoundError:
             self.generate(app, seed)
     
-    def loadFromAnvil(self, app, path):
-        chunk = anvil.Chunk.from_region(path, 2, -6)
-
+    def loadFromAnvilChunk(self, app, chunk):
         for x in range(16):
             for y in range(16):
                 for z in range(16):
-                    block: str = chunk.get_block(x, y + 69, z).id #type:ignore
-                    if block == 'dirt':
+                    global seen
+
+                    block: str = chunk.get_block(x, y + 62, z, force_new=True).id #type:ignore
+                    if block in ['dirt', 'grass_block']:
                         block = 'grass'
-                    elif block == 'grass_block':
-                        block = 'grass'
-                    elif block == 'smooth_stone_slab':
+                    elif block in ['smooth_stone_slab', 'coal_ore', 'gravel']:
                         block = 'stone'
-                    elif block == 'oak_leaves':
+                    elif block in ['cobblestone', 'mossy_cobblestone']:
+                        block = 'cobblestone'
+                    elif block in ['oak_leaves', 'birch_leaves']:
                         block = 'leaves'
-                    elif block == 'oak_log':
+                    elif block in ['oak_log', 'birch_log', 'jungle_wood']:
                         block = 'log'
+                    elif block in ['dandelion', 'poppy', 'fern', 'grass', 'brown_mushroom', 'red_mushroom']:
+                        block = 'air'
+                    elif block in ['repeater', 'redstone_wire', 'redstone_torch', 'redstone_wall_torch', 'stone_button', 'stone_pressure_plate']:
+                        block = 'air'
+                    elif block in ['glowstone', 'dispenser', 'red_bed', 'chest', 'oak_planks', 'note_block', 'gold_block']:
+                        block = 'planks'
+                    elif block.endswith('_wool'):
+                        block = 'crafting_table'
+                    elif 'piston' in block:
+                        block = 'crafting_table'
+                    elif block == 'water':
+                        block = 'air'
+                    elif block != 'air' and block not in app.textures:
+                        if block not in seen:
+                            print(f"UNKNOWN BLOCK {block}")
+                            seen.add(block)
+                        block = 'bedrock'
+
+                    if y == 0:
+                        block = 'bedrock'
                     self.setBlock(app, BlockPos(x, y, z), block, doUpdateLight=False)
+        
+        self.worldgenStage = WorldgenStage.COMPLETE
     
     def load(self, app, path):
         with open(path, "r") as f:
@@ -155,7 +179,6 @@ class Chunk:
 
     def generate(self, app, seed):
         if self.pos == ChunkPos(0, 0, 0):
-            self.loadFromAnvil(app, 'C:/Users/Carson/AppData/Roaming/.minecraft/saves/TheTempleofNotch/region/r.0.-1.mca')
             self.worldgenStage = WorldgenStage.COMPLETE
             return
 
@@ -298,6 +321,65 @@ class Chunk:
         if doUpdateLight:
             updateLight(app, globalPos)
 
+def getRegionCoords(pos: ChunkPos) -> Tuple[int, int]:
+    return (math.floor(pos.x / 32), math.floor(pos.z / 32))
+
+class World:
+    chunks: dict[ChunkPos, Chunk]
+    seed: int
+    name: str
+
+    regions: dict[Tuple[int, int], anvil.Region]
+    anvilpath: str
+
+    def __init__(self, name: str, seed=None, anvilpath=''):
+        self.chunks = {}
+        self.name = name
+        self.anvilpath = anvilpath
+        self.regions = {}
+
+        os.makedirs(f'saves/{self.name}', exist_ok=True)
+
+        if seed is not None:
+            self.seed = seed
+        else:
+            # TODO: Need to parse meta file
+            1 / 0
+    
+    def chunkFileName(self, pos: ChunkPos) -> str:
+        return f'saves/{self.name}/c_{pos.x}_{pos.y}_{pos.z}.txt'
+    
+    def save(self):
+        for pos in self.chunks:
+            self.saveChunk(pos)
+
+        with open("saves/{self.name}/meta.txt", "w") as f:
+            f.write(f"seed={self.seed}")
+
+    def saveChunk(self, pos: ChunkPos):
+        self.chunks[pos].save(self.chunkFileName(pos))
+    
+    def loadChunk(self, app, pos: ChunkPos):
+        print(f"Loading chunk at {pos}")
+        self.chunks[pos] = Chunk(pos)
+        if self.anvilpath != '':
+            pos2 = ChunkPos(pos.x + 2, pos.y, pos.z - 6)
+            regionPos = getRegionCoords(pos2)
+            if regionPos not in self.regions:
+                path = self.anvilpath + f'r.{regionPos[0]}.{regionPos[1]}.mca'
+                self.regions[regionPos] = anvil.Region.from_file(path)
+
+            chunk = anvil.Chunk.from_region(self.regions[regionPos], pos2.x, pos2.z)
+            self.chunks[pos].loadFromAnvilChunk(app, chunk)
+        else:
+            self.chunks[pos].loadOrGenerate(app, self.chunkFileName(pos), self.seed)
+    
+    def unloadChunk(self, app, pos: ChunkPos):
+        print(f"Unloading chunk at {pos}")
+        saveFile = self.chunkFileName(pos)
+        self.chunks[pos].save(saveFile)
+        self.chunks.pop(pos)
+
     # app.instances[idx] = [Instance(app.cube, np.array([[modelX], [modelY], [modelZ]]), texture), False]
 
 def updateBuriedStateAt(app, pos: BlockPos):
@@ -310,7 +392,7 @@ def getChunk(app, pos: BlockPos) -> Tuple[Chunk, BlockPos]:
     cy //= 16
     cz //= 16
 
-    chunk = app.chunks[ChunkPos(cx, cy, cz)]
+    chunk = app.world.chunks[ChunkPos(cx, cy, cz)]
     [x, y, z] = pos
     x %= 16
     y %= 16
@@ -346,9 +428,9 @@ def toChunkLocal(pos: BlockPos) -> Tuple[ChunkPos, BlockPos]:
 
 def coordsInBounds(app, pos: BlockPos) -> bool:
     (chunkPos, _) = toChunkLocal(pos)
-    return chunkPos in app.chunks
+    return chunkPos in app.world.chunks
     '''
-    if pos not in app.chunks:
+    if pos not in app.world.chunks:
         return False
     
     (x, y, z) = pos
@@ -400,17 +482,7 @@ def adjacentChunks(chunkPos, dist):
             newChunkPos = ChunkPos(x, y, z)
             yield newChunkPos
         
-def unloadChunk(app, pos: ChunkPos):
-    print(f"Unloading chunk at {pos}")
-    saveFile = f'saves/{app.worldName}/c_{pos.x}_{pos.y}_{pos.z}.txt'
-    app.chunks[pos].save(saveFile)
-    app.chunks.pop(pos)
 
-def loadChunk(app, pos: ChunkPos):
-    print(f"Loading chunk at {pos}")
-    app.chunks[pos] = Chunk(pos)
-    saveFile = f'saves/{app.worldName}/c_{pos.x}_{pos.y}_{pos.z}.txt'
-    app.chunks[pos].loadOrGenerate(app, saveFile, app.worldSeed)
 
 def loadUnloadChunks(app, centerPos):
     (chunkPos, _) = toChunkLocal(nearestBlockPos(centerPos[0], centerPos[1], centerPos[2]))
@@ -418,7 +490,7 @@ def loadUnloadChunks(app, centerPos):
 
     # Unload chunks
     shouldUnload = []
-    for unloadChunkPos in app.chunks:
+    for unloadChunkPos in app.world.chunks:
         (ux, _, uz) = unloadChunkPos
         dist = max(abs(ux - x), abs(uz - z))
         if dist > 2:
@@ -426,12 +498,12 @@ def loadUnloadChunks(app, centerPos):
             shouldUnload.append(unloadChunkPos)
 
     for unloadChunkPos in shouldUnload:
-        unloadChunk(app, unloadChunkPos)
+        app.world.unloadChunk(app, unloadChunkPos)
 
     loadedChunks = 0
 
     for loadChunkPos in adjacentChunks(chunkPos, 2):
-        if loadChunkPos not in app.chunks:
+        if loadChunkPos not in app.world.chunks:
             (ux, _, uz) = loadChunkPos
             dist = max(abs(ux - x), abs(uz - z))
 
@@ -439,7 +511,7 @@ def loadUnloadChunks(app, centerPos):
 
             if urgent or (loadedChunks < 1):
                 loadedChunks += 1
-                loadChunk(app, loadChunkPos)
+                app.world.loadChunk(app, loadChunkPos)
 
 def countLoadedAdjacentChunks(app, chunkPos: ChunkPos, dist: int) -> Tuple[int, int, int, int]:
     totalCount = 0
@@ -447,9 +519,9 @@ def countLoadedAdjacentChunks(app, chunkPos: ChunkPos, dist: int) -> Tuple[int, 
     popCount = 0
     comCount = 0
     for pos in adjacentChunks(chunkPos, dist):
-        if pos in app.chunks:
+        if pos in app.world.chunks:
             totalCount += 1
-            chunk = app.chunks[pos]
+            chunk = app.world.chunks[pos]
             if chunk.worldgenStage >= WorldgenStage.GENERATED: genCount += 1
             if chunk.worldgenStage >= WorldgenStage.POPULATED: popCount += 1
             if chunk.worldgenStage >= WorldgenStage.COMPLETE:  comCount += 1
@@ -457,11 +529,11 @@ def countLoadedAdjacentChunks(app, chunkPos: ChunkPos, dist: int) -> Tuple[int, 
     return (totalCount, genCount, popCount, comCount)
 
 def tickChunks(app):
-    for chunkPos in app.chunks:
-        chunk = app.chunks[chunkPos]
+    for chunkPos in app.world.chunks:
+        chunk = app.world.chunks[chunkPos]
         (adj, gen, pop, com) = countLoadedAdjacentChunks(app, chunkPos, 1)
         if chunk.worldgenStage == WorldgenStage.GENERATED and gen == 8:
-            chunk.populate(app, app.worldSeed)
+            chunk.populate(app, app.world.seed)
         if chunk.worldgenStage == WorldgenStage.POPULATED and gen == 8:
             chunk.lightAndOptimize(app)
 
@@ -705,7 +777,7 @@ def updateLight(app, blockPos: BlockPos):
 
 def getBlock(app, blockPos: BlockPos) -> str:
     (chunkPos, localPos) = toChunkLocal(blockPos)
-    return app.chunks[chunkPos].blocks[localPos.x, localPos.y, localPos.z]
+    return app.world.chunks[chunkPos].blocks[localPos.x, localPos.y, localPos.z]
     
 def removeBlock(app, blockPos: BlockPos):
     setBlock(app, blockPos, 'air')

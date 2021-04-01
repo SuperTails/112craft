@@ -14,7 +14,7 @@ import config
 import cmu_112_graphics
 import random
 from button import Button, ButtonManager, createSizedBackground
-from world import Chunk, ChunkPos
+from world import Chunk, ChunkPos, World
 from typing import List, Optional, Tuple
 from enum import Enum
 from player import Player, Slot
@@ -64,19 +64,12 @@ class WorldLoadMode(Mode):
     def __init__(self, app, worldName, nextMode, seed=40):
         self.nextMode = nextMode
 
-        app.worldName = worldName
-
         app.timerDelay = 10
 
-        app.worldSeed = seed
+        app.world = World(worldName, seed, anvilpath='C:/Users/Carson/AppData/Roaming/.minecraft/saves/TheTempleofNotch/region/')
+        #app.world = World(worldName, seed)
 
-        os.makedirs(f'saves/{app.worldName}', exist_ok=True)
-
-        app.chunks = {
-            ChunkPos(0, 0, 0): Chunk(ChunkPos(0, 0, 0))
-        }
-
-        app.chunks[ChunkPos(0, 0, 0)].loadOrGenerate(app, f'saves/{worldName}/c_0_0_0.txt', app.worldSeed)
+        app.world.loadChunk(app, ChunkPos(0, 0, 0))
     
     def timerFired(self, app):
         if self.loadStage < 20:
@@ -588,7 +581,11 @@ class InventoryMode(Mode):
 def appStarted(app):
     loadResources(app)
 
-    app.mode = WorldLoadMode(app, 'world', TitleMode)
+    #app.mode = WorldLoadMode(app, 'world', TitleMode)
+    def makePlayingMode(app): return PlayingMode(app, False)
+    app.mode = WorldLoadMode(app, 'world', makePlayingMode)
+
+
 
     app.btnBg = createSizedBackground(app, 200, 40)
 
