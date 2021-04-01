@@ -480,6 +480,7 @@ def renderInstances(app, canvas):
         'leaves': [],
         'log': [],
         'bedrock': [],
+        'crafting_table': [],
     }
 
     for chunk in app.chunks.values():
@@ -762,7 +763,7 @@ def drawSlot(app, canvas, x, y, slot, drawBackground=True):
 
     if not slot.isEmpty():
         tex = app.itemTextures[slot.item]
-        image = getCachedImage(tex)
+        image = tex
         canvas.create_image(x, y, image=image)
 
         # Slots that are infinite or with a single item just don't have a number displayed
@@ -827,6 +828,63 @@ def redrawAll(app, canvas, doDrawHud=True):
     #canvas.create_line(origin[0], origin[1], zAxis[0], zAxis[1], fill='blue')
 
     if doDrawHud: drawHud(app, canvas, startTime)
+
+def drawItemFromBlock2(sz: int, base: Image.Image) -> Image.Image:
+    from typing import cast
+
+    midX = int((sz - 1) / 2)
+
+    partH = sz / 5
+
+    bottomLeft = (0, int(partH * 4))
+    bottomMiddle = (midX, sz - 1)
+    bottomRight = (sz - 1, int(partH * 4))
+
+    centerLeft = (0, int(partH))
+    centerMiddle = (midX, int(partH * 2))
+    centerRight = (sz - 1, int(partH))
+
+    im = Image.new('RGBA', (sz, sz))
+    draw = cast(ImageDraw.ImageDraw, ImageDraw.Draw(im))
+
+    for x in range(0, 16):
+        srcX = 16 + x
+        dstX = int(x / 16.0 * midX)
+
+        for y in range(0, 16):
+            srcY = 16 + y
+            dstY = centerLeft[1] + y + int(partH * x / 16.0)
+
+            pixel = base.getpixel((srcX, srcY))
+
+            im.putpixel((dstX, dstY), pixel)
+    
+    for x in range(0, 16):
+        srcX = 32 + x
+        dstX = int((x / 16.0 + 1.0) * midX)
+
+        for y in range(0, 16):
+            srcY = 16 + y
+            dstY = centerLeft[1] + y - int(partH * (x - midX) / 16.0)
+
+            pixel = base.getpixel((srcX, srcY))
+
+            im.putpixel((dstX, dstY), pixel)
+
+    for x in range(0, 16):
+        srcX = 16 + x
+
+        for y in range(0, 16):
+            srcY = y
+
+            dstX = int((x - y + 16) / 32.0 * sz)
+            dstY = int((y + x) / 32.0 * partH * 2)
+
+            pixel = base.getpixel((srcX, srcY))
+
+            im.putpixel((dstX, dstY), pixel)
+
+    return im
 
 def drawItemFromBlock(size: int, textures: List[Color]) -> Image.Image:
     from typing import cast

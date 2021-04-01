@@ -72,9 +72,6 @@ class StartupMode(Mode):
         self.loadStage += 1
     
     def redrawAll(self, app, window, canvas):
-        # TODO:
-        return
-
         leftX = app.width * 0.25
         rightX = app.width * 0.75
 

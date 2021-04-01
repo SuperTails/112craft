@@ -303,9 +303,10 @@ def loadResources(app):
         'crafting_table': ('assets/missing.png'),
     }
 
-    #for (name, tex) in app.textures.items():
-    #    newTex = render.drawItemFromBlock(25, tex['grass'])
-    #    app.itemTextures[name] = newTex
+    for (name, _) in app.textures.items():
+        #newTex = render.drawItemFromBlock(25, textureNames[tex])
+        newTex = render.drawItemFromBlock2(25, Image.open(textureNames[name]))
+        app.itemTextures[name] = newTex
 
 def getHardnessAgainst(app, block: world.BlockId, tool: world.ItemId) -> float:
     (goodTool, base) = app.hardnesses[block]
