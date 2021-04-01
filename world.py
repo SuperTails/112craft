@@ -89,12 +89,48 @@ class Chunk:
     def __init__(self, pos: ChunkPos):
         self.pos = pos
 
-    def generate(self, app, seed):
-        # x and y and z
         self.blocks = np.full((16, 16, 16), 'air', dtype=object)
         self.lightLevels = np.full((16, 16, 16), 7)
         self.instances = [None] * self.blocks.size
+    
+    def save(self, path):
+        allBlocks = []
+        allLights = []
+        for yIdx in range(0, 16):
+            for xIdx in range(0, 16):
+                for zIdx in range(0, 16):
+                    allBlocks.append(self.blocks[xIdx, yIdx, zIdx])
+                    allLights.append(str(self.lightLevels[xIdx, yIdx, zIdx]))
+    
+        with open(path, "w") as f:
+            f.write(','.join(allBlocks))
+            f.write('\n')
+            f.write(','.join(allLights))
+    
+    def loadOrGenerate(self, app, path, seed):
+        try:
+            self.load(app, path)
+        except FileNotFoundError:
+            self.generate(app, seed)
+    
+    def load(self, app, path):
+        with open(path, "r") as f:
+            [blockList, lightList] = f.readlines()
+            blockList = blockList.strip().split(',')
+            lightList = lightList.strip().split(',')
 
+            for (i, (b, l)) in enumerate(zip(blockList, lightList)):
+                z = i % 16
+                x = (i // 16) % 16
+                y = (i // 256)
+
+                self.setBlock(app, BlockPos(x, y, z), b, doUpdateLight=False, doUpdateBuried=True)
+                self.lightLevels[x, y, z] = int(l)
+        
+        self.worldgenStage = WorldgenStage.GENERATED
+
+    def generate(self, app, seed):
+        # x and y and z
         minVal = 100.0
         maxVal = -100.0
 
@@ -337,12 +373,15 @@ def adjacentChunks(chunkPos, dist):
         
 def unloadChunk(app, pos: ChunkPos):
     print(f"Unloading chunk at {pos}")
+    saveFile = f'saves/c_{pos.x}_{pos.y}_{pos.z}.txt'
+    app.chunks[pos].save(saveFile)
     app.chunks.pop(pos)
 
 def loadChunk(app, pos: ChunkPos):
     print(f"Loading chunk at {pos}")
     app.chunks[pos] = Chunk(pos)
-    app.chunks[pos].generate(app, app.worldSeed)
+    saveFile = f'saves/c_{pos.x}_{pos.y}_{pos.z}.txt'
+    app.chunks[pos].loadOrGenerate(app, saveFile, app.worldSeed)
 
 def loadUnloadChunks(app, centerPos):
     (chunkPos, _) = toChunkLocal(nearestBlockPos(centerPos[0], centerPos[1], centerPos[2]))

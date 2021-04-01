@@ -61,7 +61,7 @@ class StartupMode(Mode):
             ChunkPos(0, 0, 0): Chunk(ChunkPos(0, 0, 0))
         }
 
-        app.chunks[ChunkPos(0, 0, 0)].generate(app, app.worldSeed)
+        app.chunks[ChunkPos(0, 0, 0)].loadOrGenerate(app, 'saves/c_0_0_0.txt', app.worldSeed)
     
     def timerFired(self, app):
         if self.loadStage < 20:
