@@ -280,7 +280,7 @@ def loadGlTextures(app):
 
     app.glTextures = {
         'grass': loadTexture('assets/grass.png'),
-        'stone': loadTexture('assets/missing.png'),
+        'stone': loadTexture('assets/stone.png', tesselate=True),
         'leaves': loadTexture('assets/leaves.png'),
         'log': loadTexture('assets/log.png'),
         'bedrock': loadTexture('assets/missing.png'),

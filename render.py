@@ -551,7 +551,6 @@ def renderInstancesGl(app, canvas):
 
             breakingBlockAmount = app.breakingBlock / hardness
 
-
     b = math.floor(breakingBlockAmount * 10.0)
 
     glActiveTexture(GL_TEXTURE1)

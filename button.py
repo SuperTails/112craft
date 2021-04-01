@@ -79,10 +79,12 @@ class Button:
         canvas.create_text(centerX, centerY, text=self.text, font='Arial 16 bold', fill='white')
 
 class ButtonManager:
-    buttons: dict[str, Button] = {}
-    heldButtonName: Optional[str] = None
+    buttons: dict[str, Button]
+    heldButtonName: Optional[str]
 
-    def __init__(self): pass
+    def __init__(self):
+        self.buttons = {}
+        self.heldButtonName = None
 
     def onPress(self, x, y) -> None:
         for (buttonName, button) in self.buttons.items():

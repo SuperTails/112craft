@@ -102,6 +102,8 @@ class App:
             keyName = 'Escape'
         elif key == glfw.KEY_SPACE:
             keyName = 'Space'
+        elif key == glfw.KEY_BACKSPACE:
+            keyName = 'Backspace'
         else:
             keyName = None
         

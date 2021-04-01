@@ -2,6 +2,8 @@ import openglapp
 from PIL import Image
 from PIL import ImageDraw
 from PIL.ImageDraw import Draw
+from pathlib import Path
+import os
 import numpy as np
 import math
 import render
@@ -10,6 +12,7 @@ import copy
 import glfw
 import config
 import cmu_112_graphics
+import random
 from button import Button, ButtonManager, createSizedBackground
 from world import Chunk, ChunkPos
 from typing import List, Optional, Tuple
@@ -46,22 +49,34 @@ class Mode:
     def keyPressed(self, app, event): pass
     def keyReleased(self, app, event): pass
 
-class StartupMode(Mode):
+def worldToFolderName(name: str) -> str:
+    result = ''
+    for c in name:
+        if c.isalnum():
+            result += c
+        else:
+            result += '_'
+    return result
+
+class WorldLoadMode(Mode):
     loadStage: int = 0
 
-    def __init__(self, app):
-        loadResources(app)
+    def __init__(self, app, worldName, nextMode, seed=40):
+        self.nextMode = nextMode
+
+        app.worldName = worldName
 
         app.timerDelay = 10
 
-        # TODO: Fix
-        app.worldSeed = 40
+        app.worldSeed = seed
+
+        os.makedirs(f'saves/{app.worldName}', exist_ok=True)
 
         app.chunks = {
             ChunkPos(0, 0, 0): Chunk(ChunkPos(0, 0, 0))
         }
 
-        app.chunks[ChunkPos(0, 0, 0)].loadOrGenerate(app, 'saves/c_0_0_0.txt', app.worldSeed)
+        app.chunks[ChunkPos(0, 0, 0)].loadOrGenerate(app, f'saves/{worldName}/c_0_0_0.txt', app.worldSeed)
     
     def timerFired(self, app):
         if self.loadStage < 20:
@@ -69,7 +84,7 @@ class StartupMode(Mode):
         elif self.loadStage < 30:
             world.tickChunks(app)
         else:
-            app.mode = TitleMode(app)
+            app.mode = self.nextMode(app)
             
         self.loadStage += 1
     
@@ -87,6 +102,106 @@ class StartupMode(Mode):
 
         canvas.create_rectangle(leftX, app.height / 2 - height, midX, app.height / 2 + height, fill='red')
 
+def getWorldNames() -> List[str]:
+    return list(os.listdir('saves/'))
+
+class WorldListMode(Mode):
+    buttons: ButtonManager
+    selectedWorld: Optional[int]
+    worlds: List[str]
+
+    def __init__(self, app):
+        self.buttons = ButtonManager()
+        self.selectedWorld = None
+
+        self.worlds = getWorldNames()
+
+        playButton = Button(app, 0.2, 0.7, app.btnBg, "Play")
+        createButton = Button(app, 0.8, 0.7, app.btnBg, "Create New")
+
+        self.buttons.addButton('play', playButton)
+        self.buttons.addButton('create', createButton)
+    
+    def redrawAll(self, app, window, canvas):
+        self.buttons.draw(app, canvas)
+
+        if self.selectedWorld is not None:
+            cx = app.width * 0.5
+            cy = app.height * 0.20 + 30 * self.selectedWorld
+            canvas.create_rectangle(cx - 100, cy - 15, cx + 100, cy + 15)
+
+        for (i, worldName) in enumerate(self.worlds):
+            canvas.create_text(app.width * 0.5, app.height * 0.20 + 30 * i, text=worldName)
+
+    def mousePressed(self, app, event):
+        self.buttons.onPress(event.x, event.y)
+
+        # FIXME: Make these into buttons!
+        if app.width * 0.5 - 100 < event.x and event.x < app.width * 0.5 + 100:
+            yIdx = round((event.y - (app.height * 0.20)) / 30)
+            if 0 <= yIdx and yIdx < len(self.worlds):
+                self.selectedWorld = yIdx
+
+
+    
+    def mouseReleased(self, app, event):
+        btn = self.buttons.onRelease(event.x, event.y)
+        if btn is not None:
+            print(f"Pressed {btn}")
+            if btn == 'create':
+                app.mode = CreateWorldMode(app)
+            elif btn == 'play' and self.selectedWorld is not None:
+                # FIXME: Gamemodes, seed
+                def makePlayingMode(app): return PlayingMode(app, False)
+                app.mode = WorldLoadMode(app, self.worlds[self.selectedWorld], makePlayingMode)
+
+
+
+class CreateWorldMode(Mode):
+    buttons: ButtonManager
+    worldName: str
+
+    def __init__(self, app):
+        self.worldName = ''
+        self.buttons = ButtonManager()
+
+        survivalButton = Button(app, 0.5, 0.4, app.btnBg, "Play Survival")
+        creativeButton = Button(app, 0.5, 0.55, app.btnBg, "Play Creative")
+
+        self.buttons.addButton('playSurvival', survivalButton)
+        self.buttons.addButton('playCreative', creativeButton)
+
+    def redrawAll(self, app, window, canvas):
+        self.buttons.draw(app, canvas)
+
+        canvas.create_text(app.width * 0.5, app.height * 0.15, text="World Name:")
+
+        canvas.create_rectangle(app.width * 0.5 - 100, app.height * 0.25 - 15,
+            app.width * 0.5 + 100, app.height * 0.25 + 15)
+
+        canvas.create_text(app.width * 0.5, app.height * 0.25, text=self.worldName)
+    
+    def keyPressed(self, app, event):
+        key = event.key.lower()
+        # FIXME: CHECK IF BACKSPACE IS CORRECT FOR TKINTER TOO
+        if key == 'backspace' and len(self.worldName) > 0:
+            self.worldName = self.worldName[:-1]
+        elif len(key) == 1 and len(self.worldName) < 15:
+            self.worldName += key
+
+    def mousePressed(self, app, event):
+        self.buttons.onPress(event.x, event.y)
+    
+    def mouseReleased(self, app, event):
+        btn = self.buttons.onRelease(event.x, event.y)
+        if btn is not None:
+            print(f"Pressed {btn}")
+            if (btn == 'playSurvival' or btn == 'playCreative') and self.worldName != '':
+                # FIXME: CHECK FOR DUPLICATE WORLD NAMES
+                isCreative = btn == 'playCreative'
+                makePlayingMode = lambda app: PlayingMode(app, isCreative)
+                app.mode = WorldLoadMode(app, self.worldName, makePlayingMode, seed=random.random())
+
 class TitleMode(Mode):
     buttons: ButtonManager
     titleText: Image.Image
@@ -101,11 +216,8 @@ class TitleMode(Mode):
             self.titleText = app.loadImage('assets/TitleText.png')
             self.titleText = app.scaleImage(self.titleText, 3)
 
-        survivalButton = Button(app, 0.5, 0.4, app.btnBg, "Play Survival")
-        creativeButton = Button(app, 0.5, 0.55, app.btnBg, "Play Creative")
-
-        self.buttons.addButton('playSurvival', survivalButton) # type: ignore
-        self.buttons.addButton('playCreative', creativeButton) # type: ignore
+        playButton = Button(app, 0.5, 0.4, app.btnBg, "Play")
+        self.buttons.addButton('play', playButton)
 
     def timerFired(self, app):
         app.cameraYaw += 0.01
@@ -117,10 +229,11 @@ class TitleMode(Mode):
         btn = self.buttons.onRelease(event.x, event.y)
         if btn is not None:
             print(f"Pressed {btn}")
-            if btn == 'playSurvival':
-                app.mode = PlayingMode(app, False)
-            elif btn == 'playCreative':
-                app.mode = PlayingMode(app, True)
+            worldNames = getWorldNames()
+            if worldNames == []:
+                app.mode = CreateWorldMode(app)
+            else:
+                app.mode = WorldListMode(app)
 
     def redrawAll(self, app, window, canvas):
         render.redrawAll(app, canvas, doDrawHud=False)
@@ -473,7 +586,9 @@ class InventoryMode(Mode):
 
 # Initializes all the data needed to run 112craft
 def appStarted(app):
-    app.mode = StartupMode(app)
+    loadResources(app)
+
+    app.mode = WorldLoadMode(app, 'world', TitleMode)
 
     app.btnBg = createSizedBackground(app, 200, 40)
 
@@ -483,7 +598,7 @@ def appStarted(app):
     # ----------------
     # Player variables
     # ----------------
-    app.breakingBlock = 1.0
+    app.breakingBlock = 0.0
     app.breakingBlockPos = world.BlockPos(0, 0, 0)
 
     app.gravity = 0.10

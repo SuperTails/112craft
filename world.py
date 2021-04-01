@@ -6,6 +6,7 @@ import time
 import perlin
 import random
 import config
+import anvil
 from enum import IntEnum
 from math import cos, sin
 from numpy import ndarray
@@ -75,6 +76,10 @@ class WorldgenStage(IntEnum):
     COMPLETE = 3,
 
 
+# -34, 70, -89
+# 2, 6, -6
+# at y = 70ish
+
 class Chunk:
     pos: ChunkPos
     blocks: ndarray
@@ -113,6 +118,25 @@ class Chunk:
         except FileNotFoundError:
             self.generate(app, seed)
     
+    def loadFromAnvil(self, app, path):
+        chunk = anvil.Chunk.from_region(path, 2, -6)
+
+        for x in range(16):
+            for y in range(16):
+                for z in range(16):
+                    block: str = chunk.get_block(x, y + 69, z).id #type:ignore
+                    if block == 'dirt':
+                        block = 'grass'
+                    elif block == 'grass_block':
+                        block = 'grass'
+                    elif block == 'smooth_stone_slab':
+                        block = 'stone'
+                    elif block == 'oak_leaves':
+                        block = 'leaves'
+                    elif block == 'oak_log':
+                        block = 'log'
+                    self.setBlock(app, BlockPos(x, y, z), block, doUpdateLight=False)
+    
     def load(self, app, path):
         with open(path, "r") as f:
             [blockList, lightList] = f.readlines()
@@ -127,9 +151,14 @@ class Chunk:
                 self.setBlock(app, BlockPos(x, y, z), b, doUpdateLight=False, doUpdateBuried=True)
                 self.lightLevels[x, y, z] = int(l)
         
-        self.worldgenStage = WorldgenStage.GENERATED
+        self.worldgenStage = WorldgenStage.COMPLETE
 
     def generate(self, app, seed):
+        if self.pos == ChunkPos(0, 0, 0):
+            self.loadFromAnvil(app, 'C:/Users/Carson/AppData/Roaming/.minecraft/saves/TheTempleofNotch/region/r.0.-1.mca')
+            self.worldgenStage = WorldgenStage.COMPLETE
+            return
+
         # x and y and z
         minVal = 100.0
         maxVal = -100.0
@@ -373,14 +402,14 @@ def adjacentChunks(chunkPos, dist):
         
 def unloadChunk(app, pos: ChunkPos):
     print(f"Unloading chunk at {pos}")
-    saveFile = f'saves/c_{pos.x}_{pos.y}_{pos.z}.txt'
+    saveFile = f'saves/{app.worldName}/c_{pos.x}_{pos.y}_{pos.z}.txt'
     app.chunks[pos].save(saveFile)
     app.chunks.pop(pos)
 
 def loadChunk(app, pos: ChunkPos):
     print(f"Loading chunk at {pos}")
     app.chunks[pos] = Chunk(pos)
-    saveFile = f'saves/c_{pos.x}_{pos.y}_{pos.z}.txt'
+    saveFile = f'saves/{app.worldName}/c_{pos.x}_{pos.y}_{pos.z}.txt'
     app.chunks[pos].loadOrGenerate(app, saveFile, app.worldSeed)
 
 def loadUnloadChunks(app, centerPos):
