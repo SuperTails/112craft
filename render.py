@@ -2,6 +2,7 @@ import math
 import time
 from tkinter.constants import X
 import world
+import config
 import numpy as np
 from resources import getHardnessAgainst
 from math import sin, cos
@@ -38,16 +39,27 @@ class Model:
     def __init__(self, vertices: List[ndarray], faces: List[Face]):
         self.vertices = vertices
         self.faces = faces
-    
+
+'''
 class CubeInstance:
     trans: ndarray
 
     texture: int
 
-    def __init__(self, trans: ndarray, texture: int):
+    def __init__(self, model: Model, trans: ndarray, texture: int):
         self.trans = trans
         self.texture = texture
+    
+        self._worldSpaceVertices = [toHomogenous(v) for v in self.worldSpaceVerticesUncached()]
+        self.visibleFaces = [True] * len(model.faces)
 
+    def worldSpaceVertices(self) -> List[ndarray]:
+        return self._worldSpaceVertices
+    
+    def worldSpaceVerticesUncached(self) -> List[ndarray]:
+        return [vertex + self.trans for vertex in self.model.vertices]
+'''
+    
 class Instance:
     """An actual occurrence of a Model in the world.
 
@@ -426,19 +438,21 @@ def blockPosIsVisible(app, pos: BlockPos) -> bool:
 
     return dot >= 0
 
-def renderInstances(app, canvas):
+def renderInstancesTk(app, canvas):
+    faces = drawToFaces(app)
+
+    def zCoord(d): return -(d[0][d[1][0]][2] + d[0][d[1][1]][2] + d[0][d[1][2]][2])
+    
+    faces.sort(key=zCoord)
+
+    drawToCanvas(app, canvas, faces)
+
+def renderInstancesGl(app, canvas):
     check1 = makeFrustrumCullCheck(app, app.cameraPitch, app.cameraYaw)
     check2 = makeFrustrumCullCheck(app, app.cameraPitch, app.cameraYaw + (app.horizFov / 2))
     check3 = makeFrustrumCullCheck(app, app.cameraPitch, app.cameraYaw - (app.horizFov / 2))
     check4 = makeFrustrumCullCheck(app, app.cameraPitch - (app.vertFov / 2), app.cameraYaw)
     check5 = makeFrustrumCullCheck(app, app.cameraPitch + (app.vertFov / 2), app.cameraYaw)
-    #faces = drawToFaces(app)
-
-    #def zCoord(d): return -(d[0][d[1][0]][2] + d[0][d[1][1]][2] + d[0][d[1][2]][2])
-    
-    #faces.sort(key=zCoord)
-
-    #drawToCanvas(app, canvas, faces)
 
     view = glViewMat(app.cameraPos, app.cameraYaw, app.cameraPitch)
 
@@ -456,7 +470,6 @@ def renderInstances(app, canvas):
     app.blockProgram.useProgram()
     glUniformMatrix4fv(app.blockProgram.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
     glUniformMatrix4fv(app.blockProgram.getUniformLocation("projection"), 1, GL_FALSE, projection) #type:ignore
-
 
 
     glBindVertexArray(app.cubeVao)
@@ -755,7 +768,6 @@ def drawSlot(app, canvas, x, y, slot, drawBackground=True):
     slotWidth = app.itemTextures['air'].width + 6
 
     if drawBackground:
-        pass
         canvas.create_rectangle(x - slotWidth / 2, y - slotWidth / 2,
             x + slotWidth / 2,
             y + slotWidth / 2,
@@ -809,10 +821,14 @@ def redrawAll(app, canvas, doDrawHud=True):
     
     # The sky
     # TODO:
-    #canvas.create_rectangle(0.0, 0.0, app.width, app.height, fill='#0080FF')
+    if not config.USE_OPENGL_BACKEND:
+        canvas.create_rectangle(0.0, 0.0, app.width, app.height, fill='#0080FF')
 
     # The world
-    renderInstances(app, canvas)
+    if config.USE_OPENGL_BACKEND:
+        renderInstancesGl(app, canvas)
+    else:
+        renderInstancesTk(app, canvas)
 
     #origin = worldToCanvas(app, np.array([[0.0], [0.0], [0.0]]))
     #xAxis = worldToCanvas(app, np.array([[1.0], [0.0], [0.0]]))

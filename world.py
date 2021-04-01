@@ -5,6 +5,7 @@ import render
 import time
 import perlin
 import random
+import config
 from enum import IntEnum
 from math import cos, sin
 from numpy import ndarray
@@ -188,16 +189,19 @@ class Chunk:
 
         globalPos = self._globalBlockPos(blockPos)
 
+        inst = self.instances[idx][0]
+
         uncovered = False
         for faceIdx in range(0, 12, 2):
             adjPos = adjacentBlockPos(globalPos, faceIdx)
             if coordsOccupied(app, adjPos):
-                #self.instances[idx][0].visibleFaces[faceIdx] = False
-                #self.instances[idx][0].visibleFaces[faceIdx + 1] = False
-                pass
+                if not config.USE_OPENGL_BACKEND:
+                    inst.visibleFaces[faceIdx] = False
+                    inst.visibleFaces[faceIdx + 1] = False
             else:
-                #self.instances[idx][0].visibleFaces[faceIdx] = True
-                #self.instances[idx][0].visibleFaces[faceIdx + 1] = True
+                if not config.USE_OPENGL_BACKEND:
+                    inst.visibleFaces[faceIdx] = True
+                    inst.visibleFaces[faceIdx + 1] = True
                 uncovered = True
             
         self.instances[idx][1] = uncovered
@@ -217,7 +221,7 @@ class Chunk:
 
             [modelX, modelY, modelZ] = blockToWorld(self._globalBlockPos(blockPos))
 
-            self.instances[idx] = [render.CubeInstance(np.array([[modelX], [modelY], [modelZ]]), texture), True]
+            self.instances[idx] = [render.Instance(app.cube, np.array([[modelX], [modelY], [modelZ]]), texture), True]
             if doUpdateBuried:
                 self.updateBuriedStateAt(app, blockPos)
         

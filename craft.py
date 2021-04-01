@@ -1,4 +1,4 @@
-from openglapp import runApp
+import openglapp
 from PIL import Image
 from PIL import ImageDraw
 from PIL.ImageDraw import Draw
@@ -8,6 +8,8 @@ import render
 import world
 import copy
 import glfw
+import config
+import cmu_112_graphics
 from button import Button, ButtonManager, createSizedBackground
 from world import Chunk, ChunkPos
 from typing import List, Optional, Tuple
@@ -92,8 +94,12 @@ class TitleMode(Mode):
     def __init__(self, app):
         self.buttons = ButtonManager()
 
-        self.titleText = Image.open('assets/TitleText.png')
-        self.titleText = self.titleText.resize((self.titleText.width * 3, self.titleText.height * 3), Image.NEAREST)
+        if config.USE_OPENGL_BACKEND:
+            self.titleText = Image.open('assets/TitleText.png')
+            self.titleText = self.titleText.resize((self.titleText.width * 3, self.titleText.height * 3), Image.NEAREST)
+        else:
+            self.titleText = app.loadImage('assets/TitleText.png')
+            self.titleText = app.scaleImage(self.titleText, 3)
 
         survivalButton = Button(app, 0.5, 0.4, app.btnBg, "Play Survival")
         creativeButton = Button(app, 0.5, 0.55, app.btnBg, "Play Creative")
@@ -135,10 +141,11 @@ def setMouseCapture(app, value: bool) -> None:
 
     app.captureMouse = value
 
-    if app.captureMouse:
-        glfw.set_input_mode(app.window, glfw.CURSOR, glfw.CURSOR_DISABLED)
-    else:
-        glfw.set_input_mode(app.window, glfw.CURSOR, glfw.CURSOR_NORMAL)
+    if config.USE_OPENGL_BACKEND:
+        if app.captureMouse:
+            glfw.set_input_mode(app.window, glfw.CURSOR, glfw.CURSOR_DISABLED)
+        else:
+            glfw.set_input_mode(app.window, glfw.CURSOR, glfw.CURSOR_NORMAL)
 
 class PlayingMode(Mode):
     lookedAtBlock = None
@@ -191,35 +198,37 @@ class PlayingMode(Mode):
         self.mouseHeld = False
     
     def keyPressed(self, app, event):
-        if len(event.key) == 1 and event.key.isdigit():
-            keyNum = int(event.key)
+        key = event.key.upper()
+        if len(key) == 1 and key.isdigit():
+            keyNum = int(key)
             if keyNum != 0:
                 self.player.hotbarIdx = keyNum - 1
-        elif event.key == 'W':
+        elif key == 'W':
             app.w = True
-        elif event.key == 'S':
+        elif key == 'S':
             app.s = True
-        elif event.key == 'A':
+        elif key == 'A':
             app.a = True
-        elif event.key == 'D':
+        elif key == 'D':
             app.d = True
-        elif event.key == 'E':
+        elif key == 'E':
             app.mode = InventoryMode(app, self, name='inventory')
             app.w = app.s = app.a = app.d = False
-        elif event.key == 'Space':
+        elif key == 'SPACE':
             if self.player.onGround:
                 app.mode.player.velocity[1] = 0.35
-        elif event.key == 'Escape':
+        elif key == 'ESCAPE':
             setMouseCapture(app, not app.captureMouse)
 
     def keyReleased(self, app, event):
-        if event.key == 'W':
+        key = event.key.upper()
+        if key == 'W':
             app.w = False
-        elif event.key == 'S':
+        elif key == 'S':
             app.s = False 
-        elif event.key == 'A':
+        elif key == 'A':
             app.a = False
-        elif event.key == 'D':
+        elif key == 'D':
             app.d = False
         
 class CraftingGui:
@@ -451,7 +460,8 @@ class InventoryMode(Mode):
         self.gui.onClick(app, isRight, event.x, event.y)
  
     def keyPressed(self, app, event):
-        if event.key == 'E':
+        key = event.key.upper()
+        if key == 'E':
             dim = len(self.gui.craftInputs)
             for r in range(dim):
                 for c in range(dim):
@@ -599,13 +609,55 @@ def mouseMovedOrDragged(app, event):
         app.cameraYaw += xChange * 0.01
 
     if app.captureMouse:
-        app.prevMouse = (event.x, event.y)
+        if config.USE_OPENGL_BACKEND:
+            app.prevMouse = (event.x, event.y)
+        else:
+            x = app.width / 2
+            y = app.height / 2
+            app._theRoot.event_generate('<Motion>', warp=True, x=x, y=y)
+            app.prevMouse = (x, y)
 
-def redrawAll(app, window, canvas):
+
+class CachedImageCanvas(cmu_112_graphics.WrappedCanvas):
+    def __init__(self, c):
+        self._canvas = c
+    
+    def create_rectangle(self, *args, **kwargs):
+        self._canvas.create_rectangle(*args, **kwargs)
+    
+    def create_polygon(self, *args, **kwargs):
+        self._canvas.create_polygon(*args, **kwargs)
+    
+    def create_image(self, x, y, image, **kwargs):
+        self._canvas.create_image(x, y, image=render.getCachedImage(image), **kwargs)
+    
+    def create_text(self, *args, **kwargs):
+        self._canvas.create_text(*args, **kwargs)
+    
+    def create_oval(self, *args, **kwargs):
+        self._canvas.create_oval(*args, **kwargs)
+
+def redrawAll(app, *args):
+    if config.USE_OPENGL_BACKEND:
+        window, canvas = args
+    else:
+        window = ()
+        [canvas] = args
+
+        if app.captureMouse:
+            canvas.configure(cursor='none')
+        else:
+            canvas.configure(cursor='arrow')
+
+        canvas = CachedImageCanvas(canvas)
+
     app.mode.redrawAll(app, window, canvas)
 
 def main():
-    runApp(width=600, height=400)
+    if config.USE_OPENGL_BACKEND:
+        openglapp.runApp(width=600, height=400)
+    else:
+        cmu_112_graphics.runApp(width=600, height=400)
 
 if __name__ == '__main__':
     main()
