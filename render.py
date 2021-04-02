@@ -503,7 +503,7 @@ def renderInstancesGl(app, canvas):
 
         [cx, cy, cz] = chunk.pos
         cx *= 16
-        cy *= 16
+        cy *= world.CHUNK_HEIGHT
         cz *= 16
 
         for i, inst in enumerate(chunk.instances):
@@ -515,21 +515,21 @@ def renderInstancesGl(app, canvas):
                 #wy = chunk.pos[1] * 16 + (i // 16) % 16
                 #wz = chunk.pos[2] * 16 + (i % 16)
 
-                bx = i // 256
-                by = (i // 16) % 16
+                bx = i // (16 * world.CHUNK_HEIGHT)
+                by = (i // 16) % world.CHUNK_HEIGHT
                 bz = (i % 16)
 
-                wx = cx + (i // 256)
-                wy = cy + (i // 16) % 16
-                wz = cz + (i % 16)
+                wx = cx + bx
+                wy = cy + by
+                wz = cz + bz
 
                 blockPos = BlockPos(wx, wy, wz)
 
-                if not check1(blockPos): continue
-                if not check2(blockPos): continue
-                if not check3(blockPos): continue
-                if not check4(blockPos): continue
-                if not check5(blockPos): continue
+                #if not check1(blockPos): continue
+                #if not check2(blockPos): continue
+                #if not check3(blockPos): continue
+                #if not check4(blockPos): continue
+                #if not check5(blockPos): continue
 
                 bid = chunk.blocks[bx, by, bz]
 
@@ -623,7 +623,7 @@ def drawToFaces(app):
 
         [cx, cy, cz] = chunk.pos
         cx *= 16
-        cy *= 16
+        cy *= world.CHUNK_HEIGHT
         cz *= 16
 
         for (i, inst) in enumerate(chunk.instances):
@@ -812,7 +812,7 @@ def drawHud(app, canvas, startTime):
     drawTextOutlined(canvas, 10, 10, text=f'Frame Time: {frameTime:.2f}ms', anchor='nw')
 
     chunkX = math.floor(app.cameraPos[0] / 16)
-    chunkY = math.floor(app.cameraPos[1] / 16)
+    chunkY = math.floor(app.cameraPos[1] / world.CHUNK_HEIGHT)
     chunkZ = math.floor(app.cameraPos[2] / 16)
 
     drawTextOutlined(canvas, 10, 50, text=f'Chunk coords: {chunkX}, {chunkY}, {chunkZ}', anchor='nw')

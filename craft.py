@@ -66,8 +66,8 @@ class WorldLoadMode(Mode):
 
         app.timerDelay = 10
 
-        app.world = World(worldName, seed, anvilpath='C:/Users/Carson/AppData/Roaming/.minecraft/saves/TheTempleofNotch/region/')
-        #app.world = World(worldName, seed)
+        #app.world = World(worldName, seed, anvilpath='C:/Users/Carson/AppData/Roaming/.minecraft/saves/TheTempleofNotch/region/')
+        app.world = World(worldName, seed)
 
         app.world.loadChunk(app, ChunkPos(0, 0, 0))
     
@@ -584,8 +584,6 @@ def appStarted(app):
     #app.mode = WorldLoadMode(app, 'world', TitleMode)
     def makePlayingMode(app): return PlayingMode(app, False)
     app.mode = WorldLoadMode(app, 'world', makePlayingMode)
-
-
 
     app.btnBg = createSizedBackground(app, 200, 40)
 

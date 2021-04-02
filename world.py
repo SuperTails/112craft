@@ -82,6 +82,8 @@ class WorldgenStage(IntEnum):
 
 seen = set()
 
+CHUNK_HEIGHT = 16
+
 class Chunk:
     pos: ChunkPos
     blocks: ndarray
@@ -96,14 +98,14 @@ class Chunk:
     def __init__(self, pos: ChunkPos):
         self.pos = pos
 
-        self.blocks = np.full((16, 16, 16), 'air', dtype=object)
-        self.lightLevels = np.full((16, 16, 16), 7)
+        self.blocks = np.full((16, CHUNK_HEIGHT, 16), 'air', dtype=object)
+        self.lightLevels = np.full((16, CHUNK_HEIGHT, 16), 7)
         self.instances = [None] * self.blocks.size
     
     def save(self, path):
         allBlocks = []
         allLights = []
-        for yIdx in range(0, 16):
+        for yIdx in range(0, CHUNK_HEIGHT):
             for xIdx in range(0, 16):
                 for zIdx in range(0, 16):
                     allBlocks.append(self.blocks[xIdx, yIdx, zIdx])
@@ -121,43 +123,45 @@ class Chunk:
             self.generate(app, seed)
     
     def loadFromAnvilChunk(self, app, chunk):
-        for x in range(16):
-            for y in range(16):
-                for z in range(16):
-                    global seen
+        for (i, block) in enumerate(chunk.stream_chunk()):
+            y = (i // (16 * 16))
+            z = (i // 16) % 16
+            x = i % 16
+            global seen
 
-                    block: str = chunk.get_block(x, y + 62, z, force_new=True).id #type:ignore
-                    if block in ['dirt', 'grass_block']:
-                        block = 'grass'
-                    elif block in ['smooth_stone_slab', 'coal_ore', 'gravel']:
-                        block = 'stone'
-                    elif block in ['cobblestone', 'mossy_cobblestone']:
-                        block = 'cobblestone'
-                    elif block in ['oak_leaves', 'birch_leaves']:
-                        block = 'leaves'
-                    elif block in ['oak_log', 'birch_log', 'jungle_wood']:
-                        block = 'log'
-                    elif block in ['dandelion', 'poppy', 'fern', 'grass', 'brown_mushroom', 'red_mushroom']:
-                        block = 'air'
-                    elif block in ['repeater', 'redstone_wire', 'redstone_torch', 'redstone_wall_torch', 'stone_button', 'stone_pressure_plate']:
-                        block = 'air'
-                    elif block in ['glowstone', 'dispenser', 'red_bed', 'chest', 'oak_planks', 'note_block', 'gold_block']:
-                        block = 'planks'
-                    elif block.endswith('_wool'):
-                        block = 'crafting_table'
-                    elif 'piston' in block:
-                        block = 'crafting_table'
-                    elif block == 'water':
-                        block = 'air'
-                    elif block != 'air' and block not in app.textures:
-                        if block not in seen:
-                            print(f"UNKNOWN BLOCK {block}")
-                            seen.add(block)
-                        block = 'bedrock'
+            block: str = block.id #type:ignore
 
-                    if y == 0:
-                        block = 'bedrock'
-                    self.setBlock(app, BlockPos(x, y, z), block, doUpdateLight=False)
+            if block in ['dirt', 'grass_block']:
+                block = 'grass'
+            elif block in ['smooth_stone_slab', 'coal_ore', 'gravel']:
+                block = 'stone'
+            elif block in ['cobblestone', 'mossy_cobblestone']:
+                block = 'cobblestone'
+            elif block in ['oak_leaves', 'birch_leaves']:
+                block = 'leaves'
+            elif block in ['oak_log', 'birch_log', 'jungle_wood']:
+                block = 'log'
+            elif block in ['dandelion', 'poppy', 'fern', 'grass', 'brown_mushroom', 'red_mushroom']:
+                block = 'air'
+            elif block in ['repeater', 'redstone_wire', 'redstone_torch', 'redstone_wall_torch', 'stone_button', 'stone_pressure_plate']:
+                block = 'air'
+            elif block in ['glowstone', 'dispenser', 'red_bed', 'chest', 'oak_planks', 'note_block', 'gold_block']:
+                block = 'planks'
+            elif block.endswith('_wool'):
+                block = 'crafting_table'
+            elif 'piston' in block:
+                block = 'crafting_table'
+            elif block == 'water':
+                block = 'air'
+            elif block != 'air' and block not in app.textures:
+                if block not in seen:
+                    print(f"UNKNOWN BLOCK {block}")
+                    seen.add(block)
+                block = 'bedrock'
+
+            if y == 0:
+                block = 'bedrock'
+            self.setBlock(app, BlockPos(x, y, z), block, doUpdateLight=False)
         
         self.worldgenStage = WorldgenStage.COMPLETE
     
@@ -170,7 +174,7 @@ class Chunk:
             for (i, (b, l)) in enumerate(zip(blockList, lightList)):
                 z = i % 16
                 x = (i // 16) % 16
-                y = (i // 256)
+                y = (i // (16 * 16))
 
                 self.setBlock(app, BlockPos(x, y, z), b, doUpdateLight=False, doUpdateBuried=True)
                 self.lightLevels[x, y, z] = int(l)
@@ -178,10 +182,6 @@ class Chunk:
         self.worldgenStage = WorldgenStage.COMPLETE
 
     def generate(self, app, seed):
-        if self.pos == ChunkPos(0, 0, 0):
-            self.worldgenStage = WorldgenStage.COMPLETE
-            return
-
         # x and y and z
         minVal = 100.0
         maxVal = -100.0
@@ -266,7 +266,7 @@ class Chunk:
     def _globalBlockPos(self, blockPos: BlockPos) -> BlockPos:
         (x, y, z) = blockPos
         x += 16 * self.pos[0]
-        y += 16 * self.pos[1]
+        y += CHUNK_HEIGHT * self.pos[1]
         z += 16 * self.pos[2]
         return BlockPos(x, y, z)
 
@@ -389,13 +389,13 @@ def updateBuriedStateAt(app, pos: BlockPos):
 def getChunk(app, pos: BlockPos) -> Tuple[Chunk, BlockPos]:
     (cx, cy, cz) = pos
     cx //= 16
-    cy //= 16
+    cy //= CHUNK_HEIGHT
     cz //= 16
 
     chunk = app.world.chunks[ChunkPos(cx, cy, cz)]
     [x, y, z] = pos
     x %= 16
-    y %= 16
+    y %= CHUNK_HEIGHT
     z %= 16
     return (chunk, BlockPos(x, y, z))
 
@@ -413,13 +413,13 @@ def setBlock(app, pos: BlockPos, id: BlockId, doUpdateLight=True, doUpdateBuried
 def toChunkLocal(pos: BlockPos) -> Tuple[ChunkPos, BlockPos]:
     (x, y, z) = pos
     cx = x // 16
-    cy = y // 16
+    cy = y // CHUNK_HEIGHT
     cz = z // 16
 
     chunkPos = ChunkPos(cx, cy, cz)
 
     x %= 16
-    y %= 16
+    y %= CHUNK_HEIGHT
     z %= 16
 
     blockPos = BlockPos(x, y, z)
@@ -648,7 +648,7 @@ def updateLight(app, blockPos: BlockPos):
     (chunk, localPos) = getChunk(app, blockPos)
 
     skyExposed = True
-    for y in range(localPos.y + 1, 16):
+    for y in range(localPos.y + 1, CHUNK_HEIGHT):
         checkPos = BlockPos(localPos.x, y, localPos.z)
         if chunk.coordsOccupied(checkPos):
             skyExposed = False
