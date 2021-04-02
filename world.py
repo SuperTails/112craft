@@ -295,7 +295,7 @@ class Chunk:
             
         self.worldgenStage = WorldgenStage.OPTIMIZED
     
-    def createMesh(self):
+    def createMesh(self, instData):
         if not config.USE_OPENGL_BACKEND:
             self.worldgenStage = WorldgenStage.COMPLETE
             return
@@ -353,6 +353,7 @@ class Chunk:
         ], dtype='float32')
         '''
 
+        '''
         vertices = np.array([
         # Left face
         -0.5,  0.5,  0.5,  1/4, 2/3, # top-right
@@ -397,6 +398,52 @@ class Chunk:
         -0.5,  0.5, -0.5,  1/4, 3/3, # top-left
         -0.5,  0.5,  0.5,  1/4, 2/3, # bottom-left
         ], dtype='float32')
+        '''
+
+        vertices = np.array([
+        # Left face
+        -0.5,  0.5,  0.5,  1.0, 1.0, # top-right
+        -0.5,  0.5, -0.5,  0.0, 1.0, # top-left
+        -0.5, -0.5, -0.5,  0.0, 0.0, # bottom-left
+        -0.5, -0.5, -0.5,  0.0, 0.0, # bottom-left
+        -0.5, -0.5,  0.5,  1.0, 0.0, # bottom-right
+        -0.5,  0.5,  0.5,  1.0, 1.0, # top-right
+        # Right face
+        0.5,  0.5,  0.5,  0.0, 1.0, # top-left
+        0.5, -0.5, -0.5,  1.0, 0.0, # bottom-right
+        0.5,  0.5, -0.5,  1.0, 1.0, # top-right         
+        0.5, -0.5, -0.5,  1.0, 0.0, # bottom-right
+        0.5,  0.5,  0.5,  0.0, 1.0, # top-left
+        0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left     
+        # Back face
+        -0.5, -0.5, -0.5,  0.0, 0.0, # Bottom-left
+         0.5,  0.5, -0.5,  1.0, 1.0, # top-right
+         0.5, -0.5, -0.5,  1.0, 0.0, # bottom-right         
+         0.5,  0.5, -0.5,  1.0, 1.0, # top-right
+        -0.5, -0.5, -0.5,  0.0, 0.0, # bottom-left
+        -0.5,  0.5, -0.5,  0.0, 1.0, # top-left
+        # Front face
+        -0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
+         0.5, -0.5,  0.5,  1.0, 0.0, # bottom-right
+         0.5,  0.5,  0.5,  1.0, 1.0, # top-right
+         0.5,  0.5,  0.5,  1.0, 1.0, # top-right
+        -0.5,  0.5,  0.5,  0.0, 1.0, # top-left
+        -0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
+        # Bottom face
+        -0.5, -0.5, -0.5,  1.0, 1.0, # top-right
+         0.5, -0.5, -0.5,  0.0, 1.0, # top-left
+         0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
+         0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
+        -0.5, -0.5,  0.5,  1.0, 0.0, # bottom-right
+        -0.5, -0.5, -0.5,  1.0, 1.0, # top-right
+        # Top face
+        -0.5,  0.5, -0.5,  0.0, 1.0, # top-left
+         0.5,  0.5,  0.5,  1.0, 0.0, # bottom-right
+         0.5,  0.5, -0.5,  1.0, 1.0, # top-right     
+         0.5,  0.5,  0.5,  1.0, 0.0, # bottom-right
+        -0.5,  0.5, -0.5,  0.0, 1.0, # top-left
+        -0.5,  0.5,  0.5,  0.0, 0.0, # bottom-left
+        ], dtype='float32')
 
 
         usedVertices = []
@@ -411,6 +458,8 @@ class Chunk:
             by = (i // 16) % CHUNK_HEIGHT
             bz = (i % 16)
 
+            blockId = self.blocks[bx, by, bz]
+
             for faceIdx in range(0, 12, 2):
                 if not inst.visibleFaces[faceIdx]: continue
 
@@ -419,6 +468,9 @@ class Chunk:
                     faceVertices[idx2 * 5 + 0] += bx + self.pos.x * 16
                     faceVertices[idx2 * 5 + 1] += by + self.pos.y * CHUNK_HEIGHT
                     faceVertices[idx2 * 5 + 2] += bz + self.pos.z * 16
+
+                    faceVertices[idx2 * 5 + 3] *= 16.0
+                    faceVertices[idx2 * 5 + 3] += instData[2][blockId][faceIdx // 2] * 16.0
 
                 usedVertices += faceVertices
         
@@ -502,7 +554,7 @@ class Chunk:
         return self.blocks[x, y, z] != 'air'
 
     def setBlock(self, world, instData, blockPos: BlockPos, id: BlockId, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False):
-        (textures, cube) = instData
+        (textures, cube, _) = instData
         (x, y, z) = blockPos
         self.blocks[x, y, z] = id
         idx = self._coordsToIdx(blockPos)
@@ -559,7 +611,7 @@ class Chunk:
             world.updateLight(globalPos)
         
         if doUpdateMesh:
-            self.createMesh()
+            self.createMesh(instData)
 
 
 def getRegionCoords(pos: ChunkPos) -> Tuple[int, int]:
@@ -830,7 +882,7 @@ def updateBuriedStateAt(world: World, pos: BlockPos):
 
 def setBlock(app, pos: BlockPos, id: BlockId, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False) -> None:
     (chunk, innerPos) = app.world.getChunk(pos)
-    chunk.setBlock(app.world, (app.textures, app.cube), innerPos, id, doUpdateLight, doUpdateBuried, doUpdateMesh)
+    chunk.setBlock(app.world, (app.textures, app.cube, app.textureIndices), innerPos, id, doUpdateLight, doUpdateBuried, doUpdateMesh)
 
 def toChunkLocal(pos: BlockPos) -> Tuple[ChunkPos, BlockPos]:
     (x, y, z) = pos
@@ -931,7 +983,7 @@ def loadUnloadChunks(app, centerPos):
     for unloadChunkPos in app.world.chunks:
         (ux, _, uz) = unloadChunkPos
         dist = max(abs(ux - x), abs(uz - z))
-        if dist > 2:
+        if dist > 6:
             # Unload chunk
             shouldUnload.append(unloadChunkPos)
 
@@ -942,7 +994,7 @@ def loadUnloadChunks(app, centerPos):
 
     #queuedForLoad = []
 
-    for loadChunkPos in adjacentChunks(chunkPos, 2):
+    for loadChunkPos in adjacentChunks(chunkPos, 5):
         if loadChunkPos not in app.world.chunks:
             (ux, _, uz) = loadChunkPos
             dist = max(abs(ux - x), abs(uz - z))
@@ -952,7 +1004,7 @@ def loadUnloadChunks(app, centerPos):
             if urgent or (loadedChunks < 1):
                 #queuedForLoad.append((app.world, (app.textures, app.cube), loadChunkPos))
                 loadedChunks += 1
-                app.world.loadChunk((app.textures, app.cube), loadChunkPos)
+                app.world.loadChunk((app.textures, app.cube, app.textureIndices), loadChunkPos)
     
     import multiprocessing as mp
 
@@ -989,7 +1041,7 @@ def tickChunks(app):
         if chunk.worldgenStage == WorldgenStage.POPULATED and gen == 8:
             chunk.lightAndOptimize(app)
         if chunk.worldgenStage == WorldgenStage.OPTIMIZED:
-            chunk.createMesh()
+            chunk.createMesh((app.textures, app.cube, app.textureIndices))
 
         chunk.isVisible = chunk.worldgenStage == WorldgenStage.COMPLETE
         chunk.isTicking = chunk.isVisible and adj == 8

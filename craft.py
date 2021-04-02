@@ -69,7 +69,7 @@ class WorldLoadMode(Mode):
         #app.world = World(worldName, seed, anvilpath='C:/Users/Carson/AppData/Roaming/.minecraft/saves/TheTempleofNotch/region/')
         app.world = World(worldName, seed)
 
-        app.world.loadChunk((app.textures, app.cube), ChunkPos(0, 0, 0))
+        app.world.loadChunk((app.textures, app.cube, app.textureIndices), ChunkPos(0, 0, 0))
     
     def timerFired(self, app):
         if self.loadStage < 20:

@@ -243,8 +243,8 @@ def blockFaceLight(app, blockPos: BlockPos, faceIdx: int) -> int:
     """Returns the light level of the given face of the block"""
 
     pos = adjacentBlockPos(blockPos, faceIdx)
-    if world.coordsInBounds(app, pos):
-        (chunk, (x, y, z)) = world.getChunk(app, pos)
+    if app.world.coordsInBounds(app, pos):
+        (chunk, (x, y, z)) = app.world.getChunk(app, pos)
         return chunk.lightLevels[x, y, z]
     else:
         return 7
@@ -588,11 +588,12 @@ def renderInstancesGl(app, canvas):
     '''
 
     glActiveTexture(GL_TEXTURE0)
-    glBindTexture(GL_TEXTURE_2D, app.textures['grass'])
+    glBindTexture(GL_TEXTURE_2D, app.textureAtlas)
 
     app.chunkProgram.useProgram()
     glUniformMatrix4fv(app.chunkProgram.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
     glUniformMatrix4fv(app.chunkProgram.getUniformLocation("projection"), 1, GL_FALSE, projection) #type:ignore
+    glUniform1f(app.chunkProgram.getUniformLocation("atlasWidth"), app.atlasWidth)
 
     #print("drawing a chunk vao")
     for amt, chunkVao in chunkVaos:

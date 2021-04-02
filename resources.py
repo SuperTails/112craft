@@ -5,7 +5,7 @@ import config
 import copy
 from shader import ShaderProgram
 from PIL import Image
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from player import Slot
 from OpenGL.GL import * #type:ignore
 
@@ -54,7 +54,7 @@ class Recipe:
 
         return True
 
-def loadTexture(path: str, tesselate=False) -> int:
+def imageToTexture(image: Image.Image) -> int:
     texture = glGenTextures(1) #type:ignore
     glBindTexture(GL_TEXTURE_2D, texture)
 
@@ -63,15 +63,19 @@ def loadTexture(path: str, tesselate=False) -> int:
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
 
-    tex = loadBlockImage(path, tesselate)
-    arr = np.asarray(tex, dtype=np.uint8)
+    arr = np.asarray(image, dtype=np.uint8)
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex.width, tex.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, arr) #type:ignore
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, arr) #type:ignore
     glGenerateMipmap(GL_TEXTURE_2D)
 
     glBindTexture(GL_TEXTURE_2D, 0)
 
     return texture
+
+def loadTexture(path: str, tesselate=False) -> int:
+    im = loadBlockImage(path, tesselate)
+    im = im.transpose(Image.FLIP_TOP_BOTTOM)
+    return imageToTexture(im)
 
 def loadCubeVao():
     vertices = np.array([
@@ -275,23 +279,70 @@ def loadBlockImage(path, tesselate=False):
         newTex.paste(tex, (1 * 16, 0))
         newTex.paste(tex, (2 * 16, 2 * 16))
         tex = newTex
-    tex = tex.transpose(Image.FLIP_TOP_BOTTOM)
     return tex
+
+def loadTextureAtlas(app):
+
+    app.textureIdx = dict()
+    app.textureIndices = dict()
+
+
+    totalAmt = 0
+    for (_, (_, tess)) in app.texturePaths.items():
+        if tess:
+            totalAmt += 1
+        else:
+            totalAmt += 2
+
+    width = 16 * totalAmt
+
+    atlas = Image.new("RGBA", (width, 16))
+
+    idx = 0
+
+    for (name, (path, tess)) in app.texturePaths.items():
+        app.textureIndices[name] = [0] * 6
+
+        im = Image.open(path)
+
+        if tess:
+            atlas.paste(im, (idx * 16, 0))
+            app.textureIndices[name] = [idx] * 6
+            idx += 1
+        else:
+            top = im.copy()
+            top = top.crop((16, 0, 32, 16))
+
+            atlas.paste(top, (idx * 16, 0))
+            # FIXME:
+            app.textureIndices[name][4] = idx
+            app.textureIndices[name][5] = idx
+            idx += 1
+            
+            side = im.copy()
+            side = side.crop((0, 16, 16, 32))
+
+            atlas.paste(side, (idx * 16, 0))
+            app.textureIndices[name][0] = idx
+            app.textureIndices[name][1] = idx
+            app.textureIndices[name][2] = idx
+            app.textureIndices[name][3] = idx
+            idx += 1
+    
+    atlas = atlas.transpose(Image.FLIP_TOP_BOTTOM)
+    
+    app.atlasWidth = width
+        
+    return imageToTexture(atlas)
 
 def loadGlTextures(app):
     app.cubeVao, app.cubeBuffer = loadCubeVao()
 
-    app.glTextures = {
-        'grass': loadTexture('assets/grass.png'),
-        'stone': loadTexture('assets/stone.png', tesselate=True),
-        'cobblestone': loadTexture('assets/cobblestone.png', tesselate=True),
-        'leaves': loadTexture('assets/leaves.png'),
-        'log': loadTexture('assets/log.png'),
-        'bedrock': loadTexture('assets/bedrock.png', tesselate=True),
-        'planks': loadTexture('assets/oak_planks.png', tesselate=True),
-        'crafting_table': loadTexture('assets/missing.png'),
-    }
-    
+    app.glTextures = dict()
+
+    for (name, (path, tess)) in app.texturePaths.items():
+        app.glTextures[name] = loadTexture(path, tesselate=tess)
+
     app.breakTextures = []
     for i in range(10):
         app.breakTextures.append(loadTexture(f'assets/destroy_stage_{i}.png', tesselate=True))
@@ -303,10 +354,22 @@ def loadGlTextures(app):
     app.guiProgram = ShaderProgram('shaders/guiShader.vert', 'shaders/guiShader.frag')
 
 def loadResources(app):
+    app.texturePaths = {
+        'grass': ('assets/grass.png', False),
+        'stone': ('assets/stone.png', True),
+        'cobblestone': ('assets/cobblestone.png', True),
+        'leaves': ('assets/leaves.png', False),
+        'log': ('assets/log.png', False),
+        'bedrock': ('assets/bedrock.png', True),
+        'planks': ('assets/oak_planks.png', True),
+        'crafting_table': ('assets/missing.png', False),
+    }
+
     loadTkTextures(app)
     if config.USE_OPENGL_BACKEND:
         loadGlTextures(app)
         app.textures = app.glTextures
+        app.textureAtlas = loadTextureAtlas(app)
     else:
         app.textures = app.tkTextures
 
@@ -399,20 +462,10 @@ def loadResources(app):
     app.tkItemTextures = copy.copy(commonItemTextures)
     app.glItemTextures = commonItemTextures
 
-    textureNames = {
-        'grass': ('assets/grass.png', False),
-        'stone': ('assets/stone.png', True),
-        'cobblestone': ('assets/cobblestone.png', True),
-        'leaves': ('assets/leaves.png', False),
-        'log': ('assets/log.png', False),
-        'bedrock': ('assets/bedrock.png', True),
-        'planks': ('assets/oak_planks.png', True),
-        'crafting_table': ('assets/missing.png', False),
-    }
-
     for (name, _) in app.textures.items():
         if config.USE_OPENGL_BACKEND:
-            newGlTex = render.drawItemFromBlock2(25, loadBlockImage(textureNames[name][0], tesselate=textureNames[name][1]))
+            (path, tess) = app.texturePaths[name]
+            newGlTex = render.drawItemFromBlock2(25, loadBlockImage(path, tesselate=tess))
             app.glItemTextures[name] = newGlTex
         else:
             newTkTex = render.drawItemFromBlock(25, app.tkTextures[name])
