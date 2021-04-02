@@ -35,8 +35,8 @@ class App:
 
         glEnable(GL_DEPTH_TEST)
         glEnable(GL_CULL_FACE)
-        glEnable(GL_BLEND)
         glFrontFace(GL_CW)
+        glEnable(GL_BLEND)
 
         self.canvas = Canvas(self.width, self.height)
 

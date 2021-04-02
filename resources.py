@@ -297,6 +297,8 @@ def loadGlTextures(app):
         app.breakTextures.append(loadTexture(f'assets/destroy_stage_{i}.png', tesselate=True))
 
     app.blockProgram = ShaderProgram('shaders/blockShader.vert', 'shaders/blockShader.frag')
+
+    app.chunkProgram = ShaderProgram('shaders/chunkShader.vert', 'shaders/chunkShader.frag')
     
     app.guiProgram = ShaderProgram('shaders/guiShader.vert', 'shaders/guiShader.frag')
 

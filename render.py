@@ -85,7 +85,8 @@ class Instance:
         self.trans = trans
         self.texture = texture
 
-        self._worldSpaceVertices = [toHomogenous(v) for v in self.worldSpaceVerticesUncached()]
+        if not config.USE_OPENGL_BACKEND:
+            self._worldSpaceVertices = [toHomogenous(v) for v in self.worldSpaceVerticesUncached()]
         self.visibleFaces = [True] * len(model.faces)
 
     def worldSpaceVertices(self) -> List[ndarray]:
@@ -498,6 +499,8 @@ def renderInstancesGl(app, canvas):
         'crafting_table': [],
     }
 
+    chunkVaos = []
+
     for chunk in app.world.chunks.values():
         if not chunk.isVisible: continue 
 
@@ -506,6 +509,10 @@ def renderInstancesGl(app, canvas):
         cy *= world.CHUNK_HEIGHT
         cz *= 16
 
+        if hasattr(chunk, 'vao'):
+            chunkVaos.append((chunk.vertexCnt, chunk.vao))
+
+        '''
         for i, inst in enumerate(chunk.instances):
             if inst is None: continue
 
@@ -534,6 +541,7 @@ def renderInstancesGl(app, canvas):
                 bid = chunk.blocks[bx, by, bz]
 
                 modelKinds[bid].append([wx, wy, wz, 0.0])
+        '''
     
     breakingBlockAmount = 0.0
 
@@ -555,6 +563,7 @@ def renderInstancesGl(app, canvas):
 
     b = math.floor(breakingBlockAmount * 10.0)
 
+    '''
     glActiveTexture(GL_TEXTURE1)
     glBindTexture(GL_TEXTURE_2D, app.breakTextures[b])
 
@@ -575,7 +584,23 @@ def renderInstancesGl(app, canvas):
         glBindBuffer(GL_ARRAY_BUFFER, app.cubeBuffer)
         glBufferData(GL_ARRAY_BUFFER, amt * 4 * 4, np.asarray(data, dtype='int32'), GL_DYNAMIC_DRAW)
 
-        doTheDraw(app, modelUniformLoc, amt)
+        #doTheDraw(app, modelUniformLoc, amt)
+    '''
+
+    glActiveTexture(GL_TEXTURE0)
+    glBindTexture(GL_TEXTURE_2D, app.textures['grass'])
+
+    app.chunkProgram.useProgram()
+    glUniformMatrix4fv(app.chunkProgram.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
+    glUniformMatrix4fv(app.chunkProgram.getUniformLocation("projection"), 1, GL_FALSE, projection) #type:ignore
+
+    #print("drawing a chunk vao")
+    for amt, chunkVao in chunkVaos:
+        #chunkVao = chunkVaos[0]
+
+        glBindVertexArray(chunkVao)
+
+        glDrawArrays(GL_TRIANGLES, 0, amt * 5)
 
 def doTheDraw(app, modelUniformLoc, amt):
     #bId = chunk.blocks[i // 256, (i // 16) % 16, i % 16]

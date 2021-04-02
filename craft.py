@@ -11,8 +11,8 @@ import world
 import copy
 import glfw
 import config
-import cmu_112_graphics
 import random
+import cmu_112_graphics
 from button import Button, ButtonManager, createSizedBackground
 from world import Chunk, ChunkPos, World
 from typing import List, Optional, Tuple
@@ -69,7 +69,7 @@ class WorldLoadMode(Mode):
         #app.world = World(worldName, seed, anvilpath='C:/Users/Carson/AppData/Roaming/.minecraft/saves/TheTempleofNotch/region/')
         app.world = World(worldName, seed)
 
-        app.world.loadChunk(app, ChunkPos(0, 0, 0))
+        app.world.loadChunk((app.textures, app.cube), ChunkPos(0, 0, 0))
     
     def timerFired(self, app):
         if self.loadStage < 20:
@@ -285,7 +285,7 @@ class PlayingMode(Mode):
             faceIdx = ['left', 'right', 'back', 'front', 'bottom', 'top'].index(face) * 2
             pos2 = world.adjacentBlockPos(pos, faceIdx)
 
-            if not world.coordsInBounds(app, pos2): return
+            if not app.world.coordsInBounds(pos2): return
 
             if world.getBlock(app, pos) == 'crafting_table':
                 app.mode = InventoryMode(app, self, name='crafting_table')
@@ -583,7 +583,7 @@ def appStarted(app):
 
     #app.mode = WorldLoadMode(app, 'world', TitleMode)
     def makePlayingMode(app): return PlayingMode(app, False)
-    app.mode = WorldLoadMode(app, 'world', makePlayingMode)
+    app.mode = WorldLoadMode(app, 'abcd', makePlayingMode)
 
     app.btnBg = createSizedBackground(app, 200, 40)
 
@@ -600,7 +600,7 @@ def appStarted(app):
 
     app.cameraYaw = 0
     app.cameraPitch = 0
-    app.cameraPos = [2.0, 9.5, 4.0]
+    app.cameraPos = [2.0, 70.5, 4.0]
 
     # -------------------
     # Rendering Variables

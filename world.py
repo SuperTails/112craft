@@ -12,6 +12,7 @@ from enum import IntEnum
 from math import cos, sin
 from numpy import ndarray
 from typing import NamedTuple, List, Any, Tuple, Optional
+from OpenGL.GL import * #type:ignore
 
 class ChunkPos(NamedTuple):
     x: int
@@ -74,7 +75,8 @@ class WorldgenStage(IntEnum):
     NOT_STARTED = 0,
     GENERATED = 1,
     POPULATED = 2,
-    COMPLETE = 3,
+    OPTIMIZED = 3,
+    COMPLETE = 4,
 
 # -34, 70, -89
 # 2, 6, -6
@@ -82,18 +84,22 @@ class WorldgenStage(IntEnum):
 
 seen = set()
 
-CHUNK_HEIGHT = 16
+CHUNK_HEIGHT = 256
 
 class Chunk:
     pos: ChunkPos
     blocks: ndarray
     lightLevels: ndarray
     instances: List[Any]
+    vao: int
 
     worldgenStage: WorldgenStage = WorldgenStage.NOT_STARTED
 
     isTicking: bool = False
     isVisible: bool = False
+
+    meshIdx: int = 0
+    vertexCnt: int = 0
 
     def __init__(self, pos: ChunkPos):
         self.pos = pos
@@ -101,6 +107,10 @@ class Chunk:
         self.blocks = np.full((16, CHUNK_HEIGHT, 16), 'air', dtype=object)
         self.lightLevels = np.full((16, CHUNK_HEIGHT, 16), 7)
         self.instances = [None] * self.blocks.size
+
+        self.meshIdx = 0
+
+        self.vao = 0
     
     def save(self, path):
         allBlocks = []
@@ -116,13 +126,13 @@ class Chunk:
             f.write('\n')
             f.write(','.join(allLights))
     
-    def loadOrGenerate(self, app, path, seed):
+    def loadOrGenerate(self, world, instData, path, seed):
         try:
-            self.load(app, path)
+            self.load(world, instData, path)
         except FileNotFoundError:
-            self.generate(app, seed)
-    
-    def loadFromAnvilChunk(self, app, chunk):
+            self.generate(world, instData, seed)
+        
+    def loadFromAnvilChunk(self, world, instData, chunk):
         for (i, block) in enumerate(chunk.stream_chunk()):
             y = (i // (16 * 16))
             z = (i // 16) % 16
@@ -153,19 +163,54 @@ class Chunk:
                 block = 'crafting_table'
             elif block == 'water':
                 block = 'air'
-            elif block != 'air' and block not in app.textures:
+            elif block != 'air' and block not in instData[0]:
                 if block not in seen:
-                    print(f"UNKNOWN BLOCK {block}")
+                    #print(f"UNKNOWN BLOCK {block}")
                     seen.add(block)
                 block = 'bedrock'
 
             if y == 0:
                 block = 'bedrock'
-            self.setBlock(app, BlockPos(x, y, z), block, doUpdateLight=False)
+            self.setBlock(world, instData, BlockPos(x, y, z), block, doUpdateLight=False, doUpdateBuried=False)
+
+            if block != 'air':
+                thisIdx = self._coordsToIdx(BlockPos(x, y, z))
+                thisInst = self.instances[thisIdx][0]
+
+                if x > 0:
+                    thatIdx = self._coordsToIdx(BlockPos(x - 1, y, z))
+
+                    if self.instances[thatIdx] is not None:
+                        self.instances[thatIdx][0].visibleFaces[2] = False
+                        self.instances[thatIdx][0].visibleFaces[3] = False
+
+                        thisInst.visibleFaces[0] = False
+                        thisInst.visibleFaces[1] = False
+                
+                if z > 0:
+                    thatIdx = self._coordsToIdx(BlockPos(x, y, z - 1))
+
+                    if self.instances[thatIdx] is not None:
+                        self.instances[thatIdx][0].visibleFaces[6] = False
+                        self.instances[thatIdx][0].visibleFaces[7] = False
+
+                        thisInst.visibleFaces[4] = False
+                        thisInst.visibleFaces[5] = False
+                
+                
+                if y > 0:
+                    thatIdx = self._coordsToIdx(BlockPos(x, y - 1, z))
+
+                    if self.instances[thatIdx] is not None:
+                        self.instances[thatIdx][0].visibleFaces[10] = False
+                        self.instances[thatIdx][0].visibleFaces[11] = False
+
+                        thisInst.visibleFaces[8] = False
+                        thisInst.visibleFaces[9] = False
         
-        self.worldgenStage = WorldgenStage.COMPLETE
+        self.worldgenStage = WorldgenStage.OPTIMIZED
     
-    def load(self, app, path):
+    def load(self, world, instData, path):
         with open(path, "r") as f:
             [blockList, lightList] = f.readlines()
             blockList = blockList.strip().split(',')
@@ -176,12 +221,12 @@ class Chunk:
                 x = (i // 16) % 16
                 y = (i // (16 * 16))
 
-                self.setBlock(app, BlockPos(x, y, z), b, doUpdateLight=False, doUpdateBuried=True)
+                self.setBlock(world, instData, BlockPos(x, y, z), b, doUpdateLight=False, doUpdateBuried=False)
                 self.lightLevels[x, y, z] = int(l)
         
-        self.worldgenStage = WorldgenStage.COMPLETE
+        self.worldgenStage = WorldgenStage.POPULATED
 
-    def generate(self, app, seed):
+    def generate(self, world, instData, seed):
         # x and y and z
         minVal = 100.0
         maxVal = -100.0
@@ -195,7 +240,7 @@ class Chunk:
                 if noise < minVal: minVal = noise
                 if noise > maxVal: maxVal = noise
 
-                topY = int(noise * 8 + 8)
+                topY = int(noise * 32 + 72)
 
                 for yIdx in range(0, topY):
                     self.lightLevels[xIdx, yIdx, zIdx] = 0
@@ -205,7 +250,7 @@ class Chunk:
                         blockId = 'grass'
                     else:
                         blockId = 'stone'
-                    self.setBlock(app, BlockPos(xIdx, yIdx, zIdx), blockId, doUpdateLight=False, doUpdateBuried=False)
+                    self.setBlock(world, instData, BlockPos(xIdx, yIdx, zIdx), blockId, doUpdateLight=False, doUpdateBuried=False)
         
         #print(f"minval: {minVal}, maxVal: {maxVal}")
 
@@ -227,29 +272,189 @@ class Chunk:
             
             treePos.append((treeX, treeZ))
 
-            baseY = 15
+            baseY = CHUNK_HEIGHT - 1
             # FIXME: y coords
-            for yIdx in range(15, 0, -1):
+            for yIdx in range(CHUNK_HEIGHT - 1, 0, -1):
                 if self.coordsOccupied(BlockPos(treeX, yIdx, treeZ)):
                     baseY = yIdx + 1
                     break
             
             globalPos = self._globalBlockPos(BlockPos(treeX, baseY, treeZ))
         
-            if globalPos.y < 10:
+            if globalPos.y < CHUNK_HEIGHT - 6:
                 generateTree(app, globalPos, doUpdates=False)
         
         self.worldgenStage = WorldgenStage.POPULATED
-
     
     def lightAndOptimize(self, app):
         print(f"Lighting and optimizing chunk at {self.pos}")
         for xIdx in range(0, 16):
-            for yIdx in range(0, 16):
+            for yIdx in range(0, CHUNK_HEIGHT):
                 for zIdx in range(0, 16):
-                    self.updateBuriedStateAt(app, BlockPos(xIdx, yIdx, zIdx))
+                    self.updateBuriedStateAt(app.world, BlockPos(xIdx, yIdx, zIdx))
+            
+        self.worldgenStage = WorldgenStage.OPTIMIZED
+    
+    def createMesh(self):
+        if not config.USE_OPENGL_BACKEND:
+            self.worldgenStage = WorldgenStage.COMPLETE
+            return
+
+        if self.vao != 0:
+            self.vao = 0
+            # FIXME:
+            # glDeleteVertexArrays(self.vao) #type:ignore
+            # glDeleteBuffers(vbo)
+
+        '''
+        vertices = np.array([
+        # Left face
+        #-0.5,  0.5,  0.5,  1/4, 2/3, # top-right
+        -0.5,  0.5, -0.5,  0/4, 2/3, # top-left
+        -0.5, -0.5, -0.5,  0/4, 1/3, # bottom-left
+        #-0.5, -0.5, -0.5,  0/4, 1/3, # bottom-left
+        -0.5, -0.5,  0.5,  1/4, 1/3, # bottom-right
+        -0.5,  0.5,  0.5,  1/4, 2/3, # top-right
+        # Right face
+        #0.5,  0.5,  0.5,  2/4, 2/3, # top-left
+        0.5, -0.5, -0.5,  3/4, 1/3, # bottom-right
+        0.5,  0.5, -0.5,  3/4, 2/3, # top-right         
+        #0.5, -0.5, -0.5,  3/4, 1/3, # bottom-right
+        0.5,  0.5,  0.5,  2/4, 2/3, # top-left
+        0.5, -0.5,  0.5,  2/4, 1/3, # bottom-left     
+        # Back face
+        #-0.5, -0.5, -0.5,  3/4, 1/3, # Bottom-left
+        0.5,  0.5, -0.5,  4/4, 2/3, # top-right
+        0.5, -0.5, -0.5,  4/4, 1/3, # bottom-right         
+        #0.5,  0.5, -0.5,  4/4, 2/3, # top-right
+        -0.5, -0.5, -0.5,  3/4, 1/3, # bottom-left
+        -0.5,  0.5, -0.5,  3/4, 2/3, # top-left
+        # Front face
+        #-0.5, -0.5,  0.5,  3/4, 1/3, # bottom-left
+        0.5, -0.5,  0.5,  4/4, 1/3, # bottom-right
+        0.5,  0.5,  0.5,  4/4, 2/3, # top-right
+        #0.5,  0.5,  0.5,  4/4, 2/3, # top-right
+        -0.5,  0.5,  0.5,  3/4, 2/3, # top-left
+        -0.5, -0.5,  0.5,  3/4, 1/3, # bottom-left
+        # Bottom face
+        #-0.5, -0.5, -0.5,  3/4, 1/3, # top-right
+        0.5, -0.5, -0.5,  2/4, 1/3, # top-left
+        0.5, -0.5,  0.5,  2/4, 0/3, # bottom-left
+        #0.5, -0.5,  0.5,  2/4, 0/3, # bottom-left
+        -0.5, -0.5,  0.5,  3/4, 0/3, # bottom-right
+        -0.5, -0.5, -0.5,  3/4, 1/3, # top-right
+        # Top face
+        -0.5,  0.5, -0.5,  1/4, 3/3, # top-left
+        0.5,  0.5,  0.5,  2/4, 2/3, # bottom-right
+        0.5,  0.5, -0.5,  2/4, 3/3, # top-right     
+        0.5,  0.5,  0.5,  2/4, 2/3, # bottom-right
+        -0.5,  0.5, -0.5,  1/4, 3/3, # top-left
+        -0.5,  0.5,  0.5,  1/4, 2/3, # bottom-left
+        ], dtype='float32')
+        '''
+
+        vertices = np.array([
+        # Left face
+        -0.5,  0.5,  0.5,  1/4, 2/3, # top-right
+        -0.5,  0.5, -0.5,  0/4, 2/3, # top-left
+        -0.5, -0.5, -0.5,  0/4, 1/3, # bottom-left
+        -0.5, -0.5, -0.5,  0/4, 1/3, # bottom-left
+        -0.5, -0.5,  0.5,  1/4, 1/3, # bottom-right
+        -0.5,  0.5,  0.5,  1/4, 2/3, # top-right
+        # Right face
+        0.5,  0.5,  0.5,  2/4, 2/3, # top-left
+        0.5, -0.5, -0.5,  3/4, 1/3, # bottom-right
+        0.5,  0.5, -0.5,  3/4, 2/3, # top-right         
+        0.5, -0.5, -0.5,  3/4, 1/3, # bottom-right
+        0.5,  0.5,  0.5,  2/4, 2/3, # top-left
+        0.5, -0.5,  0.5,  2/4, 1/3, # bottom-left     
+        # Back face
+        -0.5, -0.5, -0.5,  3/4, 1/3, # Bottom-left
+        0.5,  0.5, -0.5,  4/4, 2/3, # top-right
+        0.5, -0.5, -0.5,  4/4, 1/3, # bottom-right         
+        0.5,  0.5, -0.5,  4/4, 2/3, # top-right
+        -0.5, -0.5, -0.5,  3/4, 1/3, # bottom-left
+        -0.5,  0.5, -0.5,  3/4, 2/3, # top-left
+        # Front face
+        -0.5, -0.5,  0.5,  3/4, 1/3, # bottom-left
+        0.5, -0.5,  0.5,  4/4, 1/3, # bottom-right
+        0.5,  0.5,  0.5,  4/4, 2/3, # top-right
+        0.5,  0.5,  0.5,  4/4, 2/3, # top-right
+        -0.5,  0.5,  0.5,  3/4, 2/3, # top-left
+        -0.5, -0.5,  0.5,  3/4, 1/3, # bottom-left
+        # Bottom face
+        -0.5, -0.5, -0.5,  3/4, 1/3, # top-right
+        0.5, -0.5, -0.5,  2/4, 1/3, # top-left
+        0.5, -0.5,  0.5,  2/4, 0/3, # bottom-left
+        0.5, -0.5,  0.5,  2/4, 0/3, # bottom-left
+        -0.5, -0.5,  0.5,  3/4, 0/3, # bottom-right
+        -0.5, -0.5, -0.5,  3/4, 1/3, # top-right
+        # Top face
+        -0.5,  0.5, -0.5,  1/4, 3/3, # top-left
+        0.5,  0.5,  0.5,  2/4, 2/3, # bottom-right
+        0.5,  0.5, -0.5,  2/4, 3/3, # top-right     
+        0.5,  0.5,  0.5,  2/4, 2/3, # bottom-right
+        -0.5,  0.5, -0.5,  1/4, 3/3, # top-left
+        -0.5,  0.5,  0.5,  1/4, 2/3, # bottom-left
+        ], dtype='float32')
+
+
+        usedVertices = []
+    
+        for (i, inst) in enumerate(self.instances):
+            if inst is None: continue
+
+            inst, unburied = inst
+            if not unburied: continue
+
+            bx = i // (16 * CHUNK_HEIGHT)
+            by = (i // 16) % CHUNK_HEIGHT
+            bz = (i % 16)
+
+            for faceIdx in range(0, 12, 2):
+                if not inst.visibleFaces[faceIdx]: continue
+
+                faceVertices = list(vertices[(faceIdx // 2) * 6 * 5:((faceIdx // 2) + 1) * 6 * 5])
+                for idx2 in range(6):
+                    faceVertices[idx2 * 5 + 0] += bx + self.pos.x * 16
+                    faceVertices[idx2 * 5 + 1] += by + self.pos.y * CHUNK_HEIGHT
+                    faceVertices[idx2 * 5 + 2] += bz + self.pos.z * 16
+
+                usedVertices += faceVertices
         
+        usedVertices = np.array(usedVertices, dtype='float32')
+
+        print(f"100th vertex: {usedVertices[100 * 5:][:5]}")
+        print(f"bytes: {usedVertices.nbytes}")
+            
+        vao: int = glGenVertexArrays(1) #type:ignore
+        vbo: int = glGenBuffers(1) #type:ignore
+
+        glBindVertexArray(vao)
+
+        glBindBuffer(GL_ARRAY_BUFFER, vbo)
+        glBufferData(GL_ARRAY_BUFFER, usedVertices.nbytes, usedVertices, GL_STATIC_DRAW)
+
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * 4, ctypes.c_void_p(0))
+        glEnableVertexAttribArray(0)
+
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * 4, ctypes.c_void_p(3 * 4))
+        glEnableVertexAttribArray(1)
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0)
+
+        glBindVertexArray(0)
+
+        self.vao = vao
+        self.vertexCnt = len(usedVertices) // 5
+
         self.worldgenStage = WorldgenStage.COMPLETE
+
+        print(f"Used vertices: {len(usedVertices) / 5}")
+        
+        #vao: int = glGenVertexArrays(1) #type:ignore
+        #vbo: int = glGenBuffers(1)
+        
 
     def _coordsToIdx(self, pos: BlockPos) -> int:
         (xw, yw, zw) = self.blocks.shape
@@ -270,7 +475,7 @@ class Chunk:
         z += 16 * self.pos[2]
         return BlockPos(x, y, z)
 
-    def updateBuriedStateAt(self, app, blockPos: BlockPos):
+    def updateBuriedStateAt(self, world: 'World', blockPos: BlockPos):
         idx = self._coordsToIdx(blockPos)
         if self.instances[idx] is None:
             return
@@ -282,14 +487,12 @@ class Chunk:
         uncovered = False
         for faceIdx in range(0, 12, 2):
             adjPos = adjacentBlockPos(globalPos, faceIdx)
-            if coordsOccupied(app, adjPos):
-                if not config.USE_OPENGL_BACKEND:
-                    inst.visibleFaces[faceIdx] = False
-                    inst.visibleFaces[faceIdx + 1] = False
+            if world.coordsOccupied(adjPos):
+                inst.visibleFaces[faceIdx] = False
+                inst.visibleFaces[faceIdx + 1] = False
             else:
-                if not config.USE_OPENGL_BACKEND:
-                    inst.visibleFaces[faceIdx] = True
-                    inst.visibleFaces[faceIdx + 1] = True
+                inst.visibleFaces[faceIdx] = True
+                inst.visibleFaces[faceIdx + 1] = True
                 uncovered = True
             
         self.instances[idx][1] = uncovered
@@ -298,28 +501,66 @@ class Chunk:
         (x, y, z) = pos
         return self.blocks[x, y, z] != 'air'
 
-    def setBlock(self, app, blockPos: BlockPos, id: BlockId, doUpdateLight=True, doUpdateBuried=True):
+    def setBlock(self, world, instData, blockPos: BlockPos, id: BlockId, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False):
+        (textures, cube) = instData
         (x, y, z) = blockPos
         self.blocks[x, y, z] = id
         idx = self._coordsToIdx(blockPos)
         if id == 'air':
             self.instances[idx] = None
         else:
-            texture = app.textures[id]
+            texture = textures[id]
 
             [modelX, modelY, modelZ] = blockToWorld(self._globalBlockPos(blockPos))
 
-            self.instances[idx] = [render.Instance(app.cube, np.array([[modelX], [modelY], [modelZ]]), texture), True]
+            self.instances[idx] = [render.Instance(cube, np.array([[modelX], [modelY], [modelZ]]), texture), True]
             if doUpdateBuried:
-                self.updateBuriedStateAt(app, blockPos)
-        
-        globalPos = self._globalBlockPos(blockPos)
+                self.updateBuriedStateAt(world, blockPos)
+
+        '''
+        for faceIdx in range(0, 12, 2):
+            adjPos = adjacentBlockPos(blockPos, faceIdx)
+            if adjPos.x < 0 or 16 <= adjPos.x: continue
+            if adjPos.y < 0 or CHUNK_HEIGHT <= adjPos.y: continue
+            if adjPos.z < 0 or 16 <= adjPos.z: continue
+
+            adjIdx = self._coordsToIdx(adjPos)
+            otherFaceIdx = [2, 0, 6, 4, 10, 8][faceIdx // 2]
+            if self.instances[adjIdx] is not None:
+                if id == 'air':
+                    self.instances[adjIdx][0].visibleFaces[otherFaceIdx] = True
+                    self.instances[adjIdx][0].visibleFaces[otherFaceIdx + 1] = True
+                else:
+                    self.instances[adjIdx][0].visibleFaces[otherFaceIdx] = False
+                    self.instances[adjIdx][0].visibleFaces[otherFaceIdx + 1] = False
+        '''
+
+        '''       
+        uncovered = False
+        for faceIdx in range(0, 12, 2):
+            adjPos = adjacentBlockPos(globalPos, faceIdx)
+            if world.coordsOccupied(adjPos):
+                inst.visibleFaces[faceIdx] = False
+                inst.visibleFaces[faceIdx + 1] = False
+            else:
+                inst.visibleFaces[faceIdx] = True
+                inst.visibleFaces[faceIdx + 1] = True
+                uncovered = True
+            
+        self.instances[idx][1] = uncovered
+        '''
 
         if doUpdateBuried:
-            updateBuriedStateNear(app, globalPos)
+            globalPos = self._globalBlockPos(blockPos)
+            updateBuriedStateNear(world, globalPos)
         
         if doUpdateLight:
-            updateLight(app, globalPos)
+            globalPos = self._globalBlockPos(blockPos)
+            world.updateLight(globalPos)
+        
+        if doUpdateMesh:
+            self.createMesh()
+
 
 def getRegionCoords(pos: ChunkPos) -> Tuple[int, int]:
     return (math.floor(pos.x / 32), math.floor(pos.z / 32))
@@ -355,11 +596,26 @@ class World:
 
         with open("saves/{self.name}/meta.txt", "w") as f:
             f.write(f"seed={self.seed}")
-
+    
     def saveChunk(self, pos: ChunkPos):
         self.chunks[pos].save(self.chunkFileName(pos))
     
-    def loadChunk(self, app, pos: ChunkPos):
+    def createChunk(self, instData, pos: ChunkPos):
+        ck = Chunk(pos)
+        if self.anvilpath != '':
+            pos2 = ChunkPos(pos.x + 2, pos.y, pos.z - 6)
+            regionPos = getRegionCoords(pos2)
+            if regionPos not in self.regions:
+                path = self.anvilpath + f'r.{regionPos[0]}.{regionPos[1]}.mca'
+                self.regions[regionPos] = anvil.Region.from_file(path)
+
+            chunk = anvil.Chunk.from_region(self.regions[regionPos], pos2.x, pos2.z)
+            ck.loadFromAnvilChunk(self, instData, chunk)
+        else:
+            ck.loadOrGenerate(self, instData, self.chunkFileName(pos), self.seed)
+        return ck
+    
+    def loadChunk(self, instData, pos: ChunkPos):
         print(f"Loading chunk at {pos}")
         self.chunks[pos] = Chunk(pos)
         if self.anvilpath != '':
@@ -370,45 +626,211 @@ class World:
                 self.regions[regionPos] = anvil.Region.from_file(path)
 
             chunk = anvil.Chunk.from_region(self.regions[regionPos], pos2.x, pos2.z)
-            self.chunks[pos].loadFromAnvilChunk(app, chunk)
+            self.chunks[pos].loadFromAnvilChunk(self, instData, chunk)
         else:
-            self.chunks[pos].loadOrGenerate(app, self.chunkFileName(pos), self.seed)
+            self.chunks[pos].loadOrGenerate(self, instData, self.chunkFileName(pos), self.seed)
     
     def unloadChunk(self, app, pos: ChunkPos):
         print(f"Unloading chunk at {pos}")
         saveFile = self.chunkFileName(pos)
         self.chunks[pos].save(saveFile)
         self.chunks.pop(pos)
+    
+    def getChunk(self, pos: BlockPos) -> Tuple[Chunk, BlockPos]:
+        (cx, cy, cz) = pos
+        cx //= 16
+        cy //= CHUNK_HEIGHT
+        cz //= 16
+
+        chunk = self.chunks[ChunkPos(cx, cy, cz)]
+        [x, y, z] = pos
+        x %= 16
+        y %= CHUNK_HEIGHT
+        z %= 16
+        return (chunk, BlockPos(x, y, z))
+
+    def coordsOccupied(self, pos: BlockPos) -> bool:
+        if not self.coordsInBounds(pos):
+            return False
+
+        (chunk, innerPos) = self.getChunk(pos)
+        return chunk.coordsOccupied(innerPos)
+
+    def coordsInBounds(self, pos: BlockPos) -> bool:
+        (chunkPos, _) = toChunkLocal(pos)
+        return chunkPos in self.chunks
+
+    def blockIsBuried(self, blockPos: BlockPos):
+        for faceIdx in range(0, 12, 2):
+            if not self.coordsOccupied(adjacentBlockPos(blockPos, faceIdx)):
+                # Unburied
+                return False
+        # All spaces around are occupied, this block is buried
+        return True
+
+        '''
+        if pos not in app.world.chunks:
+            return False
+        
+        (x, y, z) = pos
+        (xw, yw, zw) = app.blocks.shape
+        if x < 0 or xw <= x: return False
+        if y < 0 or yw <= y: return False
+        if z < 0 or zw <= z: return False
+        return True
+        '''
+
+    def getLightLevel(self, blockPos: BlockPos) -> int:
+        (chunk, (x, y, z)) = self.getChunk(blockPos)
+        return chunk.lightLevels[x, y, z]
+
+    def setLightLevel(self, blockPos: BlockPos, level: int):
+        (chunk, (x, y, z)) = self.getChunk(blockPos)
+        chunk.lightLevels[x, y, z] = level
+
+    def updateLight(self, blockPos: BlockPos):
+        added = self.coordsOccupied(blockPos)
+
+        (chunk, localPos) = self.getChunk(blockPos)
+
+        skyExposed = True
+        for y in range(localPos.y + 1, CHUNK_HEIGHT):
+            checkPos = BlockPos(localPos.x, y, localPos.z)
+            if chunk.coordsOccupied(checkPos):
+                skyExposed = False
+                break
+
+        if added:
+            # When a block is ADDED:
+            # If the block is directly skylit:
+            #   Mark all blocks visibly beneath as ex-sources
+            # Mark every block adjacent to the change as an ex-source
+            # Propogate "negative light" from the ex-sources
+            # Mark any "overpowering" lights as actual sources
+            # Reset all "negative lights" to 0
+            # Propogate from the actual sources
+
+            exSources = []
+            
+            # FIXME: If I ever add vertical chunks this needs to change
+            if skyExposed:
+                for y in range(localPos.y - 1, -1, -1):
+                    checkPos = BlockPos(localPos.x, y, localPos.z)
+                    if chunk.coordsOccupied(checkPos):
+                        break
+
+                    heapq.heappush(exSources, (-7, BlockPos(blockPos.x, y, blockPos.z)))
+            
+            for faceIdx in range(0, 12, 2):
+                gPos = adjacentBlockPos(blockPos, faceIdx)
+
+                if self.coordsOccupied(gPos):
+                    continue
+
+                if not self.coordsInBounds(gPos):
+                    continue
+
+                lightLevel = self.getLightLevel(gPos)
+
+                heapq.heappush(exSources, (-lightLevel, gPos))
+
+            exVisited = []
+
+            queue = []
+            
+            while len(exSources) > 0:
+                (neglight, pos) = heapq.heappop(exSources)
+                neglight *= -1
+                if pos in exVisited:
+                    continue
+                exVisited.append(pos)
+
+                existingLight = self.getLightLevel(pos)
+                if existingLight > neglight:
+                    heapq.heappush(queue, (-existingLight, pos))
+                    continue
+
+                self.setLightLevel(pos, 0)
+
+                nextLight = max(neglight - 1, 0)
+                for faceIdx in range(0, 12, 2):
+                    nextPos = adjacentBlockPos(pos, faceIdx)
+                    if nextPos in exVisited:
+                        continue
+                    if not self.coordsInBounds(nextPos):
+                        continue
+                    if self.coordsOccupied(nextPos):
+                        continue
+
+                    heapq.heappush(exSources, (-nextLight, nextPos))
+            
+            chunk.lightLevels[localPos.x, localPos.y, localPos.z] = 0
+        else:
+            # When a block is REMOVED:
+            # Note that this can only ever *increase* the light level of a block! So:
+            # If the block is directly skylit:
+            #   Propogate light downwards
+            #   Add every block visibly beneath the change to the queue
+            # 
+            # Add every block adjacent to the change to the queue
+
+            queue = []
+
+            # FIXME: If I ever add vertical chunks this needs to change
+            if skyExposed:
+                for y in range(localPos.y, -1, -1):
+                    checkPos = BlockPos(localPos.x, y, localPos.z)
+                    if chunk.coordsOccupied(checkPos):
+                        break
+
+                    heapq.heappush(queue, (-7, BlockPos(blockPos.x, y, blockPos.z)))
+            
+            for faceIdx in range(0, 12, 2):
+                gPos = adjacentBlockPos(blockPos, faceIdx)
+
+                if not self.coordsInBounds(gPos):
+                    continue
+
+                lightLevel = self.getLightLevel(gPos)
+
+                heapq.heappush(queue, (-lightLevel, gPos))
+
+
+        visited = []
+        
+        while len(queue) > 0:
+            (light, pos) = heapq.heappop(queue)
+            light *= -1
+            if pos in visited:
+                continue
+            visited.append(pos)
+            self.setLightLevel(pos, light)
+
+            nextLight = max(light - 1, 0)
+            for faceIdx in range(0, 12, 2):
+                nextPos = adjacentBlockPos(pos, faceIdx)
+                if nextPos in visited:
+                    continue
+                if not self.coordsInBounds(nextPos):
+                    continue
+                if self.coordsOccupied(nextPos):
+                    continue
+
+                existingLight = self.getLightLevel(nextPos)
+
+                if nextLight > existingLight:
+                    heapq.heappush(queue, (-nextLight, nextPos))
+
 
     # app.instances[idx] = [Instance(app.cube, np.array([[modelX], [modelY], [modelZ]]), texture), False]
 
-def updateBuriedStateAt(app, pos: BlockPos):
-    (chunk, innerPos) = getChunk(app, pos)
-    chunk.updateBuriedStateAt(app, innerPos)
+def updateBuriedStateAt(world: World, pos: BlockPos):
+    (chunk, innerPos) = world.getChunk(pos)
+    chunk.updateBuriedStateAt(world, innerPos)
 
-def getChunk(app, pos: BlockPos) -> Tuple[Chunk, BlockPos]:
-    (cx, cy, cz) = pos
-    cx //= 16
-    cy //= CHUNK_HEIGHT
-    cz //= 16
-
-    chunk = app.world.chunks[ChunkPos(cx, cy, cz)]
-    [x, y, z] = pos
-    x %= 16
-    y %= CHUNK_HEIGHT
-    z %= 16
-    return (chunk, BlockPos(x, y, z))
-
-def coordsOccupied(app, pos: BlockPos) -> bool:
-    if not coordsInBounds(app, pos):
-        return False
-
-    (chunk, innerPos) = getChunk(app, pos)
-    return chunk.coordsOccupied(innerPos)
-
-def setBlock(app, pos: BlockPos, id: BlockId, doUpdateLight=True, doUpdateBuried=True) -> None:
-    (chunk, innerPos) = getChunk(app, pos)
-    chunk.setBlock(app, innerPos, id, doUpdateLight, doUpdateBuried)
+def setBlock(app, pos: BlockPos, id: BlockId, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False) -> None:
+    (chunk, innerPos) = app.world.getChunk(pos)
+    chunk.setBlock(app.world, (app.textures, app.cube), innerPos, id, doUpdateLight, doUpdateBuried, doUpdateMesh)
 
 def toChunkLocal(pos: BlockPos) -> Tuple[ChunkPos, BlockPos]:
     (x, y, z) = pos
@@ -426,21 +848,6 @@ def toChunkLocal(pos: BlockPos) -> Tuple[ChunkPos, BlockPos]:
 
     return (chunkPos, blockPos)
 
-def coordsInBounds(app, pos: BlockPos) -> bool:
-    (chunkPos, _) = toChunkLocal(pos)
-    return chunkPos in app.world.chunks
-    '''
-    if pos not in app.world.chunks:
-        return False
-    
-    (x, y, z) = pos
-    (xw, yw, zw) = app.blocks.shape
-    if x < 0 or xw <= x: return False
-    if y < 0 or yw <= y: return False
-    if z < 0 or zw <= z: return False
-    return True
-    '''
-
 def nearestBlockCoord(coord: float) -> int:
     return round(coord)
 
@@ -455,19 +862,11 @@ def blockToWorld(pos: BlockPos) -> Tuple[float, float, float]:
     (x, y, z) = pos
     return (x, y, z)
 
-def blockIsBuried(app, blockPos: BlockPos):
-    for faceIdx in range(0, 12, 2):
-        if not coordsOccupied(app, adjacentBlockPos(blockPos, faceIdx)):
-            # Unburied
-            return False
-    # All spaces around are occupied, this block is buried
-    return True
-
-def updateBuriedStateNear(app, blockPos: BlockPos):
+def updateBuriedStateNear(world: World, blockPos: BlockPos):
     for faceIdx in range(0, 12, 2):
         pos = adjacentBlockPos(blockPos, faceIdx)
-        if coordsInBounds(app, pos):
-            updateBuriedStateAt(app, pos)
+        if world.coordsInBounds(pos):
+            updateBuriedStateAt(world, pos)
 
 def adjacentChunks(chunkPos, dist):
     for xOffset in range(-dist, dist+1):
@@ -482,11 +881,50 @@ def adjacentChunks(chunkPos, dist):
             newChunkPos = ChunkPos(x, y, z)
             yield newChunkPos
         
+import pickle
 
+def pickle_trick(obj, max_depth=10):
+    output = {}
+
+    if max_depth <= 0:
+        return output
+
+    try:
+        pickle.dumps(obj)
+    except (pickle.PicklingError, TypeError) as e:
+        failing_children = []
+
+        if hasattr(obj, "__dict__"):
+            for k, v in obj.__dict__.items():
+                result = pickle_trick(v, max_depth=max_depth - 1)
+                if result:
+                    failing_children.append(result)
+
+        output = {
+            "fail": obj, 
+            "err": e, 
+            "depth": max_depth, 
+            "failing_children": failing_children
+        }
+
+    return output
+
+def mapMultiFunc(pair):
+    (world, instData, chunkPos) = pair
+    return (chunkPos, world.createChunk(instData, chunkPos))
+
+import multiprocessing as multip
+
+myPool = None
 
 def loadUnloadChunks(app, centerPos):
     (chunkPos, _) = toChunkLocal(nearestBlockPos(centerPos[0], centerPos[1], centerPos[2]))
     (x, _, z) = chunkPos
+
+    #global myPool
+
+    #if myPool is None:
+    #    myPool = multip.Pool(5)
 
     # Unload chunks
     shouldUnload = []
@@ -502,6 +940,8 @@ def loadUnloadChunks(app, centerPos):
 
     loadedChunks = 0
 
+    #queuedForLoad = []
+
     for loadChunkPos in adjacentChunks(chunkPos, 2):
         if loadChunkPos not in app.world.chunks:
             (ux, _, uz) = loadChunkPos
@@ -510,8 +950,20 @@ def loadUnloadChunks(app, centerPos):
             urgent = dist <= 1
 
             if urgent or (loadedChunks < 1):
+                #queuedForLoad.append((app.world, (app.textures, app.cube), loadChunkPos))
                 loadedChunks += 1
-                app.world.loadChunk(app, loadChunkPos)
+                app.world.loadChunk((app.textures, app.cube), loadChunkPos)
+    
+    import multiprocessing as mp
+
+    #print(f"have {len(app.world.chunks)} loaded...")
+
+    #chunks = myPool.map(mapMultiFunc, queuedForLoad)
+    #for (pos, chunk) in chunks:
+    #    app.world.chunks[pos] = chunk
+    
+    #print(f"now have {len(app.world.chunks)} loaded")
+    
 
 def countLoadedAdjacentChunks(app, chunkPos: ChunkPos, dist: int) -> Tuple[int, int, int, int]:
     totalCount = 0
@@ -524,7 +976,7 @@ def countLoadedAdjacentChunks(app, chunkPos: ChunkPos, dist: int) -> Tuple[int, 
             chunk = app.world.chunks[pos]
             if chunk.worldgenStage >= WorldgenStage.GENERATED: genCount += 1
             if chunk.worldgenStage >= WorldgenStage.POPULATED: popCount += 1
-            if chunk.worldgenStage >= WorldgenStage.COMPLETE:  comCount += 1
+            if chunk.worldgenStage >= WorldgenStage.OPTIMIZED: comCount += 1
             
     return (totalCount, genCount, popCount, comCount)
 
@@ -536,6 +988,8 @@ def tickChunks(app):
             chunk.populate(app, app.world.seed)
         if chunk.worldgenStage == WorldgenStage.POPULATED and gen == 8:
             chunk.lightAndOptimize(app)
+        if chunk.worldgenStage == WorldgenStage.OPTIMIZED:
+            chunk.createMesh()
 
         chunk.isVisible = chunk.worldgenStage == WorldgenStage.COMPLETE
         chunk.isTicking = chunk.isVisible and adj == 8
@@ -604,11 +1058,11 @@ def tick(app):
             hiXBlockCoord = round((x + player.radius))
             loXBlockCoord = round((x - player.radius))
 
-            if coordsOccupied(app, BlockPos(hiXBlockCoord, y, round(z))):
+            if app.world.coordsOccupied(BlockPos(hiXBlockCoord, y, round(z))):
                 # Collision on the right, so move to the left
                 xEdge = (hiXBlockCoord - 0.5)
                 app.cameraPos[0] = xEdge - player.radius
-            elif coordsOccupied(app, BlockPos(loXBlockCoord, y, round(z))):
+            elif app.world.coordsOccupied(BlockPos(loXBlockCoord, y, round(z))):
                 # Collision on the left, so move to the right
                 xEdge = (loXBlockCoord + 0.5)
                 app.cameraPos[0] = xEdge + player.radius
@@ -622,10 +1076,10 @@ def tick(app):
             hiZBlockCoord = round((z + player.radius))
             loZBlockCoord = round((z - player.radius))
 
-            if coordsOccupied(app, BlockPos(round(x), y, hiZBlockCoord)):
+            if app.world.coordsOccupied(BlockPos(round(x), y, hiZBlockCoord)):
                 zEdge = (hiZBlockCoord - 0.5)
                 app.cameraPos[2] = zEdge - player.radius
-            elif coordsOccupied(app, BlockPos(round(x), y, loZBlockCoord)):
+            elif app.world.coordsOccupied(BlockPos(round(x), y, loZBlockCoord)):
                 zEdge = (loZBlockCoord + 0.5)
                 app.cameraPos[2] = zEdge + player.radius
     
@@ -634,156 +1088,16 @@ def tick(app):
     app.tickTimeIdx += 1
     app.tickTimeIdx %= len(app.tickTimes)
 
-def getLightLevel(app, blockPos: BlockPos) -> int:
-    (chunk, (x, y, z)) = getChunk(app, blockPos)
-    return chunk.lightLevels[x, y, z]
-
-def setLightLevel(app, blockPos: BlockPos, level: int):
-    (chunk, (x, y, z)) = getChunk(app, blockPos)
-    chunk.lightLevels[x, y, z] = level
-
-def updateLight(app, blockPos: BlockPos):
-    added = coordsOccupied(app, blockPos)
-
-    (chunk, localPos) = getChunk(app, blockPos)
-
-    skyExposed = True
-    for y in range(localPos.y + 1, CHUNK_HEIGHT):
-        checkPos = BlockPos(localPos.x, y, localPos.z)
-        if chunk.coordsOccupied(checkPos):
-            skyExposed = False
-            break
-
-    if added:
-        # When a block is ADDED:
-        # If the block is directly skylit:
-        #   Mark all blocks visibly beneath as ex-sources
-        # Mark every block adjacent to the change as an ex-source
-        # Propogate "negative light" from the ex-sources
-        # Mark any "overpowering" lights as actual sources
-        # Reset all "negative lights" to 0
-        # Propogate from the actual sources
-
-        exSources = []
-        
-        # FIXME: If I ever add vertical chunks this needs to change
-        if skyExposed:
-            for y in range(localPos.y - 1, -1, -1):
-                checkPos = BlockPos(localPos.x, y, localPos.z)
-                if chunk.coordsOccupied(checkPos):
-                    break
-
-                heapq.heappush(exSources, (-7, BlockPos(blockPos.x, y, blockPos.z)))
-        
-        for faceIdx in range(0, 12, 2):
-            gPos = adjacentBlockPos(blockPos, faceIdx)
-
-            if coordsOccupied(app, gPos):
-                continue
-
-            if not coordsInBounds(app, gPos):
-                continue
-
-            lightLevel = getLightLevel(app, gPos)
-
-            heapq.heappush(exSources, (-lightLevel, gPos))
-
-        exVisited = []
-
-        queue = []
-        
-        while len(exSources) > 0:
-            (neglight, pos) = heapq.heappop(exSources)
-            neglight *= -1
-            if pos in exVisited:
-                continue
-            exVisited.append(pos)
-
-            existingLight = getLightLevel(app, pos)
-            if existingLight > neglight:
-                heapq.heappush(queue, (-existingLight, pos))
-                continue
-
-            setLightLevel(app, pos, 0)
-
-            nextLight = max(neglight - 1, 0)
-            for faceIdx in range(0, 12, 2):
-                nextPos = adjacentBlockPos(pos, faceIdx)
-                if nextPos in exVisited:
-                    continue
-                if not coordsInBounds(app, nextPos):
-                    continue
-                if coordsOccupied(app, nextPos):
-                    continue
-
-                heapq.heappush(exSources, (-nextLight, nextPos))
-        
-        chunk.lightLevels[localPos.x, localPos.y, localPos.z] = 0
-    else:
-        # When a block is REMOVED:
-        # Note that this can only ever *increase* the light level of a block! So:
-        # If the block is directly skylit:
-        #   Propogate light downwards
-        #   Add every block visibly beneath the change to the queue
-        # 
-        # Add every block adjacent to the change to the queue
-
-        queue = []
-
-        # FIXME: If I ever add vertical chunks this needs to change
-        if skyExposed:
-            for y in range(localPos.y, -1, -1):
-                checkPos = BlockPos(localPos.x, y, localPos.z)
-                if chunk.coordsOccupied(checkPos):
-                    break
-
-                heapq.heappush(queue, (-7, BlockPos(blockPos.x, y, blockPos.z)))
-        
-        for faceIdx in range(0, 12, 2):
-            gPos = adjacentBlockPos(blockPos, faceIdx)
-
-            if not coordsInBounds(app, gPos):
-                continue
-
-            lightLevel = getLightLevel(app, gPos)
-
-            heapq.heappush(queue, (-lightLevel, gPos))
-
-
-    visited = []
-    
-    while len(queue) > 0:
-        (light, pos) = heapq.heappop(queue)
-        light *= -1
-        if pos in visited:
-            continue
-        visited.append(pos)
-        setLightLevel(app, pos, light)
-
-        nextLight = max(light - 1, 0)
-        for faceIdx in range(0, 12, 2):
-            nextPos = adjacentBlockPos(pos, faceIdx)
-            if nextPos in visited:
-                continue
-            if not coordsInBounds(app, nextPos):
-                continue
-            if coordsOccupied(app, nextPos):
-                continue
-
-            existingLight = getLightLevel(app, nextPos)
-
-            if nextLight > existingLight:
-                heapq.heappush(queue, (-nextLight, nextPos))
 
 def getBlock(app, blockPos: BlockPos) -> str:
     (chunkPos, localPos) = toChunkLocal(blockPos)
     return app.world.chunks[chunkPos].blocks[localPos.x, localPos.y, localPos.z]
     
 def removeBlock(app, blockPos: BlockPos):
-    setBlock(app, blockPos, 'air')
+    setBlock(app, blockPos, 'air', doUpdateMesh=True)
 
 def addBlock(app, blockPos: BlockPos, id: BlockId):
-    setBlock(app, blockPos, id)
+    setBlock(app, blockPos, id, doUpdateMesh=True)
 
 def hasBlockBeneath(app):
     player = app.mode.player
@@ -795,7 +1109,7 @@ def hasBlockBeneath(app):
     for x in [xPos - player.radius * 0.99, xPos + player.radius * 0.99]:
         for z in [zPos - player.radius * 0.99, zPos + player.radius * 0.99]:
             feetPos = nearestBlockPos(x, yPos, z)
-            if coordsOccupied(app, feetPos):
+            if app.world.coordsOccupied(feetPos):
                 return True
     
     return False
@@ -858,7 +1172,7 @@ def lookedAtBlock(app) -> Optional[Tuple[BlockPos, str]]:
     lastMaxVal = 0.0
 
     while 1:
-        if coordsOccupied(app, BlockPos(x, y, z)):
+        if app.world.coordsOccupied(BlockPos(x, y, z)):
             blockPos = BlockPos(x, y, z)
             break
 
