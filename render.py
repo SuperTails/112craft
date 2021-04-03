@@ -601,7 +601,7 @@ def renderInstancesGl(app, canvas):
 
         glBindVertexArray(chunkVao)
 
-        glDrawArrays(GL_TRIANGLES, 0, amt * 5)
+        glDrawArrays(GL_TRIANGLES, 0, amt * 6)
 
 def doTheDraw(app, modelUniformLoc, amt):
     #bId = chunk.blocks[i // 256, (i // 16) % 16, i % 16]

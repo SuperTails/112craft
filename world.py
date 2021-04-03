@@ -295,7 +295,7 @@ class Chunk:
             
         self.worldgenStage = WorldgenStage.OPTIMIZED
     
-    def createMesh(self, instData):
+    def createMesh(self, world: 'World', instData):
         if not config.USE_OPENGL_BACKEND:
             self.worldgenStage = WorldgenStage.COMPLETE
             return
@@ -463,20 +463,34 @@ class Chunk:
             for faceIdx in range(0, 12, 2):
                 if not inst.visibleFaces[faceIdx]: continue
 
-                faceVertices = list(vertices[(faceIdx // 2) * 6 * 5:((faceIdx // 2) + 1) * 6 * 5])
-                for idx2 in range(6):
-                    faceVertices[idx2 * 5 + 0] += bx + self.pos.x * 16
-                    faceVertices[idx2 * 5 + 1] += by + self.pos.y * CHUNK_HEIGHT
-                    faceVertices[idx2 * 5 + 2] += bz + self.pos.z * 16
+                faceVertices = [] 
+                for l in range(6):
+                    faceVertices += list(vertices[((faceIdx // 2) * 6 + l) * 5:][:5]) + [0.0]
+                
+                adjBlockPos = adjacentBlockPos(BlockPos(bx, by, bz), faceIdx)
+                (ckPos, ckLocal) = toChunkLocal(self._globalBlockPos(adjBlockPos))
+                if ckPos not in world.chunks:
+                    lightLevel = 7
+                else:
+                    lightLevel = world.chunks[ckPos].lightLevels[ckLocal.x, ckLocal.y, ckLocal.z]
 
-                    faceVertices[idx2 * 5 + 3] *= 16.0
-                    faceVertices[idx2 * 5 + 3] += instData[2][blockId][faceIdx // 2] * 16.0
+                #faceVertices = list(vertices[(faceIdx // 2) * 6 * 5:((faceIdx // 2) + 1) * 6 * 5])
+                for idx2 in range(6):
+                    faceVertices[idx2 * 6 + 0] += bx + self.pos.x * 16
+                    faceVertices[idx2 * 6 + 1] += by + self.pos.y * CHUNK_HEIGHT
+                    faceVertices[idx2 * 6 + 2] += bz + self.pos.z * 16
+
+                    faceVertices[idx2 * 6 + 3] *= 16.0
+                    faceVertices[idx2 * 6 + 3] += instData[2][blockId][faceIdx // 2] * 16.0
+
+                    faceVertices[idx2 * 6 + 5] = lightLevel
+
 
                 usedVertices += faceVertices
         
         usedVertices = np.array(usedVertices, dtype='float32')
 
-        print(f"100th vertex: {usedVertices[100 * 5:][:5]}")
+        print(f"100th vertex: {usedVertices[100 * 6:][:6]}")
         print(f"bytes: {usedVertices.nbytes}")
             
         vao: int = glGenVertexArrays(1) #type:ignore
@@ -487,22 +501,25 @@ class Chunk:
         glBindBuffer(GL_ARRAY_BUFFER, vbo)
         glBufferData(GL_ARRAY_BUFFER, usedVertices.nbytes, usedVertices, GL_STATIC_DRAW)
 
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * 4, ctypes.c_void_p(0))
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * 4, ctypes.c_void_p(0))
         glEnableVertexAttribArray(0)
 
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * 4, ctypes.c_void_p(3 * 4))
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 6 * 4, ctypes.c_void_p(3 * 4))
         glEnableVertexAttribArray(1)
+
+        glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 6 * 4, ctypes.c_void_p(5 * 4))
+        glEnableVertexAttribArray(2)
 
         glBindBuffer(GL_ARRAY_BUFFER, 0)
 
         glBindVertexArray(0)
 
         self.vao = vao
-        self.vertexCnt = len(usedVertices) // 5
+        self.vertexCnt = len(usedVertices) // 6
 
         self.worldgenStage = WorldgenStage.COMPLETE
 
-        print(f"Used vertices: {len(usedVertices) / 5}")
+        print(f"Used vertices: {len(usedVertices) / 6}")
         
         #vao: int = glGenVertexArrays(1) #type:ignore
         #vbo: int = glGenBuffers(1)
@@ -611,7 +628,7 @@ class Chunk:
             world.updateLight(globalPos)
         
         if doUpdateMesh:
-            self.createMesh(instData)
+            self.createMesh(world, instData)
 
 
 def getRegionCoords(pos: ChunkPos) -> Tuple[int, int]:
@@ -886,9 +903,9 @@ def setBlock(app, pos: BlockPos, id: BlockId, doUpdateLight=True, doUpdateBuried
 
 def toChunkLocal(pos: BlockPos) -> Tuple[ChunkPos, BlockPos]:
     (x, y, z) = pos
-    cx = x // 16
-    cy = y // CHUNK_HEIGHT
-    cz = z // 16
+    cx = math.floor(x / 16)
+    cy = math.floor(y / CHUNK_HEIGHT)
+    cz = math.floor(z / 16)
 
     chunkPos = ChunkPos(cx, cy, cz)
 
@@ -983,7 +1000,7 @@ def loadUnloadChunks(app, centerPos):
     for unloadChunkPos in app.world.chunks:
         (ux, _, uz) = unloadChunkPos
         dist = max(abs(ux - x), abs(uz - z))
-        if dist > 6:
+        if dist > 5:
             # Unload chunk
             shouldUnload.append(unloadChunkPos)
 
@@ -994,7 +1011,7 @@ def loadUnloadChunks(app, centerPos):
 
     #queuedForLoad = []
 
-    for loadChunkPos in adjacentChunks(chunkPos, 5):
+    for loadChunkPos in adjacentChunks(chunkPos, 2):
         if loadChunkPos not in app.world.chunks:
             (ux, _, uz) = loadChunkPos
             dist = max(abs(ux - x), abs(uz - z))
@@ -1040,8 +1057,8 @@ def tickChunks(app):
             chunk.populate(app, app.world.seed)
         if chunk.worldgenStage == WorldgenStage.POPULATED and gen == 8:
             chunk.lightAndOptimize(app)
-        if chunk.worldgenStage == WorldgenStage.OPTIMIZED:
-            chunk.createMesh((app.textures, app.cube, app.textureIndices))
+        if chunk.worldgenStage == WorldgenStage.OPTIMIZED and gen == 8:
+            chunk.createMesh(app.world, (app.textures, app.cube, app.textureIndices))
 
         chunk.isVisible = chunk.worldgenStage == WorldgenStage.COMPLETE
         chunk.isTicking = chunk.isVisible and adj == 8
