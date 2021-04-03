@@ -646,6 +646,8 @@ def updateBlockBreaking(app, mode: PlayingMode):
             else:
                 app.breakingBlockPos = pos
                 app.breakingBlock = 0.0
+
+        #app.sounds['grass'].play()
         
         blockId = world.getBlock(app, pos)
 
@@ -660,6 +662,7 @@ def updateBlockBreaking(app, mode: PlayingMode):
         if app.breakingBlock >= hardness:
             brokenName = world.getBlock(app, pos)
             world.removeBlock(app, pos)
+            app.sounds['destroy_grass'].play()
             mode.player.pickUpItem(app, Slot(brokenName, 1))
     else:
         app.breakingBlock = 0.0

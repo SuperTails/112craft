@@ -3,6 +3,7 @@ import world
 import render
 import config
 import copy
+from sound import Sound
 from shader import ShaderProgram
 from PIL import Image
 from typing import List, Optional, Tuple
@@ -354,6 +355,11 @@ def loadGlTextures(app):
     app.guiProgram = ShaderProgram('shaders/guiShader.vert', 'shaders/guiShader.frag')
 
 def loadResources(app):
+    app.sounds = {
+        'grass': Sound('assets/grass.ogg'),
+        'destroy_grass': Sound('assets/destroy_grass.ogg')
+    }
+
     app.texturePaths = {
         'grass': ('assets/grass.png', False),
         'stone': ('assets/stone.png', True),
