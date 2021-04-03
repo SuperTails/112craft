@@ -105,7 +105,7 @@ class Chunk:
         self.pos = pos
 
         self.blocks = np.full((16, CHUNK_HEIGHT, 16), 'air', dtype=object)
-        self.lightLevels = np.full((16, CHUNK_HEIGHT, 16), 7)
+        self.lightLevels = np.full((16, CHUNK_HEIGHT, 16), 0)
         self.instances = [None] * self.blocks.size
 
         self.meshIdx = 0
@@ -208,7 +208,7 @@ class Chunk:
                         thisInst.visibleFaces[8] = False
                         thisInst.visibleFaces[9] = False
         
-        self.worldgenStage = WorldgenStage.OPTIMIZED
+        self.worldgenStage = WorldgenStage.POPULATED
     
     def load(self, world, instData, path):
         with open(path, "r") as f:
@@ -243,7 +243,6 @@ class Chunk:
                 topY = int(noise * 32 + 72)
 
                 for yIdx in range(0, topY):
-                    self.lightLevels[xIdx, yIdx, zIdx] = 0
                     if yIdx == 0:
                         blockId = 'bedrock'
                     elif yIdx == topY - 1:
@@ -288,10 +287,69 @@ class Chunk:
     
     def lightAndOptimize(self, app):
         print(f"Lighting and optimizing chunk at {self.pos}")
-        for xIdx in range(0, 16):
-            for yIdx in range(0, CHUNK_HEIGHT):
-                for zIdx in range(0, 16):
+        for xIdx in range(16):
+            for yIdx in range(CHUNK_HEIGHT):
+                for zIdx in range(16):
                     self.updateBuriedStateAt(app.world, BlockPos(xIdx, yIdx, zIdx))
+        
+        import heapq
+
+        highestBlock = CHUNK_HEIGHT - 1
+        for yIdx in range(CHUNK_HEIGHT - 1, -1, -1):
+            isEmpty = True
+            for zIdx in range(16):
+                for xIdx in range(16):
+                    if self.blocks[xIdx, yIdx, zIdx] != 'air':
+                        isEmpty = False
+                    else:
+                        self.lightLevels[xIdx, yIdx, zIdx] = 7
+            highestBlock = yIdx
+            if not isEmpty:
+                break
+                    
+        
+        for yIdx in range(highestBlock, -1, -1):
+            allAreDark = True
+
+            for xIdx in range(16):
+                for zIdx in range(16):
+                    if self.blocks[xIdx, yIdx, zIdx] != 'air':
+                        lightLevel = 0
+                    elif yIdx == highestBlock:
+                        lightLevel = 7
+                    else:
+                        lightAbove = self.lightLevels[xIdx, yIdx + 1, zIdx]
+                        if lightAbove == 7:
+                            lightLevel = 7
+                        else:
+                            lightLevel = max(lightAbove - 1, 0)
+                    
+                    if lightLevel != 0:
+                        allAreDark = False
+
+                    self.lightLevels[xIdx, yIdx, zIdx] = lightLevel
+            
+            if allAreDark:
+                break
+            
+            # Then, propogate light inwards
+            visited = []
+            queue = [(-l, i) for (i, l) in np.ndenumerate(self.lightLevels[:,yIdx,:])]
+            heapq.heapify(queue)
+            
+            while len(queue) > 0:
+                (level, pos) = heapq.heappop(queue)
+                level *= -1
+                visited.append(pos)
+                newLevel = max(level - 1, 0)
+                for (dx, dz) in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    newPos = (pos[0] + dx, pos[1] + dz)
+                    if newPos in visited: continue
+                    if newPos[0] < 0 or 16 <= newPos[0]: continue
+                    if newPos[1] < 0 or 16 <= newPos[1]: continue
+                    if self.lightLevels[newPos[0], yIdx, newPos[1]] < newLevel:
+                        self.lightLevels[newPos[0], yIdx, newPos[1]] = newLevel
+                        heapq.heappush(queue, (-newLevel, newPos))
             
         self.worldgenStage = WorldgenStage.OPTIMIZED
     
@@ -940,15 +998,16 @@ def updateBuriedStateNear(world: World, blockPos: BlockPos):
 def adjacentChunks(chunkPos, dist):
     for xOffset in range(-dist, dist+1):
         for zOffset in range(-dist, dist+1):
-            if xOffset == 0 and zOffset == 0:
-                continue
-        
+            if xOffset == 0 and zOffset == 0: continue
+
             (x, y, z) = chunkPos
             x += xOffset
             z += zOffset
 
             newChunkPos = ChunkPos(x, y, z)
             yield newChunkPos
+
+print(list(adjacentChunks(ChunkPos(0, 0, 0), 1)))
         
 import pickle
 
@@ -1000,7 +1059,7 @@ def loadUnloadChunks(app, centerPos):
     for unloadChunkPos in app.world.chunks:
         (ux, _, uz) = unloadChunkPos
         dist = max(abs(ux - x), abs(uz - z))
-        if dist > 5:
+        if dist > 4:
             # Unload chunk
             shouldUnload.append(unloadChunkPos)
 
@@ -1011,7 +1070,7 @@ def loadUnloadChunks(app, centerPos):
 
     #queuedForLoad = []
 
-    for loadChunkPos in adjacentChunks(chunkPos, 2):
+    for loadChunkPos in adjacentChunks(chunkPos, 4):
         if loadChunkPos not in app.world.chunks:
             (ux, _, uz) = loadChunkPos
             dist = max(abs(ux - x), abs(uz - z))
@@ -1034,10 +1093,11 @@ def loadUnloadChunks(app, centerPos):
     #print(f"now have {len(app.world.chunks)} loaded")
     
 
-def countLoadedAdjacentChunks(app, chunkPos: ChunkPos, dist: int) -> Tuple[int, int, int, int]:
+def countLoadedAdjacentChunks(app, chunkPos: ChunkPos, dist: int) -> Tuple[int, int, int, int, int]:
     totalCount = 0
     genCount = 0
     popCount = 0
+    optCount = 0
     comCount = 0
     for pos in adjacentChunks(chunkPos, dist):
         if pos in app.world.chunks:
@@ -1045,14 +1105,15 @@ def countLoadedAdjacentChunks(app, chunkPos: ChunkPos, dist: int) -> Tuple[int, 
             chunk = app.world.chunks[pos]
             if chunk.worldgenStage >= WorldgenStage.GENERATED: genCount += 1
             if chunk.worldgenStage >= WorldgenStage.POPULATED: popCount += 1
-            if chunk.worldgenStage >= WorldgenStage.OPTIMIZED: comCount += 1
+            if chunk.worldgenStage >= WorldgenStage.OPTIMIZED: optCount += 1
+            if chunk.worldgenStage >= WorldgenStage.COMPLETE:  comCount += 1
             
-    return (totalCount, genCount, popCount, comCount)
+    return (totalCount, genCount, popCount, optCount, comCount)
 
 def tickChunks(app):
     for chunkPos in app.world.chunks:
         chunk = app.world.chunks[chunkPos]
-        (adj, gen, pop, com) = countLoadedAdjacentChunks(app, chunkPos, 1)
+        (adj, gen, pop, opt, com) = countLoadedAdjacentChunks(app, chunkPos, 1)
         if chunk.worldgenStage == WorldgenStage.GENERATED and gen == 8:
             chunk.populate(app, app.world.seed)
         if chunk.worldgenStage == WorldgenStage.POPULATED and gen == 8:
