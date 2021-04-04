@@ -66,8 +66,8 @@ class WorldLoadMode(Mode):
 
         app.timerDelay = 10
 
-        app.world = World(worldName, seed, anvilpath='C:/Users/Carson/AppData/Roaming/.minecraft/saves/TheTempleofNotch/region/')
-        #app.world = World(worldName, seed)
+        #app.world = World(worldName, seed, anvilpath='C:/Users/Carson/AppData/Roaming/.minecraft/saves/TheTempleofNotch/region/')
+        app.world = World(worldName, seed)
 
         app.world.loadChunk((app.textures, app.cube, app.textureIndices), ChunkPos(0, 0, 0))
     
@@ -287,7 +287,7 @@ class PlayingMode(Mode):
 
             if not app.world.coordsInBounds(pos2): return
 
-            if world.getBlock(app, pos) == 'crafting_table':
+            if app.world.getBlock(pos) == 'crafting_table':
                 app.mode = InventoryMode(app, self, name='crafting_table')
             else:
                 slot = self.player.inventory[self.player.hotbarIdx]
@@ -472,6 +472,13 @@ class CraftingTableGui(CraftingGui):
 
         render.drawSlot(app, canvas, x, y, self.craftOutput)
 
+class PauseMode(Mode):
+    submode: PlayingMode
+
+    def __init__(self, app, submode: PlayingMode):
+        setMouseCapture(app, False)
+        self.submode = submode
+
 class InventoryMode(Mode):
     submode: PlayingMode
     heldItem: Slot = Slot('', 0)
@@ -649,7 +656,7 @@ def updateBlockBreaking(app, mode: PlayingMode):
 
         #app.sounds['grass'].play()
         
-        blockId = world.getBlock(app, pos)
+        blockId = app.world.getBlock(pos)
 
         toolSlot = mode.player.inventory[mode.player.hotbarIdx]
         if toolSlot.isEmpty():
@@ -660,7 +667,7 @@ def updateBlockBreaking(app, mode: PlayingMode):
         hardness = getHardnessAgainst(app, blockId, tool)
 
         if app.breakingBlock >= hardness:
-            brokenName = world.getBlock(app, pos)
+            brokenName = app.world.getBlock(pos)
             world.removeBlock(app, pos)
             app.sounds['destroy_grass'].play()
             mode.player.pickUpItem(app, Slot(brokenName, 1))

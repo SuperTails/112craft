@@ -86,6 +86,74 @@ seen = set()
 
 CHUNK_HEIGHT = 256
 
+class Emu:
+    x: float
+    y: float
+    z: float
+
+    count: int
+
+    yaw: float
+    pitch: float
+
+    def __init__(self, pos: BlockPos):
+        self.x = pos.x
+        self.y = pos.y
+        self.z = pos.z
+
+        self.yaw = 0.0
+        self.pitch = -60.0
+
+        self.count = 0
+
+    def step(self, seed: int) -> bool:
+        random.seed(hash((self.count, seed)))
+
+        self.yaw += ((random.random() * 2.0) - 1.0) * (3.14159 * 2 * 30.0 / 360.0)
+        self.pitch += ((random.random() * 2.0) - 1.0) * (3.14159 * 2 * 30.0 / 360.0)
+
+        self.x += 2 * cos(self.pitch) * cos(self.yaw)
+        self.y += 2 * sin(self.pitch)
+        self.z += 2 * cos(self.pitch) * sin(-self.yaw)
+
+        self.count += 1
+
+        return self.count > 40
+    
+    def clearNearby(self, world: 'World', instData):
+        blockPos = nearestBlockPos(self.x, self.y, self.z)
+
+        for xOffset in range(-1, 2):
+            for yOffset in range(-1, 2):
+                for zOffset in range(-1, 2):
+                    bx = blockPos.x + xOffset
+                    by = blockPos.y + yOffset
+                    bz = blockPos.z + zOffset
+                    bPos = BlockPos(bx, by, bz)
+
+                    (cp, cl) = toChunkLocal(bPos)
+
+                    world.chunks[cp].setBlock(world, instData, cl, 'air')
+
+def timed(f, count=3): 
+    i = 0
+    durations = [0.0] * count
+
+    def wrapper(*args, **kwargs):
+        start = time.perf_counter()
+        f(*args, **kwargs)
+        end = time.perf_counter()
+
+        nonlocal i, durations
+        durations[i] = end - start
+        i += 1
+        i %= len(durations)
+
+        avg = sum(durations) / len(durations)
+        print(f"average time for {f.__name__} is {avg}")
+
+    return wrapper
+        
 class Chunk:
     pos: ChunkPos
     blocks: ndarray
@@ -97,6 +165,8 @@ class Chunk:
 
     isTicking: bool = False
     isVisible: bool = False
+
+    meshDirty: bool
 
     meshIdx: int = 0
     vertexCnt: int = 0
@@ -111,6 +181,8 @@ class Chunk:
         self.meshIdx = 0
 
         self.vao = 0
+
+        self.meshDirty = True
     
     def save(self, path):
         allBlocks = []
@@ -285,13 +357,7 @@ class Chunk:
         
         self.worldgenStage = WorldgenStage.POPULATED
     
-    def lightAndOptimize(self, app):
-        print(f"Lighting and optimizing chunk at {self.pos}")
-        for xIdx in range(16):
-            for yIdx in range(CHUNK_HEIGHT):
-                for zIdx in range(16):
-                    self.updateBuriedStateAt(app.world, BlockPos(xIdx, yIdx, zIdx))
-        
+    def doFirstLighting(self, app):
         import heapq
 
         highestBlock = CHUNK_HEIGHT - 1
@@ -350,10 +416,25 @@ class Chunk:
                     if self.lightLevels[newPos[0], yIdx, newPos[1]] < newLevel:
                         self.lightLevels[newPos[0], yIdx, newPos[1]] = newLevel
                         heapq.heappush(queue, (-newLevel, newPos))
+    
+    @timed
+    def lightAndOptimize(self, app):
+        print(f"Lighting and optimizing chunk at {self.pos}")
+        for xIdx in range(16):
+            for yIdx in range(CHUNK_HEIGHT):
+                for zIdx in range(16):
+                    self.updateBuriedStateAt(app.world, BlockPos(xIdx, yIdx, zIdx))
+        
+        self.doFirstLighting(app)
             
         self.worldgenStage = WorldgenStage.OPTIMIZED
     
     def createMesh(self, world: 'World', instData):
+        if not self.meshDirty:
+            return
+
+        self.meshDirty = False
+
         if not config.USE_OPENGL_BACKEND:
             self.worldgenStage = WorldgenStage.COMPLETE
             return
@@ -613,8 +694,11 @@ class Chunk:
 
         uncovered = False
         for faceIdx in range(0, 12, 2):
-            adjPos = adjacentBlockPos(globalPos, faceIdx)
-            if world.coordsOccupied(adjPos):
+            adjPos = adjacentBlockPos(blockPos, faceIdx)
+            if adjPos.x < 0 or 16 <= adjPos.x: continue
+            if adjPos.y < 0 or CHUNK_HEIGHT <= adjPos.y: continue
+            if adjPos.z < 0 or 16 <= adjPos.z: continue
+            if self.coordsOccupied(adjPos):
                 inst.visibleFaces[faceIdx] = False
                 inst.visibleFaces[faceIdx + 1] = False
             else:
@@ -629,6 +713,7 @@ class Chunk:
         return self.blocks[x, y, z] != 'air'
 
     def setBlock(self, world, instData, blockPos: BlockPos, id: BlockId, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False):
+        self.meshDirty = True
         (textures, cube, _) = instData
         (x, y, z) = blockPos
         self.blocks[x, y, z] = id
@@ -700,11 +785,21 @@ class World:
     regions: dict[Tuple[int, int], anvil.Region]
     anvilpath: str
 
+    emu: Optional[Emu]
+
+    def getHighestBlock(self, x: int, z: int) -> int:
+        for y in range(CHUNK_HEIGHT - 1, -1, -1):
+            if self.getBlock(BlockPos(x, y, z)) != 'air':
+                return y
+        return 0
+
     def __init__(self, name: str, seed=None, anvilpath=''):
         self.chunks = {}
         self.name = name
         self.anvilpath = anvilpath
         self.regions = {}
+
+        self.emu = None
 
         os.makedirs(f'saves/{self.name}', exist_ok=True)
 
@@ -713,6 +808,10 @@ class World:
         else:
             # TODO: Need to parse meta file
             1 / 0
+    
+    def getBlock(self, blockPos: BlockPos) -> str:
+        (chunkPos, localPos) = toChunkLocal(blockPos)
+        return self.chunks[chunkPos].blocks[localPos.x, localPos.y, localPos.z]
     
     def chunkFileName(self, pos: ChunkPos) -> str:
         return f'saves/{self.name}/c_{pos.x}_{pos.y}_{pos.z}.txt'
@@ -756,6 +855,17 @@ class World:
             self.chunks[pos].loadFromAnvilChunk(self, instData, chunk)
         else:
             self.chunks[pos].loadOrGenerate(self, instData, self.chunkFileName(pos), self.seed)
+
+        if ChunkPos(0, 0, 0) in self.chunks and self.emu is None and self.chunks[ChunkPos(0, 0, 0)].worldgenStage >= WorldgenStage.POPULATED and len(self.chunks) > 8:
+            self.emu = Emu(BlockPos(4, self.getHighestBlock(4, 8), 8))
+            if self.emu.count == 0:
+                ok = True
+                while ok:
+                    ok = not self.emu.step(self.seed)
+                    print(f"Pos is {self.emu.x} {self.emu.y} {self.emu.z}")
+                    self.emu.clearNearby(self, instData)
+                #for chunk in self.chunks.values():
+                #    chunk.createMesh(self, instData)
     
     def unloadChunk(self, app, pos: ChunkPos):
         print(f"Unloading chunk at {pos}")
@@ -816,6 +926,8 @@ class World:
         chunk.lightLevels[x, y, z] = level
 
     def updateLight(self, blockPos: BlockPos):
+        self.meshDirty = True
+
         added = self.coordsOccupied(blockPos)
 
         (chunk, localPos) = self.getChunk(blockPos)
@@ -1070,7 +1182,7 @@ def loadUnloadChunks(app, centerPos):
 
     #queuedForLoad = []
 
-    for loadChunkPos in adjacentChunks(chunkPos, 4):
+    for loadChunkPos in adjacentChunks(chunkPos, 3):
         if loadChunkPos not in app.world.chunks:
             (ux, _, uz) = loadChunkPos
             dist = max(abs(ux - x), abs(uz - z))
@@ -1218,10 +1330,6 @@ def tick(app):
     app.tickTimeIdx += 1
     app.tickTimeIdx %= len(app.tickTimes)
 
-
-def getBlock(app, blockPos: BlockPos) -> str:
-    (chunkPos, localPos) = toChunkLocal(blockPos)
-    return app.world.chunks[chunkPos].blocks[localPos.x, localPos.y, localPos.z]
     
 def removeBlock(app, blockPos: BlockPos):
     setBlock(app, blockPos, 'air', doUpdateMesh=True)

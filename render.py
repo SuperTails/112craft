@@ -383,7 +383,7 @@ def cullInstance(app, toCamMat: ndarray, inst: Instance, blockPos: Optional[Bloc
                 else:
                     tool = toolSlot.item
 
-                hardness = getHardnessAgainst(app, world.getBlock(app, blockPos), tool)
+                hardness = getHardnessAgainst(app, app.world.getBlock(blockPos), tool)
 
                 desaturation = app.breakingBlock / hardness
                 r += (avg - r) * desaturation
@@ -554,7 +554,7 @@ def renderInstancesGl(app, canvas):
         else:
             tool = toolSlot.item
 
-        blockId = world.getBlock(app, app.breakingBlockPos)
+        blockId = app.world.getBlock(app.breakingBlockPos)
 
         if blockId != 'air':
             hardness = getHardnessAgainst(app, blockId, tool)
@@ -837,11 +837,13 @@ def drawHud(app, canvas, startTime):
 
     drawTextOutlined(canvas, 10, 10, text=f'Frame Time: {frameTime:.2f}ms', anchor='nw')
 
+    drawTextOutlined(canvas, 10, 50, text=f"Pos: {app.cameraPos[0]:.2f}, {app.cameraPos[1]:.2f}, {app.cameraPos[2]:.2f}", anchor='nw')
+
     chunkX = math.floor(app.cameraPos[0] / 16)
     chunkY = math.floor(app.cameraPos[1] / world.CHUNK_HEIGHT)
     chunkZ = math.floor(app.cameraPos[2] / 16)
 
-    drawTextOutlined(canvas, 10, 50, text=f'Chunk coords: {chunkX}, {chunkY}, {chunkZ}', anchor='nw')
+    drawTextOutlined(canvas, 10, 90, text=f'Chunk coords: {chunkX}, {chunkY}, {chunkZ}', anchor='nw')
 
 def redrawAll(app, canvas, doDrawHud=True):
     startTime = time.time()
