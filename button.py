@@ -31,7 +31,7 @@ class Button:
     background: Image.Image
     text: str
 
-    def __init__(self, app, x: float, y: float, background: Image.Image, text: str):
+    def __init__(self, app, x: float, y: float, width: int, height: int, text: str):
         """Creates a button.
 
         The x and y are proportions of the screen width and height, e.g.
@@ -42,12 +42,10 @@ class Button:
         `text` will be displayed on top of that image
         """
 
-        (width, height) = background.size
-
         self.width = width
         self.height = height
 
-        self.background = background
+        self.background = createSizedBackground(app, self.width, self.height)
         self.text = text
 
         self.xFrac = x
@@ -64,11 +62,15 @@ class Button:
         self.x = int(self.xFrac * app.width) - self.width // 2
         self.y = int(self.yFrac * app.height) - self.height // 2
 
-    def isOver(self, x: int, y: int) -> bool:
+    def isOver(self, app, x: int, y: int) -> bool:
         '''Returns True if the given position is inside this button'''
 
-        return (self.x <= x and x <= self.x + self.width and 
-            self.y <= y and y <= self.y + self.height)
+        x0 = int(self.xFrac * app.width) - self.width // 2
+        y0 = int(self.yFrac * app.height) - self.height // 2
+        x1 = x0 + self.width
+        y1 = y0 + self.height
+
+        return (x0 <= x and x <= x1 and y0 <= y and y <= y1)
     
     def draw(self, app, canvas):
         centerX = self.x + (self.width // 2)
@@ -86,21 +88,21 @@ class ButtonManager:
         self.buttons = {}
         self.heldButtonName = None
 
-    def onPress(self, x, y) -> None:
+    def onPress(self, app, x, y) -> None:
         for (buttonName, button) in self.buttons.items():
-            if button.isOver(x, y):
+            if button.isOver(app, x, y):
                 self.heldButtonName = buttonName
                 break
     
     def addButton(self, name: str, button: Button) -> None:
         self.buttons[name] = button
     
-    def onRelease(self, x, y) -> Optional[str]:
+    def onRelease(self, app, x, y) -> Optional[str]:
         '''Returns the name of the button that was just activated, if any'''
 
         if self.heldButtonName is not None:
             heldButton = self.buttons[self.heldButtonName]
-            result = self.heldButtonName if heldButton.isOver(x, y) else None
+            result = self.heldButtonName if heldButton.isOver(app, x, y) else None
             self.heldButtonName = None
             return result
         else:

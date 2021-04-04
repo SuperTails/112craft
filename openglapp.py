@@ -90,6 +90,7 @@ class App:
                 timeDiff = (times[-1] - times[0]) / (len(times) - 1)
                 print(timeDiff)
 
+        self._callFn('appStopped', self)
         
         glfw.terminate()
 

@@ -695,15 +695,16 @@ class Chunk:
         uncovered = False
         for faceIdx in range(0, 12, 2):
             adjPos = adjacentBlockPos(blockPos, faceIdx)
-            if adjPos.x < 0 or 16 <= adjPos.x: continue
-            if adjPos.y < 0 or CHUNK_HEIGHT <= adjPos.y: continue
-            if adjPos.z < 0 or 16 <= adjPos.z: continue
-            if self.coordsOccupied(adjPos):
-                inst.visibleFaces[faceIdx] = False
-                inst.visibleFaces[faceIdx + 1] = False
-            else:
-                inst.visibleFaces[faceIdx] = True
-                inst.visibleFaces[faceIdx + 1] = True
+            isVisible = (
+                adjPos.x < 0 or 16 <= adjPos.x or
+                adjPos.y < 0 or CHUNK_HEIGHT <= adjPos.y or
+                adjPos.z < 0 or 16 <= adjPos.z or
+                not self.coordsOccupied(adjPos))
+
+            inst.visibleFaces[faceIdx] = isVisible
+            inst.visibleFaces[faceIdx + 1] = isVisible
+
+            if isVisible:
                 uncovered = True
             
         self.instances[idx][1] = uncovered
@@ -783,7 +784,7 @@ class World:
     name: str
 
     regions: dict[Tuple[int, int], anvil.Region]
-    anvilpath: str
+    importPath: str
 
     emu: Optional[Emu]
 
@@ -793,11 +794,14 @@ class World:
                 return y
         return 0
 
-    def __init__(self, name: str, seed=None, anvilpath=''):
+    def __init__(self, name: str, seed=None, importPath=''):
         self.chunks = {}
         self.name = name
-        self.anvilpath = anvilpath
+        self.importPath = importPath
         self.regions = {}
+
+        if self.importPath != '' and not self.importPath.endswith('/'):
+            self.importPath += '/'
 
         self.emu = None
 
@@ -805,10 +809,30 @@ class World:
 
         if seed is not None:
             self.seed = seed
-        else:
-            # TODO: Need to parse meta file
-            1 / 0
-    
+
+        try:
+            with open("saves/{self.name}/meta.txt", "r") as f:
+                for line in f.readlines():
+                    line = line.strip()
+                    if len(line) == 0:
+                        continue
+                    [key, value] = line.split('=')
+                    if key == 'seed':
+                        self.seed = int(value)
+                    elif key == 'importPath':
+                        self.importPath = importPath
+                    else:
+                        raise Exception(f"Unknown meta {key}={value}")
+
+        except FileNotFoundError:
+            self.saveMetaFile()
+        
+    def saveMetaFile(self):
+        with open(f"saves/{self.name}/meta.txt", "w") as f:
+            f.write(f"seed={self.seed}\n")
+            if self.importPath != '':
+                f.write(f"importPath={self.importPath}\n")
+
     def getBlock(self, blockPos: BlockPos) -> str:
         (chunkPos, localPos) = toChunkLocal(blockPos)
         return self.chunks[chunkPos].blocks[localPos.x, localPos.y, localPos.z]
@@ -817,22 +841,23 @@ class World:
         return f'saves/{self.name}/c_{pos.x}_{pos.y}_{pos.z}.txt'
     
     def save(self):
+        print("Saving world... ", end='')
         for pos in self.chunks:
             self.saveChunk(pos)
-
-        with open("saves/{self.name}/meta.txt", "w") as f:
-            f.write(f"seed={self.seed}")
+        
+        self.saveMetaFile()
+        print("Done!")
     
     def saveChunk(self, pos: ChunkPos):
         self.chunks[pos].save(self.chunkFileName(pos))
     
     def createChunk(self, instData, pos: ChunkPos):
         ck = Chunk(pos)
-        if self.anvilpath != '':
+        if self.importPath != '':
             pos2 = ChunkPos(pos.x + 2, pos.y, pos.z - 6)
             regionPos = getRegionCoords(pos2)
             if regionPos not in self.regions:
-                path = self.anvilpath + f'r.{regionPos[0]}.{regionPos[1]}.mca'
+                path = self.importPath + f'region/r.{regionPos[0]}.{regionPos[1]}.mca'
                 self.regions[regionPos] = anvil.Region.from_file(path)
 
             chunk = anvil.Chunk.from_region(self.regions[regionPos], pos2.x, pos2.z)
@@ -844,11 +869,11 @@ class World:
     def loadChunk(self, instData, pos: ChunkPos):
         print(f"Loading chunk at {pos}")
         self.chunks[pos] = Chunk(pos)
-        if self.anvilpath != '':
+        if self.importPath != '':
             pos2 = ChunkPos(pos.x + 2, pos.y, pos.z - 6)
             regionPos = getRegionCoords(pos2)
             if regionPos not in self.regions:
-                path = self.anvilpath + f'r.{regionPos[0]}.{regionPos[1]}.mca'
+                path = self.importPath + f'region/r.{regionPos[0]}.{regionPos[1]}.mca'
                 self.regions[regionPos] = anvil.Region.from_file(path)
 
             chunk = anvil.Chunk.from_region(self.regions[regionPos], pos2.x, pos2.z)
@@ -856,6 +881,7 @@ class World:
         else:
             self.chunks[pos].loadOrGenerate(self, instData, self.chunkFileName(pos), self.seed)
 
+        '''
         if ChunkPos(0, 0, 0) in self.chunks and self.emu is None and self.chunks[ChunkPos(0, 0, 0)].worldgenStage >= WorldgenStage.POPULATED and len(self.chunks) > 8:
             self.emu = Emu(BlockPos(4, self.getHighestBlock(4, 8), 8))
             if self.emu.count == 0:
@@ -863,7 +889,10 @@ class World:
                 while ok:
                     ok = not self.emu.step(self.seed)
                     print(f"Pos is {self.emu.x} {self.emu.y} {self.emu.z}")
+
                     self.emu.clearNearby(self, instData)
+        '''
+
                 #for chunk in self.chunks.values():
                 #    chunk.createMesh(self, instData)
     
@@ -1171,7 +1200,7 @@ def loadUnloadChunks(app, centerPos):
     for unloadChunkPos in app.world.chunks:
         (ux, _, uz) = unloadChunkPos
         dist = max(abs(ux - x), abs(uz - z))
-        if dist > 4:
+        if dist > 5:
             # Unload chunk
             shouldUnload.append(unloadChunkPos)
 
@@ -1182,7 +1211,7 @@ def loadUnloadChunks(app, centerPos):
 
     #queuedForLoad = []
 
-    for loadChunkPos in adjacentChunks(chunkPos, 3):
+    for loadChunkPos in adjacentChunks(chunkPos, 4):
         if loadChunkPos not in app.world.chunks:
             (ux, _, uz) = loadChunkPos
             dist = max(abs(ux - x), abs(uz - z))

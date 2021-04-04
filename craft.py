@@ -13,6 +13,7 @@ import glfw
 import config
 import random
 import cmu_112_graphics
+import tkinter
 from button import Button, ButtonManager, createSizedBackground
 from world import Chunk, ChunkPos, World
 from typing import List, Optional, Tuple
@@ -61,13 +62,13 @@ def worldToFolderName(name: str) -> str:
 class WorldLoadMode(Mode):
     loadStage: int = 0
 
-    def __init__(self, app, worldName, nextMode, seed=40):
+    def __init__(self, app, worldName, nextMode, seed=40, importPath=''):
         self.nextMode = nextMode
 
         app.timerDelay = 10
 
         #app.world = World(worldName, seed, anvilpath='C:/Users/Carson/AppData/Roaming/.minecraft/saves/TheTempleofNotch/region/')
-        app.world = World(worldName, seed)
+        app.world = World(worldName, seed, importPath=importPath)
 
         app.world.loadChunk((app.textures, app.cube, app.textureIndices), ChunkPos(0, 0, 0))
     
@@ -109,8 +110,8 @@ class WorldListMode(Mode):
 
         self.worlds = getWorldNames()
 
-        playButton = Button(app, 0.2, 0.7, app.btnBg, "Play")
-        createButton = Button(app, 0.8, 0.7, app.btnBg, "Create New")
+        playButton = Button(app, 0.2, 0.7, 200, 40, "Play")
+        createButton = Button(app, 0.8, 0.7, 200, 40, "Create New")
 
         self.buttons.addButton('play', playButton)
         self.buttons.addButton('create', createButton)
@@ -127,18 +128,16 @@ class WorldListMode(Mode):
             canvas.create_text(app.width * 0.5, app.height * 0.20 + 30 * i, text=worldName)
 
     def mousePressed(self, app, event):
-        self.buttons.onPress(event.x, event.y)
+        self.buttons.onPress(app, event.x, event.y)
 
         # FIXME: Make these into buttons!
         if app.width * 0.5 - 100 < event.x and event.x < app.width * 0.5 + 100:
             yIdx = round((event.y - (app.height * 0.20)) / 30)
             if 0 <= yIdx and yIdx < len(self.worlds):
                 self.selectedWorld = yIdx
-
-
     
     def mouseReleased(self, app, event):
-        btn = self.buttons.onRelease(event.x, event.y)
+        btn = self.buttons.onRelease(app, event.x, event.y)
         if btn is not None:
             print(f"Pressed {btn}")
             if btn == 'create':
@@ -149,28 +148,77 @@ class WorldListMode(Mode):
                 app.mode = WorldLoadMode(app, self.worlds[self.selectedWorld], makePlayingMode)
 
 
+def posInBox(x, y, bounds) -> bool:
+    (x0, y0, x1, y1) = bounds
+    return x0 <= x and x <= x1 and y0 <= y and y <= y1
 
 class CreateWorldMode(Mode):
     buttons: ButtonManager
     worldName: str
 
+    worldSource: str
+    importPath: str
+    seed: Optional[int]
+
     def __init__(self, app):
         self.worldName = ''
         self.buttons = ButtonManager()
 
-        survivalButton = Button(app, 0.5, 0.4, app.btnBg, "Play Survival")
-        creativeButton = Button(app, 0.5, 0.55, app.btnBg, "Play Creative")
+        self.seed = None
 
+        self.importPath = ''
+
+        survivalButton = Button(app, 0.2, 0.90, 200, 40, "Play Survival")
         self.buttons.addButton('playSurvival', survivalButton)
+
+        creativeButton = Button(app, 0.8, 0.90, 200, 40, "Play Creative")
         self.buttons.addButton('playCreative', creativeButton)
 
+        worldTypeButton = Button(app, 0.5, 0.4, 300, 40, "")
+        self.buttons.addButton('worldSource', worldTypeButton)
+
+        self.setWorldSource('generated')
+
+    def setWorldSource(self, ty: str):
+        self.worldSource = ty
+        if self.worldSource == 'generated':
+            self.buttons.buttons['worldSource'].text = 'World Source:  Generated'
+        elif self.worldSource == 'imported':
+            self.buttons.buttons['worldSource'].text = 'World Source:  Imported'
+        else:
+            1 / 0
+
+    def worldNameBoxBounds(self, app):
+        return (app.width * 0.5 - 100, app.height * 0.25 - 15,
+                app.width * 0.5 + 100, app.height * 0.25 + 15)
+    
+    def worldPathBoxBounds(self, app):
+        return (app.width * 0.5 - 100, app.height * 0.60 - 15,
+                app.width * 0.5 + 100, app.height * 0.60 + 15)
+        
     def redrawAll(self, app, window, canvas):
         self.buttons.draw(app, canvas)
 
         canvas.create_text(app.width * 0.5, app.height * 0.15, text="World Name:")
 
-        canvas.create_rectangle(app.width * 0.5 - 100, app.height * 0.25 - 15,
-            app.width * 0.5 + 100, app.height * 0.25 + 15)
+        (x0, y0, x1, y1) = self.worldNameBoxBounds(app)
+        canvas.create_rectangle(x0, y0, x1, y1)
+
+        if self.worldSource == 'imported':
+            (x0, y0, x1, y1) = self.worldPathBoxBounds(app)
+            canvas.create_rectangle(x0, y0, x1, y1)
+
+            if len(self.importPath) > 18:
+                importText = '...' + self.importPath[-15:]
+            else:
+                importText = self.importPath
+            
+            x = (x1 + x0) / 2
+            y = (y1 + y0) / 2
+
+            canvas.create_text(x, y0 - 5, text='World Folder:', anchor='s')
+
+            canvas.create_text(x0 + 5, y, text=importText, anchor='w')
 
         canvas.create_text(app.width * 0.5, app.height * 0.25, text=self.worldName)
     
@@ -183,17 +231,37 @@ class CreateWorldMode(Mode):
             self.worldName += key
 
     def mousePressed(self, app, event):
-        self.buttons.onPress(event.x, event.y)
-    
+        self.buttons.onPress(app, event.x, event.y)
+
+        if posInBox(event.x, event.y, self.worldPathBoxBounds(app)):
+            # https://stackoverflow.com/questions/30678508/how-to-use-tkinter-filedialog-without-a-window
+
+            from cmu_112_graphics import Tk
+            from cmu_112_graphics import filedialog
+
+            Tk().withdraw()
+            self.importPath = filedialog.askdirectory()
+
     def mouseReleased(self, app, event):
-        btn = self.buttons.onRelease(event.x, event.y)
+        btn = self.buttons.onRelease(app, event.x, event.y)
         if btn is not None:
             print(f"Pressed {btn}")
             if (btn == 'playSurvival' or btn == 'playCreative') and self.worldName != '':
                 # FIXME: CHECK FOR DUPLICATE WORLD NAMES
                 isCreative = btn == 'playCreative'
                 makePlayingMode = lambda app: PlayingMode(app, isCreative)
-                app.mode = WorldLoadMode(app, self.worldName, makePlayingMode, seed=random.random())
+
+                if self.worldSource == 'imported':
+                    importPath = self.importPath
+                else:
+                    importPath = ''
+
+                app.mode = WorldLoadMode(app, self.worldName, makePlayingMode, seed=random.random(), importPath=importPath)
+            elif btn == 'worldSource':
+                if self.worldSource == 'generated':
+                    self.setWorldSource('imported')
+                else:
+                    self.setWorldSource('generated')
 
 class TitleMode(Mode):
     buttons: ButtonManager
@@ -209,17 +277,17 @@ class TitleMode(Mode):
             self.titleText = app.loadImage('assets/TitleText.png')
             self.titleText = app.scaleImage(self.titleText, 3)
 
-        playButton = Button(app, 0.5, 0.4, app.btnBg, "Play")
+        playButton = Button(app, 0.5, 0.4, 200, 40, "Play")
         self.buttons.addButton('play', playButton)
 
     def timerFired(self, app):
         app.cameraYaw += 0.01
 
     def mousePressed(self, app, event):
-        self.buttons.onPress(event.x, event.y)
+        self.buttons.onPress(app, event.x, event.y)
     
     def mouseReleased(self, app, event):
-        btn = self.buttons.onRelease(event.x, event.y)
+        btn = self.buttons.onRelease(app, event.x, event.y)
         if btn is not None:
             print(f"Pressed {btn}")
             worldNames = getWorldNames()
@@ -474,10 +542,16 @@ class CraftingTableGui(CraftingGui):
 
 class PauseMode(Mode):
     submode: PlayingMode
+    buttons: ButtonManager
 
     def __init__(self, app, submode: PlayingMode):
         setMouseCapture(app, False)
         self.submode = submode
+
+    def redrawAll(self, app, window, canvas):
+        self.submode.redrawAll(app, window, canvas)
+
+
 
 class InventoryMode(Mode):
     submode: PlayingMode
@@ -588,9 +662,10 @@ class InventoryMode(Mode):
 def appStarted(app):
     loadResources(app)
 
-    #app.mode = WorldLoadMode(app, 'world', TitleMode)
-    def makePlayingMode(app): return PlayingMode(app, False)
-    app.mode = WorldLoadMode(app, 'abcd', makePlayingMode)
+    app.mode = WorldLoadMode(app, 'world', TitleMode)
+    #def makePlayingMode(app): return PlayingMode(app, False)
+    #app.mode = WorldLoadMode(app, 'abcd', makePlayingMode)
+    #app.mode = CreateWorldMode(app)
 
     app.btnBg = createSizedBackground(app, 200, 40)
 
@@ -640,6 +715,11 @@ def appStarted(app):
     app.prevMouse = None
 
     setMouseCapture(app, False)
+
+def appStopped(app):
+    # FIXME:
+    if hasattr(app, 'world'):
+        app.world.save()
 
 def updateBlockBreaking(app, mode: PlayingMode):
     if mode.mouseHeld and mode.lookedAtBlock is not None:
