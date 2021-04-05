@@ -243,8 +243,8 @@ def blockFaceLight(app, blockPos: BlockPos, faceIdx: int) -> int:
     """Returns the light level of the given face of the block"""
 
     pos = adjacentBlockPos(blockPos, faceIdx)
-    if app.world.coordsInBounds(app, pos):
-        (chunk, (x, y, z)) = app.world.getChunk(app, pos)
+    if app.world.coordsInBounds(pos):
+        (chunk, (x, y, z)) = app.world.getChunk(pos)
         return chunk.lightLevels[x, y, z]
     else:
         return 7

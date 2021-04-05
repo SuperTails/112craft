@@ -73,9 +73,9 @@ class WorldLoadMode(Mode):
         app.world.loadChunk((app.textures, app.cube, app.textureIndices), ChunkPos(0, 0, 0))
     
     def timerFired(self, app):
-        if self.loadStage < 20:
+        if self.loadStage < 40:
             world.loadUnloadChunks(app, [0.0, 0.0, 0.0])
-        elif self.loadStage < 30:
+        elif self.loadStage < 60:
             world.tickChunks(app)
         else:
             app.mode = self.nextMode(app)
@@ -90,7 +90,7 @@ class WorldLoadMode(Mode):
 
         canvas.create_rectangle(leftX, app.height / 2 - height, rightX, app.height / 2 + height)
 
-        progress = self.loadStage / 30.0
+        progress = self.loadStage / 60.0
 
         midX = leftX + (rightX - leftX) * progress
 
@@ -682,7 +682,11 @@ def appStarted(app):
 
     app.cameraYaw = 0
     app.cameraPitch = 0
-    app.cameraPos = [2.0, 70.5, 4.0]
+
+    if world.CHUNK_HEIGHT == 256:
+        app.cameraPos = [2.0, 72, 4.0]
+    else:
+        app.cameraPos = [2.0, 10.0, 4.0]
 
     # -------------------
     # Rendering Variables

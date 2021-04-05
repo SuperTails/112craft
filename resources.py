@@ -182,6 +182,14 @@ def loadTkTextures(app):
         '#A52A2A', '#A52A2A',
         '#00FF00', '#00EE00']
     
+    dirtTexture = [
+        '#FF0000', '#FF0000',
+        '#A52A2A', '#A52A2A',
+        '#A52A2A', '#A52A2A',
+        '#A52A2A', '#A52A2A',
+        '#A52A2A', '#A52A2A',
+        '#a52A2A', '#A52A2A']
+    
     stoneTexture = [
         '#AAAAAA', '#AAAABB',
         '#AAAACC', '#AABBBB',
@@ -238,6 +246,7 @@ def loadTkTextures(app):
 
     app.tkTextures = {
         'grass': grassTexture,
+        'dirt': dirtTexture,
         'stone': stoneTexture,
         'leaves': leavesTexture,
         'log': logTexture,
@@ -362,6 +371,7 @@ def loadResources(app):
 
     app.texturePaths = {
         'grass': ('assets/grass.png', False),
+        'dirt': ('assets/dirt.png', True),
         'stone': ('assets/stone.png', True),
         'cobblestone': ('assets/cobblestone.png', True),
         'leaves': ('assets/leaves.png', False),
@@ -371,16 +381,9 @@ def loadResources(app):
         'crafting_table': ('assets/missing.png', False),
     }
 
-    loadTkTextures(app)
-    if config.USE_OPENGL_BACKEND:
-        loadGlTextures(app)
-        app.textures = app.glTextures
-        app.textureAtlas = loadTextureAtlas(app)
-    else:
-        app.textures = app.tkTextures
-
     app.hardnesses = {
         'grass': ('shovel', 1.0),
+        'dirt': ('shovel', 0.8),
         'stone': ('pickaxe', 5.0),
         'cobblestone': ('pickaxe', 6.0),
         'leaves': (None, 0.5),
@@ -389,6 +392,15 @@ def loadResources(app):
         'crafting_table': ('axe', 2.0),
         'bedrock': (None, float('inf')),
     }
+
+    loadTkTextures(app)
+    if config.USE_OPENGL_BACKEND:
+        loadGlTextures(app)
+        app.textures = app.glTextures
+        app.textureAtlas = loadTextureAtlas(app)
+    else:
+        app.textures = app.tkTextures
+        app.textureIndices = None
 
     app.recipes = [
         Recipe(
