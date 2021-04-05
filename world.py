@@ -84,8 +84,8 @@ class WorldgenStage(IntEnum):
 
 seen = set()
 
-CHUNK_HEIGHT = 256
-MESH_HEIGHT = 64
+CHUNK_HEIGHT = 16
+MESH_HEIGHT = 16
 
 MAX_CAVE_DISP = 100
 MAX_CAVE_LENGTH = 200
@@ -305,6 +305,7 @@ class Chunk:
             f.write('\n')
             f.write(','.join(allLights))
     
+    @timed()
     def loadFromAnvilChunk(self, world, instData, chunk):
         for (i, block) in enumerate(chunk.stream_chunk()):
             y = (i // (16 * 16))
@@ -346,12 +347,14 @@ class Chunk:
                 block = 'bedrock'
             self.setBlock(world, instData, BlockPos(x, y, z), block, doUpdateLight=False, doUpdateBuried=False)
 
+            '''
             if block != 'air':
                 thisIdx = self._coordsToIdx(BlockPos(x, y, z))
                 thisInst = self.instances[thisIdx][0]
 
                 if x > 0:
-                    thatIdx = self._coordsToIdx(BlockPos(x - 1, y, z))
+                    thatIdx = thisIdx - 16
+                    #thatIdx = self._coordsToIdx(BlockPos(x - 1, y, z))
 
                     if self.instances[thatIdx] is not None:
                         self.instances[thatIdx][0].visibleFaces[2] = False
@@ -361,7 +364,8 @@ class Chunk:
                         thisInst.visibleFaces[1] = False
                 
                 if z > 0:
-                    thatIdx = self._coordsToIdx(BlockPos(x, y, z - 1))
+                    thatIdx = thisIdx - 1
+                    #thatIdx = self._coordsToIdx(BlockPos(x, y, z - 1))
 
                     if self.instances[thatIdx] is not None:
                         self.instances[thatIdx][0].visibleFaces[6] = False
@@ -372,7 +376,8 @@ class Chunk:
                 
                 
                 if y > 0:
-                    thatIdx = self._coordsToIdx(BlockPos(x, y - 1, z))
+                    #thatIdx = self._coordsToIdx(BlockPos(x, y - 1, z))
+                    thatIdx = thisIdx - 256
 
                     if self.instances[thatIdx] is not None:
                         self.instances[thatIdx][0].visibleFaces[10] = False
@@ -380,6 +385,7 @@ class Chunk:
 
                         thisInst.visibleFaces[8] = False
                         thisInst.visibleFaces[9] = False
+            '''
         
         self.worldgenStage = WorldgenStage.POPULATED
     
@@ -552,13 +558,68 @@ class Chunk:
                         self.lightLevels[newPos[0], yIdx, newPos[1]] = newLevel
                         heapq.heappush(queue, (-newLevel, newPos))
     
-    @timed()
-    def lightAndOptimize(self, app):
-        print(f"Lighting and optimizing chunk at {self.pos}")
+    def updateAllBuried(self, app):
+        for i in range(16 * CHUNK_HEIGHT * 16):
+            if self.instances[i] is not None:
+                self.instances[i][1] = True
+                self.instances[i][0].visibleFaces = [True] * 12
+        
+        for i in range(16 * CHUNK_HEIGHT * 16):
+            if self.instances[i] is not None:
+                x, y, z = self._coordsFromIdx(i)
+                thisInst = self.instances[i][0]
+
+                if x > 0:
+                    thatIdx = i - 16
+                    #thatIdx = self._coordsToIdx(BlockPos(x - 1, y, z))
+
+                    if self.instances[thatIdx] is not None:
+                        self.instances[thatIdx][0].visibleFaces[2] = False
+                        self.instances[thatIdx][0].visibleFaces[3] = False
+
+                        thisInst.visibleFaces[0] = False
+                        thisInst.visibleFaces[1] = False
+                
+                if z > 0:
+                    thatIdx = i - 1
+                    #thatIdx = self._coordsToIdx(BlockPos(x, y, z - 1))
+
+                    if self.instances[thatIdx] is not None:
+                        self.instances[thatIdx][0].visibleFaces[6] = False
+                        self.instances[thatIdx][0].visibleFaces[7] = False
+
+                        thisInst.visibleFaces[4] = False
+                        thisInst.visibleFaces[5] = False
+                
+                
+                if y > 0:
+                    #thatIdx = self._coordsToIdx(BlockPos(x, y - 1, z))
+                    thatIdx = i - 256
+
+                    if self.instances[thatIdx] is not None:
+                        self.instances[thatIdx][0].visibleFaces[10] = False
+                        self.instances[thatIdx][0].visibleFaces[11] = False
+
+                        thisInst.visibleFaces[8] = False
+                        thisInst.visibleFaces[9] = False
+        
+        for i in range(16 * CHUNK_HEIGHT * 16):
+            if self.instances[i] is not None:
+                self.instances[i][1] = any(self.instances[i][0].visibleFaces)
+                
+    '''
+    def updateAllBuried(self, app):
         for xIdx in range(16):
             for yIdx in range(CHUNK_HEIGHT):
                 for zIdx in range(16):
                     self.updateBuriedStateAt(app.world, BlockPos(xIdx, yIdx, zIdx))
+    '''
+    
+    @timed()
+    def lightAndOptimize(self, app):
+        print(f"Lighting and optimizing chunk at {self.pos}")
+        
+        self.updateAllBuried(app)
         
         self.doFirstLighting(app)
             
@@ -685,19 +746,18 @@ class Chunk:
 
 
         usedVertices = []
-    
-        for (i, inst) in enumerate(self.instances):
-            if inst is None: continue
 
-            by = (i // 16) % CHUNK_HEIGHT
-            if (by // MESH_HEIGHT) != meshIdx:
-                continue
+        for i in range(meshIdx * 16 * 16 * MESH_HEIGHT, (meshIdx + 1) * 16 * 16 * MESH_HEIGHT):
+            inst = self.instances[i]
+
+            if inst is None: continue
 
             inst, unburied = inst
             if not unburied: continue
 
-            bx = i // (16 * CHUNK_HEIGHT)
-            bz = (i % 16)
+            by = (i // (16 * 16))
+            bx = (i // 16) % 16
+            bz = i % 16
 
             blockId = self.blocks[bx, by, bz]
 
@@ -735,9 +795,6 @@ class Chunk:
         
         usedVertices = np.array(usedVertices, dtype='float32')
 
-        print(f"100th vertex: {usedVertices[100 * 6:][:6]}")
-        print(f"bytes: {usedVertices.nbytes}")
-            
         vao: int = glGenVertexArrays(1) #type:ignore
         vbo: int = glGenBuffers(1) #type:ignore
 
@@ -764,8 +821,6 @@ class Chunk:
 
         self.worldgenStage = WorldgenStage.COMPLETE
 
-        print(f"Used vertices: {len(usedVertices) / 6}")
-        
         #vao: int = glGenVertexArrays(1) #type:ignore
         #vbo: int = glGenBuffers(1)
         
@@ -773,12 +828,12 @@ class Chunk:
     def _coordsToIdx(self, pos: BlockPos) -> int:
         (xw, yw, zw) = self.blocks.shape
         (x, y, z) = pos
-        return x * yw * zw + y * zw + z
+        return y * xw * zw + x * zw + z
 
     def _coordsFromIdx(self, idx: int) -> BlockPos:
         (x, y, z) = self.blocks.shape
-        xIdx = idx // (y * z)
-        yIdx = (idx // z) % y
+        yIdx = (idx // (z * x))
+        xIdx = (idx // z) % x
         zIdx = (idx % z)
         return BlockPos(xIdx, yIdx, zIdx)
     

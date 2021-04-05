@@ -661,8 +661,8 @@ def drawToFaces(app):
                     #wy = chunk.pos[1] * 16 + (i // 16) % 16
                     #wz = chunk.pos[2] * 16 + (i % 16)
 
-                    wx = cx + (i // 256)
-                    wy = cy + (i // 16) % 16
+                    wy = cy + (i // 256)
+                    wx = cx + (i // 16) % 16
                     wz = cz + (i % 16)
 
                     if abs(wx - camX) >= renderDist: continue
