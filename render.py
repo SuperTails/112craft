@@ -509,8 +509,9 @@ def renderInstancesGl(app, canvas):
         cy *= world.CHUNK_HEIGHT
         cz *= 16
 
-        if hasattr(chunk, 'vao'):
-            chunkVaos.append((chunk.vertexCnt, chunk.vao))
+        if hasattr(chunk, 'meshVaos'):
+            for i in range(len(chunk.meshVaos)):
+                chunkVaos.append((chunk.meshVertexCounts[i], chunk.meshVaos[i]))
 
         '''
         for i, inst in enumerate(chunk.instances):

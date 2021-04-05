@@ -85,6 +85,7 @@ class WorldgenStage(IntEnum):
 seen = set()
 
 CHUNK_HEIGHT = 256
+MESH_HEIGHT = 64
 
 MAX_CAVE_DISP = 100
 MAX_CAVE_LENGTH = 200
@@ -154,24 +155,27 @@ def generateCaveCenter(startPos: BlockPos, seed: int) -> List[BlockPos]:
     positions.sort()
     return positions
 
-def timed(f, count=3): 
-    i = 0
-    durations = [0.0] * count
+def timed(count=3):
+    def timedDecor(f):
+        i = 0
+        durations = [0.0] * count
 
-    def wrapper(*args, **kwargs):
-        start = time.perf_counter()
-        f(*args, **kwargs)
-        end = time.perf_counter()
+        def wrapper(*args, **kwargs):
+            start = time.perf_counter()
+            f(*args, **kwargs)
+            end = time.perf_counter()
 
-        nonlocal i, durations
-        durations[i] = end - start
-        i += 1
-        i %= len(durations)
+            nonlocal i, durations
+            durations[i] = end - start
+            i += 1
+            i %= len(durations)
 
-        avg = sum(durations) / len(durations)
-        print(f"average time for {f.__name__} is {avg}")
+            avg = sum(durations) / len(durations)
+            print(f"average time for {f.__name__} is {avg}")
 
-    return wrapper
+        return wrapper
+
+    return timedDecor
 
 def binarySearchIdx(L: List[BlockPos], x: int) -> Optional[int]:
     startIdx = 0
@@ -212,22 +216,68 @@ def binarySearchMax(L: List[BlockPos], x: int) -> Optional[int]:
                 return i - 1
         
         return len(L) - 1
+
+CUBE_MESH_VERTICES = np.array([
+    # Left face
+    -0.5,  0.5,  0.5,  1.0, 1.0, # top-right
+    -0.5,  0.5, -0.5,  0.0, 1.0, # top-left
+    -0.5, -0.5, -0.5,  0.0, 0.0, # bottom-left
+    -0.5, -0.5, -0.5,  0.0, 0.0, # bottom-left
+    -0.5, -0.5,  0.5,  1.0, 0.0, # bottom-right
+    -0.5,  0.5,  0.5,  1.0, 1.0, # top-right
+    # Right face
+    0.5,  0.5,  0.5,  0.0, 1.0, # top-left
+    0.5, -0.5, -0.5,  1.0, 0.0, # bottom-right
+    0.5,  0.5, -0.5,  1.0, 1.0, # top-right         
+    0.5, -0.5, -0.5,  1.0, 0.0, # bottom-right
+    0.5,  0.5,  0.5,  0.0, 1.0, # top-left
+    0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left     
+    # Back face
+    -0.5, -0.5, -0.5,  0.0, 0.0, # Bottom-left
+        0.5,  0.5, -0.5,  1.0, 1.0, # top-right
+        0.5, -0.5, -0.5,  1.0, 0.0, # bottom-right         
+        0.5,  0.5, -0.5,  1.0, 1.0, # top-right
+    -0.5, -0.5, -0.5,  0.0, 0.0, # bottom-left
+    -0.5,  0.5, -0.5,  0.0, 1.0, # top-left
+    # Front face
+    -0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
+        0.5, -0.5,  0.5,  1.0, 0.0, # bottom-right
+        0.5,  0.5,  0.5,  1.0, 1.0, # top-right
+        0.5,  0.5,  0.5,  1.0, 1.0, # top-right
+    -0.5,  0.5,  0.5,  0.0, 1.0, # top-left
+    -0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
+    # Bottom face
+    -0.5, -0.5, -0.5,  1.0, 1.0, # top-right
+        0.5, -0.5, -0.5,  0.0, 1.0, # top-left
+        0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
+        0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
+    -0.5, -0.5,  0.5,  1.0, 0.0, # bottom-right
+    -0.5, -0.5, -0.5,  1.0, 1.0, # top-right
+    # Top face
+    -0.5,  0.5, -0.5,  0.0, 1.0, # top-left
+        0.5,  0.5,  0.5,  1.0, 0.0, # bottom-right
+        0.5,  0.5, -0.5,  1.0, 1.0, # top-right     
+        0.5,  0.5,  0.5,  1.0, 0.0, # bottom-right
+    -0.5,  0.5, -0.5,  0.0, 1.0, # top-left
+    -0.5,  0.5,  0.5,  0.0, 0.0, # bottom-left
+    ], dtype='float32')
+
         
 class Chunk:
     pos: ChunkPos
     blocks: ndarray
     lightLevels: ndarray
     instances: List[Any]
-    vao: int
+
+    meshVaos: List[int]
+    meshVertexCounts: List[int]
+    meshDirtyFlags: List[bool]
 
     worldgenStage: WorldgenStage = WorldgenStage.NOT_STARTED
 
     isTicking: bool = False
     isVisible: bool = False
 
-    meshDirty: bool
-
-    meshIdx: int = 0
     vertexCnt: int = 0
 
     def __init__(self, pos: ChunkPos):
@@ -237,11 +287,9 @@ class Chunk:
         self.lightLevels = np.full((16, CHUNK_HEIGHT, 16), 0)
         self.instances = [None] * self.blocks.size
 
-        self.meshIdx = 0
-
-        self.vao = 0
-
-        self.meshDirty = True
+        self.meshVaos = [0] * (CHUNK_HEIGHT // MESH_HEIGHT)
+        self.meshVertexCounts = [0] * (CHUNK_HEIGHT // MESH_HEIGHT)
+        self.meshDirtyFlags = [True] * (CHUNK_HEIGHT // MESH_HEIGHT)
     
     def save(self, path):
         allBlocks = []
@@ -351,7 +399,7 @@ class Chunk:
         
         self.worldgenStage = WorldgenStage.POPULATED
 
-    @timed
+    @timed()
     def generate(self, world, instData, cavePositions, seed):
         # x and y and z
         minVal = 100.0
@@ -504,7 +552,7 @@ class Chunk:
                         self.lightLevels[newPos[0], yIdx, newPos[1]] = newLevel
                         heapq.heappush(queue, (-newLevel, newPos))
     
-    @timed
+    @timed()
     def lightAndOptimize(self, app):
         print(f"Lighting and optimizing chunk at {self.pos}")
         for xIdx in range(16):
@@ -515,23 +563,28 @@ class Chunk:
         self.doFirstLighting(app)
             
         self.worldgenStage = WorldgenStage.OPTIMIZED
-    
+
     def createMesh(self, world: 'World', instData):
-        if not self.meshDirty:
+        for i in range(len(self.meshVaos)):
+            self.createOneMesh(i, world, instData)
+        
+        self.worldgenStage = WorldgenStage.COMPLETE
+    
+    def createOneMesh(self, i: int, world: 'World', instData):
+        if not self.meshDirtyFlags[i]:
             return
         
-        self.createMeshUncached(world, instData)
+        self.createOneMeshUncached(i, world, instData)
     
-    @timed
-    def createMeshUncached(self, world: 'World', instData):
-        self.meshDirty = False
+    @timed(count=1)
+    def createOneMeshUncached(self, meshIdx: int, world: 'World', instData):
+        self.meshDirtyFlags[meshIdx] = False
 
         if not config.USE_OPENGL_BACKEND:
-            self.worldgenStage = WorldgenStage.COMPLETE
             return
 
-        if self.vao != 0:
-            self.vao = 0
+        if self.meshVaos[meshIdx] != 0:
+            self.meshVaos[meshIdx] = 0
             # FIXME:
             # glDeleteVertexArrays(self.vao) #type:ignore
             # glDeleteBuffers(vbo)
@@ -630,62 +683,20 @@ class Chunk:
         ], dtype='float32')
         '''
 
-        vertices = np.array([
-        # Left face
-        -0.5,  0.5,  0.5,  1.0, 1.0, # top-right
-        -0.5,  0.5, -0.5,  0.0, 1.0, # top-left
-        -0.5, -0.5, -0.5,  0.0, 0.0, # bottom-left
-        -0.5, -0.5, -0.5,  0.0, 0.0, # bottom-left
-        -0.5, -0.5,  0.5,  1.0, 0.0, # bottom-right
-        -0.5,  0.5,  0.5,  1.0, 1.0, # top-right
-        # Right face
-        0.5,  0.5,  0.5,  0.0, 1.0, # top-left
-        0.5, -0.5, -0.5,  1.0, 0.0, # bottom-right
-        0.5,  0.5, -0.5,  1.0, 1.0, # top-right         
-        0.5, -0.5, -0.5,  1.0, 0.0, # bottom-right
-        0.5,  0.5,  0.5,  0.0, 1.0, # top-left
-        0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left     
-        # Back face
-        -0.5, -0.5, -0.5,  0.0, 0.0, # Bottom-left
-         0.5,  0.5, -0.5,  1.0, 1.0, # top-right
-         0.5, -0.5, -0.5,  1.0, 0.0, # bottom-right         
-         0.5,  0.5, -0.5,  1.0, 1.0, # top-right
-        -0.5, -0.5, -0.5,  0.0, 0.0, # bottom-left
-        -0.5,  0.5, -0.5,  0.0, 1.0, # top-left
-        # Front face
-        -0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
-         0.5, -0.5,  0.5,  1.0, 0.0, # bottom-right
-         0.5,  0.5,  0.5,  1.0, 1.0, # top-right
-         0.5,  0.5,  0.5,  1.0, 1.0, # top-right
-        -0.5,  0.5,  0.5,  0.0, 1.0, # top-left
-        -0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
-        # Bottom face
-        -0.5, -0.5, -0.5,  1.0, 1.0, # top-right
-         0.5, -0.5, -0.5,  0.0, 1.0, # top-left
-         0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
-         0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
-        -0.5, -0.5,  0.5,  1.0, 0.0, # bottom-right
-        -0.5, -0.5, -0.5,  1.0, 1.0, # top-right
-        # Top face
-        -0.5,  0.5, -0.5,  0.0, 1.0, # top-left
-         0.5,  0.5,  0.5,  1.0, 0.0, # bottom-right
-         0.5,  0.5, -0.5,  1.0, 1.0, # top-right     
-         0.5,  0.5,  0.5,  1.0, 0.0, # bottom-right
-        -0.5,  0.5, -0.5,  0.0, 1.0, # top-left
-        -0.5,  0.5,  0.5,  0.0, 0.0, # bottom-left
-        ], dtype='float32')
-
 
         usedVertices = []
     
         for (i, inst) in enumerate(self.instances):
             if inst is None: continue
 
+            by = (i // 16) % CHUNK_HEIGHT
+            if (by // MESH_HEIGHT) != meshIdx:
+                continue
+
             inst, unburied = inst
             if not unburied: continue
 
             bx = i // (16 * CHUNK_HEIGHT)
-            by = (i // 16) % CHUNK_HEIGHT
             bz = (i % 16)
 
             blockId = self.blocks[bx, by, bz]
@@ -695,7 +706,7 @@ class Chunk:
 
                 faceVertices = [] 
                 for l in range(6):
-                    faceVertices += list(vertices[((faceIdx // 2) * 6 + l) * 5:][:5]) + [0.0]
+                    faceVertices += list(CUBE_MESH_VERTICES[((faceIdx // 2) * 6 + l) * 5:][:5]) + [0.0]
                 
                 adjBlockPos = adjacentBlockPos(BlockPos(bx, by, bz), faceIdx)
                 (ckPos, ckLocal) = toChunkLocal(self._globalBlockPos(adjBlockPos))
@@ -748,8 +759,8 @@ class Chunk:
 
         glBindVertexArray(0)
 
-        self.vao = vao
-        self.vertexCnt = len(usedVertices) // 6
+        self.meshVaos[meshIdx] = vao
+        self.meshVertexCounts[meshIdx] = len(usedVertices) // 6
 
         self.worldgenStage = WorldgenStage.COMPLETE
 
@@ -809,7 +820,9 @@ class Chunk:
         return self.blocks[x, y, z] != 'air'
 
     def setBlock(self, world, instData, blockPos: BlockPos, id: BlockId, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False):
-        self.meshDirty = True
+        meshIdx = blockPos.y // MESH_HEIGHT
+        self.meshDirtyFlags[meshIdx] = True
+
         (textures, cube, _) = instData
         (x, y, z) = blockPos
         self.blocks[x, y, z] = id
@@ -1227,7 +1240,29 @@ def updateBuriedStateNear(world: World, blockPos: BlockPos):
         if world.coordsInBounds(pos):
             updateBuriedStateAt(world, pos)
 
+# length is dist * 2
+
 def adjacentChunks(chunkPos, dist):
+    for r in range(1, dist + 1):
+        length = r * 2
+        corners = (
+            ((-1,  1), ( 1,  0)),
+            (( 1,  1), ( 0, -1)),
+            (( 1, -1), (-1,  0)),
+            ((-1, -1), ( 0,  1)),
+        )
+        for ((cx, cz), (dx, dz)) in corners:
+            for i in range(length):
+                xOffset = cx * r + dx * i
+                zOffset = cz * r + dz * i
+
+                (x, y, z) = chunkPos
+                x += xOffset
+                z += zOffset
+
+                yield ChunkPos(x, y, z)
+            
+def adjacentChunks2(chunkPos, dist):
     for xOffset in range(-dist, dist+1):
         for zOffset in range(-dist, dist+1):
             if xOffset == 0 and zOffset == 0: continue
