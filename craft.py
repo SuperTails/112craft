@@ -683,7 +683,7 @@ def appStarted(app):
     app.cameraYaw = 0
     app.cameraPitch = 0
 
-    if world.CHUNK_HEIGHT == 256:
+    if world.CHUNK_HEIGHT == 256: #type:ignore
         app.cameraPos = [2.0, 72, 4.0]
     else:
         app.cameraPos = [2.0, 10.0, 4.0]
@@ -695,7 +695,7 @@ def appStarted(app):
     app.vpWidth = 3.0 / 4.0
     app.vpHeight = app.vpWidth * app.height / app.width 
     app.wireframe = False
-    app.renderDistanceSq = 10**2
+    app.renderDistanceSq = 9**2
 
     app.horizFov = math.atan(app.vpWidth / app.vpDist)
     app.vertFov = math.atan(app.vpHeight / app.vpDist)

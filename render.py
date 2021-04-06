@@ -846,6 +846,12 @@ def drawHud(app, canvas, startTime):
 
     drawTextOutlined(canvas, 10, 90, text=f'Chunk coords: {chunkX}, {chunkY}, {chunkZ}', anchor='nw')
 
+    # FIXME:
+    if hasattr(app.mode, 'player'):
+        feetPos = (app.cameraPos[0], app.cameraPos[1] - app.mode.player.height + 0.1, app.cameraPos[2])
+        lightLevel = app.world.getLightLevel(world.nearestBlockPos(feetPos[0], feetPos[1], feetPos[2]))
+        drawTextOutlined(canvas, 10, 140, text=f'Light level: {lightLevel}', anchor='nw')
+
 def redrawAll(app, canvas, doDrawHud=True):
     startTime = time.time()
     

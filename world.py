@@ -84,7 +84,7 @@ class WorldgenStage(IntEnum):
 
 seen = set()
 
-CHUNK_HEIGHT = 16
+CHUNK_HEIGHT = 256
 MESH_HEIGHT = 16
 
 MAX_CAVE_DISP = 100
@@ -234,30 +234,30 @@ CUBE_MESH_VERTICES = np.array([
     0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left     
     # Back face
     -0.5, -0.5, -0.5,  0.0, 0.0, # Bottom-left
-        0.5,  0.5, -0.5,  1.0, 1.0, # top-right
-        0.5, -0.5, -0.5,  1.0, 0.0, # bottom-right         
-        0.5,  0.5, -0.5,  1.0, 1.0, # top-right
+    0.5,  0.5, -0.5,  1.0, 1.0, # top-right
+    0.5, -0.5, -0.5,  1.0, 0.0, # bottom-right         
+    0.5,  0.5, -0.5,  1.0, 1.0, # top-right
     -0.5, -0.5, -0.5,  0.0, 0.0, # bottom-left
     -0.5,  0.5, -0.5,  0.0, 1.0, # top-left
     # Front face
     -0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
-        0.5, -0.5,  0.5,  1.0, 0.0, # bottom-right
-        0.5,  0.5,  0.5,  1.0, 1.0, # top-right
-        0.5,  0.5,  0.5,  1.0, 1.0, # top-right
+    0.5, -0.5,  0.5,  1.0, 0.0, # bottom-right
+    0.5,  0.5,  0.5,  1.0, 1.0, # top-right
+    0.5,  0.5,  0.5,  1.0, 1.0, # top-right
     -0.5,  0.5,  0.5,  0.0, 1.0, # top-left
     -0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
     # Bottom face
     -0.5, -0.5, -0.5,  1.0, 1.0, # top-right
-        0.5, -0.5, -0.5,  0.0, 1.0, # top-left
-        0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
-        0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
+    0.5, -0.5, -0.5,  0.0, 1.0, # top-left
+    0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
+    0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
     -0.5, -0.5,  0.5,  1.0, 0.0, # bottom-right
     -0.5, -0.5, -0.5,  1.0, 1.0, # top-right
     # Top face
     -0.5,  0.5, -0.5,  0.0, 1.0, # top-left
-        0.5,  0.5,  0.5,  1.0, 0.0, # bottom-right
-        0.5,  0.5, -0.5,  1.0, 1.0, # top-right     
-        0.5,  0.5,  0.5,  1.0, 0.0, # bottom-right
+    0.5,  0.5,  0.5,  1.0, 0.0, # bottom-right
+    0.5,  0.5, -0.5,  1.0, 1.0, # top-right     
+    0.5,  0.5,  0.5,  1.0, 0.0, # bottom-right
     -0.5,  0.5, -0.5,  0.0, 1.0, # top-left
     -0.5,  0.5,  0.5,  0.0, 0.0, # bottom-left
     ], dtype='float32')
@@ -270,6 +270,7 @@ class Chunk:
     instances: List[Any]
 
     meshVaos: List[int]
+    meshVbos: List[int]
     meshVertexCounts: List[int]
     meshDirtyFlags: List[bool]
 
@@ -288,6 +289,7 @@ class Chunk:
         self.instances = [None] * self.blocks.size
 
         self.meshVaos = [0] * (CHUNK_HEIGHT // MESH_HEIGHT)
+        self.meshVbos = [0] * (CHUNK_HEIGHT // MESH_HEIGHT)
         self.meshVertexCounts = [0] * (CHUNK_HEIGHT // MESH_HEIGHT)
         self.meshDirtyFlags = [True] * (CHUNK_HEIGHT // MESH_HEIGHT)
     
@@ -644,11 +646,6 @@ class Chunk:
         if not config.USE_OPENGL_BACKEND:
             return
 
-        if self.meshVaos[meshIdx] != 0:
-            self.meshVaos[meshIdx] = 0
-            # FIXME:
-            # glDeleteVertexArrays(self.vao) #type:ignore
-            # glDeleteBuffers(vbo)
 
         '''
         vertices = np.array([
@@ -790,10 +787,23 @@ class Chunk:
 
                     faceVertices[idx2 * 6 + 5] = lightLevel
 
-
                 usedVertices += faceVertices
         
         usedVertices = np.array(usedVertices, dtype='float32')
+
+        self.setMesh(meshIdx, usedVertices)
+
+        self.worldgenStage = WorldgenStage.COMPLETE
+
+        #vao: int = glGenVertexArrays(1) #type:ignore
+        #vbo: int = glGenBuffers(1)
+        
+    def setMesh(self, meshIdx: int, usedVertices: ndarray):
+        if self.meshVaos[meshIdx] != 0:
+            glDeleteVertexArrays(1, np.array([self.meshVaos[meshIdx]])) #type:ignore
+            glDeleteBuffers(1, np.array([self.meshVbos[meshIdx]])) #type:ignore
+
+            self.meshVaos[meshIdx] = 0
 
         vao: int = glGenVertexArrays(1) #type:ignore
         vbo: int = glGenBuffers(1) #type:ignore
@@ -817,13 +827,9 @@ class Chunk:
         glBindVertexArray(0)
 
         self.meshVaos[meshIdx] = vao
+        self.meshVbos[meshIdx] = vbo
         self.meshVertexCounts[meshIdx] = len(usedVertices) // 6
 
-        self.worldgenStage = WorldgenStage.COMPLETE
-
-        #vao: int = glGenVertexArrays(1) #type:ignore
-        #vbo: int = glGenBuffers(1)
-        
 
     def _coordsToIdx(self, pos: BlockPos) -> int:
         (xw, yw, zw) = self.blocks.shape
@@ -956,7 +962,7 @@ class World:
             if self.getBlock(BlockPos(x, y, z)) != 'air':
                 return y
         return 0
-
+    
     def __init__(self, name: str, seed=None, importPath=''):
         self.chunks = {}
         self.name = name
@@ -1392,7 +1398,7 @@ def loadUnloadChunks(app, centerPos):
 
     #queuedForLoad = []
 
-    for loadChunkPos in adjacentChunks(chunkPos, 4):
+    for loadChunkPos in adjacentChunks(chunkPos, 3):
         if loadChunkPos not in app.world.chunks:
             (ux, _, uz) = loadChunkPos
             dist = max(abs(ux - x), abs(uz - z))
