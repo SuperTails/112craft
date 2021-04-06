@@ -327,9 +327,9 @@ class Chunk:
 
             if block == 'grass_block':
                 block = 'grass'
-            elif block in ['smooth_stone_slab', 'coal_ore', 'gravel']:
+            elif block in ['smooth_stone_slab', 'gravel']:
                 block = 'stone'
-            elif block in ['cobblestone', 'mossy_cobblestone']:
+            elif block in ['mossy_cobblestone']:
                 block = 'cobblestone'
             elif block in ['oak_leaves', 'birch_leaves']:
                 block = 'leaves'

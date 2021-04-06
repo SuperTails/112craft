@@ -35,6 +35,7 @@ def convertAnchor(anchor):
 
     return horiz2 + vert2
 
+ALPHA_COLOR = (0xFE, 0xFE, 0xFE)
 
 class Canvas:
     image: Image.Image
@@ -51,7 +52,7 @@ class Canvas:
     font: ImageFont.ImageFont
 
     def __init__(self, width, height):
-        self.image = Image.new("RGBA", (width, height), color=(0, 0, 0, 0))
+        self.image = Image.new("RGB", (width, height), color=ALPHA_COLOR)
         self.draw = typing.cast(ImageDraw.ImageDraw, ImageDraw.Draw(self.image, "RGBA"))
 
         self._createGlSurface()
@@ -164,14 +165,14 @@ class Canvas:
         #grassTex = grassTex.transpose(Image.FLIP_TOP_BOTTOM)
         arr = numpy.asarray(self.image, dtype=numpy.uint8)
 
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, self.image.width, self.image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, arr) #type:ignore
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, self.image.width, self.image.height, 0, GL_RGB, GL_UNSIGNED_BYTE, arr) #type:ignore
 
         glBindTexture(GL_TEXTURE_2D, 0)
     
     def redraw(self):
         glBindTexture(GL_TEXTURE_2D, self.texture)
         arr = numpy.asarray(self.image, dtype=numpy.uint8)
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, self.image.width, self.image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, arr) #type:ignore
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, self.image.width, self.image.height, 0, GL_RGB, GL_UNSIGNED_BYTE, arr) #type:ignore
         #glBindTexture(GL_TEXTURE_2D, 0)
 
         glActiveTexture(GL_TEXTURE0)
@@ -180,11 +181,12 @@ class Canvas:
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
         self.program.useProgram()
+        glUniform3f(self.program.getUniformLocation("alphaColor"), ALPHA_COLOR[0] / 255.0, ALPHA_COLOR[1] / 255.0, ALPHA_COLOR[2] / 255.0)
 
         glBindVertexArray(self.vao)
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, ctypes.c_void_p(0)) #type:ignore
 
         glBlendFunc(GL_SRC_ALPHA, GL_ZERO)
 
-        self.image = Image.new("RGBA", (self.width, self.height), color=(0, 0, 0, 0))
+        self.image = Image.new("RGB", (self.width, self.height), color=ALPHA_COLOR)
         self.draw = typing.cast(ImageDraw.ImageDraw, ImageDraw.Draw(self.image, "RGBA"))

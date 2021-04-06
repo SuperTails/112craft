@@ -917,9 +917,10 @@ def drawItemFromBlock2(sz: int, base: Image.Image) -> Image.Image:
 
         for y in range(0, 16):
             srcY = 16 + y
-            dstY = centerLeft[1] + y - int(partH * (x - midX) / 16.0)
+            dstY = int(centerMiddle[1] + (y / 16.0) * partH * 3 - partH * (x / 16.0))
 
             pixel = base.getpixel((srcX, srcY))
+
 
             im.putpixel((dstX, dstY), pixel)
 
