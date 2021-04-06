@@ -363,34 +363,78 @@ def loadGlTextures(app):
     
     app.guiProgram = ShaderProgram('shaders/guiShader.vert', 'shaders/guiShader.frag')
 
+def registerBlock(
+    app,
+    blockId: world.BlockId,
+    texturePath: Tuple[str, bool],
+    hardness: Tuple[Optional[str], float],
+    drops: dict[str, world.ItemId],
+):
+    # TODO: INTEGRATE WITH `loadTkTextures`
+
+    app.texturePaths[blockId] = texturePath
+    app.hardnesses[blockId] = hardness
+    app.blockDrops[blockId] = drops
+
+    # TODO: Block drops
+
+    # TODO: TkTextures (see below)
+
+    pass
+
+#def createTk
+
+#def createTkFace(im: Image.Image, offsetX: int, offsetY: int) -> List[int]:
+
 def loadResources(app):
     app.sounds = {
         'grass': Sound('assets/grass.ogg'),
         'destroy_grass': Sound('assets/destroy_grass.ogg')
     }
 
+    app.texturePaths = {}
+    app.hardnesses = {}
+
     app.texturePaths = {
         'grass': ('assets/grass.png', False),
         'dirt': ('assets/dirt.png', True),
         'stone': ('assets/stone.png', True),
+        'coal_ore': ('assets/coal_ore.png', True),
+        'iron_ore': ('assets/iron_ore.png', True),
         'cobblestone': ('assets/cobblestone.png', True),
         'leaves': ('assets/leaves.png', False),
         'log': ('assets/log.png', False),
         'bedrock': ('assets/bedrock.png', True),
         'planks': ('assets/oak_planks.png', True),
-        'crafting_table': ('assets/missing.png', False),
+        'crafting_table': ('assets/crafting_table.png', False),
     }
 
     app.hardnesses = {
         'grass': ('shovel', 1.0),
         'dirt': ('shovel', 0.8),
         'stone': ('pickaxe', 5.0),
+        'coal_ore': ('pickaxe', 6.0),
+        'iron_ore': ('pickaxe', 6.0),
         'cobblestone': ('pickaxe', 6.0),
         'leaves': (None, 0.5),
         'log': ('axe', 2.0),
         'planks': ('axe', 2.0),
         'crafting_table': ('axe', 2.0),
         'bedrock': (None, float('inf')),
+    }
+
+    app.blockDrops = {
+        'grass': { '': 'dirt' },
+        'dirt': { '': 'dirt' }, 
+        'stone': { '': None, 'pickaxe': 'cobblestone' },
+        'coal_ore': { '': None, 'pickaxe': 'coal' },
+        'iron_ore': { '': None, 'pickaxe': 'iron_ore' },
+        'cobblestone': { '': 'cobblestone' },
+        'leaves': { '': None },
+        'log': { '': 'log' },
+        'planks': { '': 'planks' },
+        'crafting_table': { '': 'crafting_table' },
+        'bedrock': { '': None },
     }
 
     loadTkTextures(app)
@@ -471,6 +515,7 @@ def loadResources(app):
     commonItemTextures = {
         'air': Image.open('assets/AirItem.png'),
         'stick': Image.open('assets/Stick.png'),
+        'coal': Image.open('assets/coal.png'),
         'wooden_pickaxe': Image.open('assets/WoodenPickaxe.png'),
         'stone_pickaxe': Image.open('assets/StonePickaxe.png'),
         'wooden_axe': Image.open('assets/WoodenAxe.png'),
@@ -493,6 +538,13 @@ def loadResources(app):
         app.itemTextures = app.glItemTextures
     else:
         app.itemTextures = app.tkItemTextures
+
+def getBlockDrop(app, block: world.BlockId, tool: world.ItemId) -> world.ItemId:
+    drops = app.blockDrops[block]
+    if tool not in drops:
+        return drops['']
+    else:
+        return drops[tool]
 
 def getHardnessAgainst(app, block: world.BlockId, tool: world.ItemId) -> float:
     (goodTool, base) = app.hardnesses[block]

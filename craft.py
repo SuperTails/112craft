@@ -19,7 +19,7 @@ from world import Chunk, ChunkPos, World
 from typing import List, Optional, Tuple
 from enum import Enum
 from player import Player, Slot
-from resources import loadResources, getHardnessAgainst
+from resources import loadResources, getHardnessAgainst, getBlockDrop
 
 # =========================================================================== #
 # ----------------------------- THE APP ------------------------------------- #
@@ -76,7 +76,7 @@ class WorldLoadMode(Mode):
         if self.loadStage < 40:
             world.loadUnloadChunks(app, [0.0, 0.0, 0.0])
         elif self.loadStage < 60:
-            world.tickChunks(app)
+            world.tickChunks(app, maxTime=5.0)
         else:
             app.mode = self.nextMode(app)
             
@@ -662,9 +662,9 @@ class InventoryMode(Mode):
 def appStarted(app):
     loadResources(app)
 
-    app.mode = WorldLoadMode(app, 'world', TitleMode)
-    #def makePlayingMode(app): return PlayingMode(app, False)
-    #app.mode = WorldLoadMode(app, 'abcd', makePlayingMode)
+    #app.mode = WorldLoadMode(app, 'world', TitleMode)
+    def makePlayingMode(app): return PlayingMode(app, False)
+    app.mode = WorldLoadMode(app, 'cavetest', makePlayingMode)
     #app.mode = CreateWorldMode(app)
 
     app.btnBg = createSizedBackground(app, 200, 40)
@@ -751,10 +751,11 @@ def updateBlockBreaking(app, mode: PlayingMode):
         hardness = getHardnessAgainst(app, blockId, tool)
 
         if app.breakingBlock >= hardness:
-            brokenName = app.world.getBlock(pos)
+            droppedItem = getBlockDrop(app, app.world.getBlock(pos), tool)
             world.removeBlock(app, pos)
             app.sounds['destroy_grass'].play()
-            mode.player.pickUpItem(app, Slot(brokenName, 1))
+            if droppedItem is not None:
+                mode.player.pickUpItem(app, Slot(droppedItem, 1))
     else:
         app.breakingBlock = 0.0
 

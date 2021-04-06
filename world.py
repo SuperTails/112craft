@@ -117,8 +117,16 @@ class Emu:
     def step(self, seed: int) -> bool:
         random.seed(hash((self.count, seed)))
 
-        self.yaw += ((random.random() * 2.0) - 1.0) * (3.14159 * 2 * 30.0 / 360.0)
-        self.pitch += ((random.random() * 2.0) - 1.0) * (3.14159 * 2 * 30.0 / 360.0)
+        self.yaw += ((random.random() * 2.0) - 1.0) * math.radians(20.0)
+
+        # Caves should not intersect with the bottom of the world,
+        # so make them go back upwards if they're too low
+        if self.y > 10 or self.pitch > 0.0:
+            pitchOffset = 0.0
+        else:
+            pitchOffset = math.exp(-0.5 * self.y)
+
+        self.pitch += ((random.random() * 2.0) - 1.0 + pitchOffset) * math.radians(20.0)
 
         self.x += cos(self.pitch) * cos(self.yaw)
         self.y += sin(self.pitch)
@@ -415,11 +423,8 @@ class Chunk:
 
         positions = set()
 
-        '''
         minIdx = binarySearchMin(cavePositions, self.pos.x * 16 - 1)
         maxIdx = binarySearchMax(cavePositions, (self.pos.x + 1) * 16)
-
-        positions = set()
 
         if minIdx is not None or maxIdx is not None:
             if minIdx is None:
@@ -438,9 +443,7 @@ class Chunk:
                                 positions.add(ckLocal)
             
 
-            print("Positions: ")
-            print(cavePositions[minIdx:maxIdx + 1])
-        '''
+            print(f"{len(positions)}-many positions: ")
 
         for xIdx in range(0, 16):
             for zIdx in range(0, 16):
@@ -470,8 +473,25 @@ class Chunk:
 
         self.worldgenStage = WorldgenStage.GENERATED
     
+    def disperseOre(self, app, seed, ore: BlockId, frequency: int, maxHeight: int):
+        instData = (app.textures, app.cube, app.textureIndices)
+
+        for _ in range(frequency):
+            x = random.randrange(0, 16)
+            y = random.randrange(0, maxHeight)
+            z = random.randrange(0, 16)
+
+            for x in range(x, min(x + 2, 16)):
+                for y in range(y, min(y + 2, CHUNK_HEIGHT)):
+                    for z in range(z, min(z + 2, 16)):
+                        if self.blocks[x, y, z] == 'stone':
+                            self.setBlock(app.world, instData, BlockPos(x, y, z), ore, doUpdateLight=False, doUpdateBuried=False, doUpdateMesh=False)
+    
     def populate(self, app, seed):
         random.seed(hash((self.pos, seed)))
+
+        self.disperseOre(app, seed, 'coal_ore', 20, CHUNK_HEIGHT // 2)
+        self.disperseOre(app, seed, 'iron_ore', 20, CHUNK_HEIGHT // 4)
 
         treePos = []
 
@@ -626,6 +646,16 @@ class Chunk:
         self.doFirstLighting(app)
             
         self.worldgenStage = WorldgenStage.OPTIMIZED
+    
+    def createNextMesh(self, world: 'World', instData) -> bool:
+        """Returns True if any meshes were actually changed"""
+
+        for i in range(len(self.meshVaos)):
+            if self.meshDirtyFlags[i]:
+                self.createOneMesh(i, world, instData)
+                return True
+            
+        return False
 
     def createMesh(self, world: 'World', instData):
         for i in range(len(self.meshVaos)):
@@ -793,7 +823,8 @@ class Chunk:
 
         self.setMesh(meshIdx, usedVertices)
 
-        self.worldgenStage = WorldgenStage.COMPLETE
+        if not any(self.meshDirtyFlags):
+            self.worldgenStage = WorldgenStage.COMPLETE
 
         #vao: int = glGenVertexArrays(1) #type:ignore
         #vbo: int = glGenBuffers(1)
@@ -1369,25 +1400,18 @@ def mapMultiFunc(pair):
     (world, instData, chunkPos) = pair
     return (chunkPos, world.createChunk(instData, chunkPos))
 
-import multiprocessing as multip
-
-myPool = None
-
 def loadUnloadChunks(app, centerPos):
     (chunkPos, _) = toChunkLocal(nearestBlockPos(centerPos[0], centerPos[1], centerPos[2]))
     (x, _, z) = chunkPos
 
-    #global myPool
-
-    #if myPool is None:
-    #    myPool = multip.Pool(5)
+    chunkLoadDistance = math.ceil(config.CHUNK_LOAD_DISTANCE / 16)
 
     # Unload chunks
     shouldUnload = []
     for unloadChunkPos in app.world.chunks:
         (ux, _, uz) = unloadChunkPos
         dist = max(abs(ux - x), abs(uz - z))
-        if dist > 5:
+        if dist > chunkLoadDistance + 1:
             # Unload chunk
             shouldUnload.append(unloadChunkPos)
 
@@ -1398,7 +1422,7 @@ def loadUnloadChunks(app, centerPos):
 
     #queuedForLoad = []
 
-    for loadChunkPos in adjacentChunks(chunkPos, 3):
+    for loadChunkPos in adjacentChunks(chunkPos, chunkLoadDistance):
         if loadChunkPos not in app.world.chunks:
             (ux, _, uz) = loadChunkPos
             dist = max(abs(ux - x), abs(uz - z))
@@ -1438,19 +1462,34 @@ def countLoadedAdjacentChunks(app, chunkPos: ChunkPos, dist: int) -> Tuple[int, 
             
     return (totalCount, genCount, popCount, optCount, comCount)
 
-def tickChunks(app):
+def tickChunks(app, maxTime=0.030):
+    startTime = time.perf_counter()
+
+    keepGoing = True
+
     for chunkPos in app.world.chunks:
-        chunk = app.world.chunks[chunkPos]
+        chunk: Chunk = app.world.chunks[chunkPos]
         (adj, gen, pop, opt, com) = countLoadedAdjacentChunks(app, chunkPos, 1)
         if chunk.worldgenStage == WorldgenStage.GENERATED and gen == 8:
             chunk.populate(app, app.world.seed)
-        if chunk.worldgenStage == WorldgenStage.POPULATED and gen == 8:
+            if time.perf_counter() - startTime > maxTime:
+                keepGoing = False
+            
+        if keepGoing and chunk.worldgenStage == WorldgenStage.POPULATED and pop == 8:
             chunk.lightAndOptimize(app)
-        if chunk.worldgenStage == WorldgenStage.OPTIMIZED and gen == 8:
-            chunk.createMesh(app.world, (app.textures, app.cube, app.textureIndices))
+            if time.perf_counter() - startTime > maxTime:
+                keepGoing = False
+
+        if keepGoing and chunk.worldgenStage == WorldgenStage.OPTIMIZED and pop == 8:
+            while keepGoing and chunk.createNextMesh(app.world, (app.textures, app.cube, app.textureIndices)):
+                if time.perf_counter() - startTime > maxTime:
+                    keepGoing = False
 
         chunk.isVisible = chunk.worldgenStage == WorldgenStage.COMPLETE
         chunk.isTicking = chunk.isVisible and adj == 8
+
+        if not keepGoing:
+            break
 
 def tick(app):
     startTime = time.time()
