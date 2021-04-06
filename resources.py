@@ -407,12 +407,14 @@ def loadResources(app):
         'bedrock': ('assets/bedrock.png', True),
         'planks': ('assets/oak_planks.png', True),
         'crafting_table': ('assets/crafting_table.png', False),
+        'furnace': ('assets/furnace.png', False)
     }
 
     app.hardnesses = {
         'grass': ('shovel', 1.0),
         'dirt': ('shovel', 0.8),
         'stone': ('pickaxe', 5.0),
+        'furnace': ('pickaxe', 5.0),
         'coal_ore': ('pickaxe', 6.0),
         'iron_ore': ('pickaxe', 6.0),
         'cobblestone': ('pickaxe', 6.0),
@@ -430,6 +432,7 @@ def loadResources(app):
         'coal_ore': { '': None, 'pickaxe': 'coal' },
         'iron_ore': { '': None, 'pickaxe': 'iron_ore' },
         'cobblestone': { '': 'cobblestone' },
+        'furnace': { 'pickaxe': 'furnace' },
         'leaves': { '': None },
         'log': { '': 'log' },
         'planks': { '': 'planks' },
@@ -490,7 +493,7 @@ def loadResources(app):
                 '-s-',
             ],
             Slot('stone_pickaxe', 1),
-            { 'c': 'stone', 's': 'stick' }
+            { 'c': 'cobblestone', 's': 'stick' }
         ),
         Recipe(
             [
@@ -509,6 +512,15 @@ def loadResources(app):
             ],
             Slot('wooden_shovel', 1),
             { 'p': 'planks', 's': 'stick' }
+        ),
+        Recipe(
+            [
+                'ccc',
+                'c-c',
+                'ccc',
+            ],
+            Slot('furnace', 1),
+            { 'c': 'cobblestone' }
         )
     ]
 
@@ -541,10 +553,24 @@ def loadResources(app):
 
 def getBlockDrop(app, block: world.BlockId, tool: world.ItemId) -> world.ItemId:
     drops = app.blockDrops[block]
-    if tool not in drops:
-        return drops['']
+
+    pickaxes = { 'wooden_pickaxe': 0.5, 'stone_pickaxe': 0.25 }
+    axes = { 'wooden_axe': 0.5 }
+    shovels = { 'wooden_shovel': 0.5 }
+
+    if tool in pickaxes:
+        toolKind = 'pickaxe'
+    elif tool in axes:
+        toolKind = 'axe'
+    elif tool in shovels:
+        toolKind = 'shovel'
     else:
-        return drops[tool]
+        toolKind = ''
+    
+    if toolKind in drops:
+        return drops[toolKind]
+    else:
+        return drops['']
 
 def getHardnessAgainst(app, block: world.BlockId, tool: world.ItemId) -> float:
     (goodTool, base) = app.hardnesses[block]
