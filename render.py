@@ -603,14 +603,17 @@ def renderInstancesGl(app, canvas):
         glBindVertexArray(chunkVao)
 
         glDrawArrays(GL_TRIANGLES, 0, amt * 6)
+    
+    drawEntities(app, view, projection)
 
-
+def drawEntities(app, view, projection):
     app.entityProgram.useProgram()
     glUniform1i(app.blockProgram.getUniformLocation("skin"), 0)
     glUniformMatrix4fv(app.entityProgram.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
     glUniformMatrix4fv(app.entityProgram.getUniformLocation("projection"), 1, GL_FALSE, projection) #type:ignore
 
     modelPos = app.entityProgram.getUniformLocation("model")
+    rotPos = app.entityProgram.getUniformLocation("rot")
 
     glActiveTexture(GL_TEXTURE0)
 
@@ -628,10 +631,25 @@ def renderInstancesGl(app, canvas):
         ], dtype='float32')
 
         glUniformMatrix4fv(modelPos, 1, GL_FALSE, modelMat) #type:ignore
+        glUniform1f(rotPos, entity.bodyAngle)
+
+        i = 0
 
         for (vao, num) in model.vaos:
+            if vao == 0: 
+                i += 1
+                continue
+
+            (x, y, z) = entity.getRotation(app, i)
+
+            glUniform1f(app.entityProgram.getUniformLocation("rotX"), x)
+            glUniform1f(app.entityProgram.getUniformLocation("rotY"), y)
+            glUniform1f(app.entityProgram.getUniformLocation("rotZ"), z)
+
             glBindVertexArray(vao)
             glDrawArrays(GL_TRIANGLES, 0, num * 5)
+
+            i += 1
 
 
 

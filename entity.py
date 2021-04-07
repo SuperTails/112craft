@@ -1,5 +1,5 @@
 from os import X_OK
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Any
 import json
 import numpy as np
 import heapq
@@ -68,10 +68,12 @@ class Cube:
 
         offset = np.array([self.origin[0], self.origin[1], self.origin[2], 0.0, 0.0])
 
+        # https://stackoverflow.com/questions/8486294/how-to-add-an-extra-column-to-a-numpy-array/8505658
+
         result = (vertices + np.array([0.5, 0.5, 0.5, 0.0, 0.0])) * factor + offset
 
         for row in range(vertices.shape[0]):
-            face = ['left', 'right', 'back', 'front', 'bottom', 'top'][row // 6]
+            face = ['left', 'right', 'front', 'back', 'bottom', 'top'][row // 6]
 
             if face == 'left':
                 uOffset = 0
@@ -113,7 +115,7 @@ class Cube:
             uFrac = result[row, 3]
             vFrac = result[row, 4]
 
-            result[row, 3] = self.uv[0] + uOffset + uFrac * uSize
+            result[row, 3] = self.uv[0] + uOffset + (1.0 - uFrac) * uSize
             result[row, 4] = (32.0 - (self.uv[1] + self.size[1] + self.size[2])) + vOffset + vFrac * vSize
         
         return result
@@ -123,11 +125,18 @@ class Bone:
     name: str
     pivot: Tuple[float, float, float]
     cubes: List[Cube]
+    bind_pose_rotation: Tuple[float, float, float]
 
     def toVertices(self) -> np.ndarray:
         self.innerVertices = []
         for cube in self.cubes:
-            self.innerVertices.append(cube.toVertices())
+            vertices = cube.toVertices()
+
+            pv = (self.pivot[0], self.pivot[1], self.pivot[2])
+
+            withPivot = np.hstack((vertices, np.full(shape=(vertices.shape[0], 3), fill_value=pv)))
+
+            self.innerVertices.append(withPivot)
         return np.vstack(self.innerVertices)
 
     def toVao(self) -> Tuple[int, int]:
@@ -152,17 +161,57 @@ class Bone:
         glBindBuffer(GL_ARRAY_BUFFER, vbo)
         glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
 
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * 4, ctypes.c_void_p(0))
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * 4, ctypes.c_void_p(0))
         glEnableVertexAttribArray(0)
 
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * 4, ctypes.c_void_p(3 * 4))
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * 4, ctypes.c_void_p(3 * 4))
         glEnableVertexAttribArray(1)
+
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * 4, ctypes.c_void_p(5 * 4))
+        glEnableVertexAttribArray(2)
 
         glBindBuffer(GL_ARRAY_BUFFER, 0)
 
         glBindVertexArray(0)
 
         return (vao, len(vertices) // 5)
+
+@dataclass
+class BoneAnimation:
+    rotation: List[Any]
+
+@dataclass
+class Animation:
+    loop: bool
+    bones: dict[str, BoneAnimation]
+
+def parseBoneAnim(j) -> BoneAnimation:
+    if 'rotation' in j:
+        rotation = j['rotation']
+    else:
+        rotation = [0.0, 0.0, 0.0]
+
+    return BoneAnimation(rotation)
+
+def parseAnimation(j) -> Animation:
+    loop = j['loop']
+    bones = dict()
+    for (name, bone) in j['bones'].items():
+        bones[name] = parseBoneAnim(bone)
+    return Animation(loop, bones)
+
+def openAnimations(path) -> dict[str, Animation]:
+    with open(path) as f:
+        j = json.load(f)
+    
+    result = {}
+    
+    for (name, anim) in j['animations'].items():
+        if name.startswith('animation.'):
+            name = name.removeprefix('animation.')
+            result[name] = parseAnimation(anim)
+    
+    return result
 
 
 @dataclass
@@ -176,6 +225,8 @@ class EntityModel:
         for bone in self.bones:
             if bone.cubes != []:
                 self.vaos.append(bone.toVao())
+            else:
+                self.vaos.append((0, 0))
 
 def parseCube(j) -> Cube:
     origin = tuple(j['origin'])
@@ -194,7 +245,11 @@ def parseBone(j) -> Bone:
         cubes = list(map(parseCube, j['cubes']))
     else:
         cubes = []
-    return Bone(name, pivot, cubes) #type:ignore
+    if 'bind_pose_rotation' in j:
+        bind_pose_rotation = tuple(j['bind_pose_rotation'])
+    else:
+        bind_pose_rotation = (0.0, 0.0, 0.0)
+    return Bone(name, pivot, cubes, bind_pose_rotation) #type:ignore
 
 def parseModel(j) -> EntityModel:
     bones = list(map(parseBone, j['bones']))
@@ -231,6 +286,9 @@ class Entity:
     onGround: bool
     walkSpeed: float
 
+    bodyAngle: float
+    headAngle: float
+
     path: List[BlockPos]
 
     def __init__(self, kind: EntityKind, x: float, y: float, z: float):
@@ -242,9 +300,71 @@ class Entity:
         self.onGround = False
         self.walkSpeed = 0.05
 
+        self.bodyAngle = 0.0
+        self.headAngle = 0.0
+
         self.path = []
     
+    def getRotation(self, app, i):
+        bone = app.entityModels[self.kind].bones[i]
+        boneName = bone.name
+        boneRot = bone.bind_pose_rotation
+
+        if self.kind == 'creeper':
+            anim = app.entityAnimations['creeper.legs']
+        elif self.kind == 'fox':
+            #anim = app.entityAnimations['fox.sit']
+            anim = None
+        else:
+            raise Exception(self.kind)
+
+        if boneName == 'head' and self.kind != 'fox':
+            rot = [0.0, math.degrees(self.headAngle - self.bodyAngle), 0.0]
+        elif anim is not None and boneName in anim.bones:
+            (x, y, z) = anim.bones[boneName].rotation
+            rot = [self.calc(x), self.calc(y), self.calc(z)]
+        else:
+            rot = [0.0, 0.0, 0.0]
+
+        rot[0] += boneRot[0]
+        rot[1] += boneRot[1]
+        rot[2] += boneRot[2]
+
+        rot[0] = math.radians(rot[0])
+        rot[1] = math.radians(rot[1])
+        rot[2] = math.radians(rot[2])
+
+        return rot
+    
+    def calc(self, ex):
+        if isinstance(ex, float):
+            result = ex
+        elif 'variable.leg_rot' in ex:
+            result = 0.0
+        else:
+            raise Exception("no")
+        
+        return result
+
     def tick(self, world):
+        self.headAngle = math.atan2(0.0 - self.pos[0], 0.0 - self.pos[2])
+
+        if math.sqrt(self.velocity[0]**2 + self.velocity[2]**2) > 0.01:
+            goalAngle = math.atan2(self.velocity[0], self.velocity[2])
+
+            # https://stackoverflow.com/questions/2708476/rotation-interpolation
+
+            diff = ((goalAngle - self.bodyAngle + math.pi) % (2*math.pi)) - math.pi
+
+            if diff > math.radians(10.0):
+                change = math.radians(10.0)
+            elif diff < math.radians(-10.0):
+                change = math.radians(-10.0)
+            else:
+                change = diff
+
+            self.bodyAngle += change
+
         if len(self.path) > 0:
             x = self.path[0][0] - self.pos[0]
             z = self.path[0][2] - self.pos[2]

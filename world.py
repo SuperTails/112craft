@@ -618,7 +618,14 @@ class Chunk:
         for i in range(16 * CHUNK_HEIGHT * 16):
             if self.instances[i] is not None:
                 self.instances[i][1] = any(self.instances[i][0].visibleFaces)
-                
+        
+        for y in range(CHUNK_HEIGHT):
+            for foo in range(16):
+                updateBuriedStateAt(app.world, self._globalBlockPos(BlockPos(0, y, foo)))
+                updateBuriedStateAt(app.world, self._globalBlockPos(BlockPos(15, y, foo)))
+
+                updateBuriedStateAt(app.world, self._globalBlockPos(BlockPos(foo, y, 0)))
+                updateBuriedStateAt(app.world, self._globalBlockPos(BlockPos(foo, y, 15)))
     '''
     def updateAllBuried(self, app):
         for xIdx in range(16):
@@ -761,7 +768,6 @@ class Chunk:
         ], dtype='float32')
         '''
 
-
         usedVertices = []
 
         for i in range(meshIdx * 16 * 16 * MESH_HEIGHT, (meshIdx + 1) * 16 * 16 * MESH_HEIGHT):
@@ -818,21 +824,28 @@ class Chunk:
 
         #vao: int = glGenVertexArrays(1) #type:ignore
         #vbo: int = glGenBuffers(1)
-        
+
     def setMesh(self, meshIdx: int, usedVertices: ndarray):
+        # FIXME: MEMORY LEAK
+        '''
         if self.meshVaos[meshIdx] != 0:
             glDeleteVertexArrays(1, np.array([self.meshVaos[meshIdx]])) #type:ignore
             glDeleteBuffers(1, np.array([self.meshVbos[meshIdx]])) #type:ignore
 
             self.meshVaos[meshIdx] = 0
+        '''
 
-        vao: int = glGenVertexArrays(1) #type:ignore
-        vbo: int = glGenBuffers(1) #type:ignore
+        vao = self.meshVaos[meshIdx]
+        vbo = self.meshVbos[meshIdx]
+
+        if vao == 0:
+            vao: int = glGenVertexArrays(1) #type:ignore
+            vbo: int = glGenBuffers(1) #type:ignore
 
         glBindVertexArray(vao)
 
         glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        glBufferData(GL_ARRAY_BUFFER, usedVertices.nbytes, usedVertices, GL_STATIC_DRAW)
+        glBufferData(GL_ARRAY_BUFFER, usedVertices.nbytes, usedVertices, GL_DYNAMIC_DRAW)
 
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * 4, ctypes.c_void_p(0))
         glEnableVertexAttribArray(0)
@@ -883,11 +896,16 @@ class Chunk:
         uncovered = False
         for faceIdx in range(0, 12, 2):
             adjPos = adjacentBlockPos(blockPos, faceIdx)
+
+            isVisible = not world.coordsOccupied(self._globalBlockPos(adjPos))
+
+            '''
             isVisible = (
                 adjPos.x < 0 or 16 <= adjPos.x or
                 adjPos.y < 0 or CHUNK_HEIGHT <= adjPos.y or
                 adjPos.z < 0 or 16 <= adjPos.z or
                 not self.coordsOccupied(adjPos))
+            '''
 
             inst.visibleFaces[faceIdx] = isVisible
             inst.visibleFaces[faceIdx + 1] = isVisible

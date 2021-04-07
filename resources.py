@@ -57,11 +57,19 @@ class Recipe:
         return True
 
 def loadEntityModels(app):
-    app.entityModels = entity.openModels('assets/creeper.geo.json')
+    app.entityModels = dict()
+    app.entityModels.update(entity.openModels('assets/creeper.geo.json'))
+    app.entityModels.update(entity.openModels('assets/fox.geo.json'))
+
+def loadEntityAnimations(app):
+    app.entityAnimations = dict()
+    app.entityAnimations.update(entity.openAnimations('assets/creeper.animation.json'))
+    app.entityAnimations.update(entity.openAnimations('assets/fox.animation.json'))
 
 def loadEntityTextures(app):
     app.entityTextures = {}
     app.entityTextures['creeper'] = loadTexture('assets/creeper.png')
+    app.entityTextures['fox'] = loadTexture('assets/fox.png')
 
 def imageToTexture(image: Image.Image) -> int:
     texture = glGenTextures(1) #type:ignore
@@ -456,6 +464,7 @@ def loadResources(app):
         app.textureAtlas = loadTextureAtlas(app)
         loadEntityModels(app)
         loadEntityTextures(app)
+        loadEntityAnimations(app)
     else:
         app.textures = app.tkTextures
         app.textureIndices = None

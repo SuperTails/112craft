@@ -720,7 +720,7 @@ def appStarted(app):
     app.mode = WorldLoadMode(app, 'cavetest', makePlayingMode)
     #app.mode = CreateWorldMode(app)
 
-    app.entities = [entity.Entity('creeper', 0.0, 71.0, 1.0)]
+    app.entities = [entity.Entity('creeper', 0.0, 71.0, 1.0), entity.Entity('fox', 5.0, 72.0, 3.0)]
 
     app.btnBg = createSizedBackground(app, 200, 40)
 
