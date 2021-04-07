@@ -1577,7 +1577,7 @@ def collide(app, entity: Entity):
 
     entity.pos[0] += entity.velocity[0]
 
-    for y in range(minY, maxY):
+    for y in range(minY, maxY + 1):
         for z in [entity.pos[2] - entity.radius * 0.99, entity.pos[2] + entity.radius * 0.99]:
             x = entity.pos[0]
 
@@ -1595,7 +1595,7 @@ def collide(app, entity: Entity):
     
     entity.pos[2] += entity.velocity[2]
 
-    for y in range(minY, maxY):
+    for y in range(minY, maxY + 1):
         for x in [entity.pos[0] - entity.radius * 0.99, entity.pos[0] + entity.radius * 0.99]:
             z = entity.pos[2]
 
