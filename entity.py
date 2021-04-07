@@ -12,47 +12,47 @@ EntityKind = str
 
 CUBE_MESH_VERTICES = np.array([
     # Left face
-    -0.5,  0.5,  0.5,  1/4, 1/2, # top-right
-    -0.5,  0.5, -0.5,  0/4, 1/2, # top-left
-    -0.5, -0.5, -0.5,  0/4, 0/2, # bottom-left
-    -0.5, -0.5, -0.5,  0/4, 0/2, # bottom-left
-    -0.5, -0.5,  0.5,  1/4, 0/2, # bottom-right
-    -0.5,  0.5,  0.5,  1/4, 1/2, # top-right
+    -0.5,  0.5,  0.5,  1.0, 1.0, # top-right
+    -0.5,  0.5, -0.5,  0.0, 1.0, # top-left
+    -0.5, -0.5, -0.5,  0.0, 0.0, # bottom-left
+    -0.5, -0.5, -0.5,  0.0, 0.0, # bottom-left
+    -0.5, -0.5,  0.5,  1.0, 0.0, # bottom-right
+    -0.5,  0.5,  0.5,  1.0, 1.0, # top-right
     # Right face
-     0.5,  0.5,  0.5,  2/4, 1/2, # top-left
-     0.5, -0.5, -0.5,  3/4, 0/2, # bottom-right
-     0.5,  0.5, -0.5,  3/4, 1/2, # top-right         
-     0.5, -0.5, -0.5,  3/4, 0/2, # bottom-right
-     0.5,  0.5,  0.5,  2/4, 1/2, # top-left
-     0.5, -0.5,  0.5,  2/4, 0/2, # bottom-left     
+    0.5,  0.5,  0.5,  0.0, 1.0, # top-left
+    0.5, -0.5, -0.5,  1.0, 0.0, # bottom-right
+    0.5,  0.5, -0.5,  1.0, 1.0, # top-right         
+    0.5, -0.5, -0.5,  1.0, 0.0, # bottom-right
+    0.5,  0.5,  0.5,  0.0, 1.0, # top-left
+    0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left     
     # Back face
-    -0.5, -0.5, -0.5,  3/4, 0/2, # Bottom-left
-     0.5,  0.5, -0.5,  4/4, 1/2, # top-right
-     0.5, -0.5, -0.5,  4/4, 0/2, # bottom-right         
-     0.5,  0.5, -0.5,  4/4, 1/2, # top-right
-    -0.5, -0.5, -0.5,  3/4, 0/2, # bottom-left
-    -0.5,  0.5, -0.5,  3/4, 1/2, # top-left
+    -0.5, -0.5, -0.5,  0.0, 0.0, # Bottom-left
+    0.5,  0.5, -0.5,  1.0, 1.0, # top-right
+    0.5, -0.5, -0.5,  1.0, 0.0, # bottom-right         
+    0.5,  0.5, -0.5,  1.0, 1.0, # top-right
+    -0.5, -0.5, -0.5,  0.0, 0.0, # bottom-left
+    -0.5,  0.5, -0.5,  0.0, 1.0, # top-left
     # Front face
-    -0.5, -0.5,  0.5,  1/4, 0/2, # bottom-left
-     0.5, -0.5,  0.5,  2/4, 0/2, # bottom-right
-     0.5,  0.5,  0.5,  2/4, 1/2, # top-right
-     0.5,  0.5,  0.5,  2/4, 1/2, # top-right
-    -0.5,  0.5,  0.5,  1/4, 1/2, # top-left
-    -0.5, -0.5,  0.5,  1/4, 0/2, # bottom-left
+    -0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
+    0.5, -0.5,  0.5,  1.0, 0.0, # bottom-right
+    0.5,  0.5,  0.5,  1.0, 1.0, # top-right
+    0.5,  0.5,  0.5,  1.0, 1.0, # top-right
+    -0.5,  0.5,  0.5,  0.0, 1.0, # top-left
+    -0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
     # Bottom face
-    -0.5, -0.5, -0.5,  3/4, 2/2, # top-right
-     0.5, -0.5, -0.5,  2/4, 2/2, # top-left
-     0.5, -0.5,  0.5,  2/4, 1/2, # bottom-left
-     0.5, -0.5,  0.5,  2/4, 1/2, # bottom-left
-    -0.5, -0.5,  0.5,  3/4, 1/2, # bottom-right
-    -0.5, -0.5, -0.5,  3/4, 2/2, # top-right
+    -0.5, -0.5, -0.5,  1.0, 1.0, # top-right
+    0.5, -0.5, -0.5,  0.0, 1.0, # top-left
+    0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
+    0.5, -0.5,  0.5,  0.0, 0.0, # bottom-left
+    -0.5, -0.5,  0.5,  1.0, 0.0, # bottom-right
+    -0.5, -0.5, -0.5,  1.0, 1.0, # top-right
     # Top face
-    -0.5,  0.5, -0.5,  1/4, 2/2, # top-left
-     0.5,  0.5,  0.5,  2/4, 1/2, # bottom-right
-     0.5,  0.5, -0.5,  2/4, 2/2, # top-right     
-     0.5,  0.5,  0.5,  2/4, 1/2, # bottom-right
-    -0.5,  0.5, -0.5,  1/4, 2/2, # top-left
-    -0.5,  0.5,  0.5,  1/4, 1/2, # bottom-left
+    -0.5,  0.5, -0.5,  0.0, 1.0, # top-left
+    0.5,  0.5,  0.5,  1.0, 0.0, # bottom-right
+    0.5,  0.5, -0.5,  1.0, 1.0, # top-right     
+    0.5,  0.5,  0.5,  1.0, 0.0, # bottom-right
+    -0.5,  0.5, -0.5,  0.0, 1.0, # top-left
+    -0.5,  0.5,  0.5,  0.0, 0.0, # bottom-left
     ], dtype='float32')
 
 @dataclass
@@ -71,28 +71,50 @@ class Cube:
         result = (vertices + np.array([0.5, 0.5, 0.5, 0.0, 0.0])) * factor + offset
 
         for row in range(vertices.shape[0]):
-            u = result[row, 3]
-            if u == 0/4:
-                u = 0
-            elif u == 1/4:
-                u = self.size[2]
-            elif u == 2/4:
-                u = self.size[0] + self.size[2]
-            elif u == 3/4:
-                u = 2*self.size[0] + self.size[2]
-            else:
-                u = 2*(self.size[0] + self.size[2])
-            
-            v = result[row, 4]
-            if v == 0/2:
-                v = 0
-            elif v == 1/2:
-                v = self.size[1]
-            else:
-                v = self.size[1] + self.size[0]
+            face = ['left', 'right', 'back', 'front', 'bottom', 'top'][row // 6]
 
-            result[row, 3] = u + self.uv[0]
-            result[row, 4] = v + (-(self.size[1] + self.size[0]) + (32.0 - self.uv[1]))
+            if face == 'left':
+                uOffset = 0
+                uSize = self.size[2]
+
+                vOffset = 0
+                vSize = self.size[1]
+            elif face == 'front':
+                uOffset = self.size[2]
+                uSize = self.size[0]
+
+                vOffset = 0
+                vSize = self.size[1]
+            elif face == 'top':
+                uOffset = self.size[2]
+                uSize = self.size[0]
+
+                vOffset = self.size[1]
+                vSize = self.size[2]
+            elif face == 'right':
+                uOffset = self.size[2] + self.size[0]
+                uSize = self.size[2]
+
+                vOffset = 0
+                vSize = self.size[1]
+            elif face == 'back':
+                uOffset = 2*self.size[2] + self.size[0]
+                uSize = self.size[0]
+
+                vOffset = 0
+                vSize = self.size[1]
+            else: # face == 'bottom'
+                uOffset = self.size[2] + self.size[0]
+                uSize = self.size[0]
+
+                vOffset = self.size[1]
+                vSize = self.size[2]
+
+            uFrac = result[row, 3]
+            vFrac = result[row, 4]
+
+            result[row, 3] = self.uv[0] + uOffset + uFrac * uSize
+            result[row, 4] = (32.0 - (self.uv[1] + self.size[1] + self.size[2])) + vOffset + vFrac * vSize
         
         return result
 
@@ -272,10 +294,14 @@ def makePathFromChain(prevDirs, end: BlockPos) -> List[BlockPos]:
 
 def findPath(start: BlockPos, end: BlockPos, world) -> Optional[List[BlockPos]]:
     def heuristic(start: BlockPos, end: BlockPos):
-        return (
-            abs(start.x - end.x) + abs(start.y - end.y)
-            + abs(start.z - end.z))
-        
+        # Chebyshev distance
+
+        xDist = abs(start.x - end.x)
+        yDist = abs(start.y - end.y)
+        zDist = abs(start.z - end.z)
+
+        return (max(xDist, zDist) + yDist)
+
     # https://en.wikipedia.org/wiki/A*_search_algorithm
 
     prevDirs = dict()
@@ -321,6 +347,19 @@ def findPath(start: BlockPos, end: BlockPos, world) -> Optional[List[BlockPos]]:
 def destinations(start: BlockPos, world):
     for (dx, dz) in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
         pos = BlockPos(start.x + dx, start.y, start.z + dz)
-        if not world.coordsOccupied(pos):
-            yield pos
+        if world.coordsOccupied(pos): continue
+
+        yield pos
+    
+    for (dx, dz) in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
+        pos = BlockPos(start.x + dx, start.y, start.z + dz)
+        if world.coordsOccupied(pos): continue
+
+        corner1 = BlockPos(start.x + dx, start.y, start.z)
+        corner2 = BlockPos(start.x, start.y, start.z + dz)
+
+        if world.coordsOccupied(corner1): continue
+        if world.coordsOccupied(corner2): continue
+
+        yield pos
     
