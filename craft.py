@@ -15,6 +15,7 @@ import random
 import cmu_112_graphics
 import tkinter
 import entity
+import util
 from button import Button, ButtonManager, createSizedBackground
 from world import Chunk, ChunkPos, World
 from typing import List, Optional, Tuple
@@ -322,6 +323,53 @@ def setMouseCapture(app, value: bool) -> None:
         else:
             glfw.set_input_mode(app.window, glfw.CURSOR, glfw.CURSOR_NORMAL)
 
+def submitChat(app, text: str):
+    if text.startswith('/'):
+        text = text.removeprefix('/')
+
+        print(f"COMMAND {text}")
+
+        if text == 'pathfind':
+            player = app.mode.player
+            target = util.BlockPos(round(player.pos[0]), round(player.pos[1] + 0.01), round(player.pos[2]))
+            for entity in app.entities:
+                entity.updatePath(app.world, target)
+
+    else:
+        print(f"CHAT: {text}")
+
+class ChatMode(Mode):
+    text: str
+
+    def __init__(self, app, submode, text):
+        self.submode = submode
+        self.player = self.submode.player
+        self.text = text
+    
+    def keyPressed(self, app, event):
+        key = event.key.upper()
+        if key == 'ESCAPE':
+            app.mode = self.submode
+        elif key == 'ENTER':
+            app.mode = self.submode
+            submitChat(app, self.text)
+        elif key == 'BACKSPACE':
+            if self.text != '':
+                self.text = self.text[:-1]
+        elif len(key) == 1:
+            self.text += key.lower()
+        
+    def redrawAll(self, app, window, canvas):
+        canvas.create_rectangle(0, app.height * 2 / 3 - 10, app.width, app.height * 2 / 3 + 10, fill='#333333')
+
+        canvas.create_text(0, app.height * 2 / 3, text=self.text, anchor='w')
+
+        self.submode.redrawAll(app, window, canvas)
+    
+    def timerFired(self, app):
+        self.submode.timerFired(app)
+
+
 class PlayingMode(Mode):
     lookedAtBlock = None
     mouseHeld: bool = False
@@ -394,6 +442,10 @@ class PlayingMode(Mode):
                 app.mode.player.velocity[1] = 0.35
         elif key == 'ESCAPE':
             setMouseCapture(app, not app.captureMouse)
+        elif key == 'T':
+            app.mode = ChatMode(app, self, '')
+        elif key == '/':
+            app.mode = ChatMode(app, self, '/')
 
     def keyReleased(self, app, event):
         key = event.key.upper()

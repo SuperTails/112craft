@@ -99,8 +99,12 @@ class App:
         if ((ord('A') <= key and key <= ord('Z'))
             or (ord('1') <= key and key <= ord('9'))):
             keyName = chr(key)
+        elif key == glfw.KEY_SLASH:
+            keyName = '/'
         elif key == glfw.KEY_ESCAPE:
             keyName = 'Escape'
+        elif key == glfw.KEY_ENTER:
+            keyName = 'Enter'
         elif key == glfw.KEY_SPACE:
             keyName = 'Space'
         elif key == glfw.KEY_BACKSPACE:

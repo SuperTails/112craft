@@ -14,21 +14,9 @@ from enum import IntEnum
 from math import cos, sin
 from numpy import ndarray
 from typing import NamedTuple, List, Any, Tuple, Optional
+from util import *
 from OpenGL.GL import * #type:ignore
 
-class ChunkPos(NamedTuple):
-    x: int
-    y: int
-    z: int
-
-class BlockPos(NamedTuple):
-    x: int
-    y: int
-    z: int
-
-BlockId = str
-
-ItemId = str
 
 # Places a tree with its bottommost log at the given position in the world.
 # If `doUpdates` is True, this recalculates the lighting and block visibility.
@@ -1536,17 +1524,10 @@ def tick(app):
     app.cameraPos[1] += player.height
 
     for entity in app.entities:
-        xPart = (app.cameraPos[0] - entity.pos[0]) * 0.01
-        zPart = (app.cameraPos[2] - entity.pos[2]) * 0.01
-        mag = math.sqrt(xPart**2 + zPart**2)
-        if mag > 0.2:
-            xPart /= mag
-            zPart /= mag
-
-        entity.velocity[0] = xPart
-        entity.velocity[2] = zPart
-
-        collide(app, entity)
+        if collide(app, entity) and entity.onGround:
+            entity.velocity[1] = 0.40
+        
+        entity.tick(app.world)
 
     endTime = time.time()
     app.tickTimes[app.tickTimeIdx] = (endTime - startTime)
@@ -1570,7 +1551,16 @@ def collide(app, entity: Entity):
             entity.velocity[1] = 0.0
             #app.cameraPos[1] = (feetPos + 0.5) + entity.height
             entity.pos[1] = feetPos + 0.5
-    
+
+    for x in [entity.pos[0] - entity.radius * 0.99, entity.pos[0] + entity.radius * 0.99]:
+        for z in [entity.pos[2] - entity.radius * 0.99, entity.pos[2] + entity.radius * 0.99]:
+            hiYCoord = round(entity.pos[1] + entity.height)
+
+            if app.world.coordsOccupied(BlockPos(round(x), hiYCoord, round(z))):
+                yEdge = hiYCoord - 0.5
+                entity.pos[1] = yEdge - entity.height
+   
+    hitWall = False
 
     minY = round((entity.pos[1] + 0.1))
     maxY = round((entity.pos[1] + entity.height))
@@ -1588,10 +1578,12 @@ def collide(app, entity: Entity):
                 # Collision on the right, so move to the left
                 xEdge = (hiXBlockCoord - 0.5)
                 entity.pos[0] = xEdge - entity.radius
+                hitWall = True
             elif app.world.coordsOccupied(BlockPos(loXBlockCoord, y, round(z))):
                 # Collision on the left, so move to the right
                 xEdge = (loXBlockCoord + 0.5)
                 entity.pos[0] = xEdge + entity.radius
+                hitWall = True
     
     entity.pos[2] += entity.velocity[2]
 
@@ -1605,10 +1597,13 @@ def collide(app, entity: Entity):
             if app.world.coordsOccupied(BlockPos(round(x), y, hiZBlockCoord)):
                 zEdge = (hiZBlockCoord - 0.5)
                 entity.pos[2] = zEdge - entity.radius
+                hitWall = True
             elif app.world.coordsOccupied(BlockPos(round(x), y, loZBlockCoord)):
                 zEdge = (loZBlockCoord + 0.5)
                 entity.pos[2] = zEdge + entity.radius
+                hitWall = True
     
+    return hitWall
 
     
 def removeBlock(app, blockPos: BlockPos):

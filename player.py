@@ -1,6 +1,6 @@
 from typing import List, Optional
 from dataclasses import dataclass
-from world import ItemId, BlockPos
+from util import ItemId, BlockPos
 import copy
 
 @dataclass
