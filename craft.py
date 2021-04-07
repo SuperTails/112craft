@@ -14,6 +14,7 @@ import config
 import random
 import cmu_112_graphics
 import tkinter
+import entity
 from button import Button, ButtonManager, createSizedBackground
 from world import Chunk, ChunkPos, World
 from typing import List, Optional, Tuple
@@ -666,6 +667,8 @@ def appStarted(app):
     def makePlayingMode(app): return PlayingMode(app, False)
     app.mode = WorldLoadMode(app, 'cavetest', makePlayingMode)
     #app.mode = CreateWorldMode(app)
+
+    app.entities = [entity.Entity('creeper', 0.0, 71.0, 1.0)]
 
     app.btnBg = createSizedBackground(app, 200, 40)
 

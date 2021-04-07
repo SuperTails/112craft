@@ -3,6 +3,7 @@ import world
 import render
 import config
 import copy
+import entity
 from sound import Sound
 from shader import ShaderProgram
 from PIL import Image
@@ -54,6 +55,13 @@ class Recipe:
                     return False
 
         return True
+
+def loadEntityModels(app):
+    app.entityModels = entity.openModels('assets/creeper.geo.json')
+
+def loadEntityTextures(app):
+    app.entityTextures = {}
+    app.entityTextures['creeper'] = loadTexture('assets/creeper.png')
 
 def imageToTexture(image: Image.Image) -> int:
     texture = glGenTextures(1) #type:ignore
@@ -292,7 +300,6 @@ def loadBlockImage(path, tesselate=False):
     return tex
 
 def loadTextureAtlas(app):
-
     app.textureIdx = dict()
     app.textureIndices = dict()
 
@@ -362,6 +369,8 @@ def loadGlTextures(app):
     app.chunkProgram = ShaderProgram('shaders/chunkShader.vert', 'shaders/chunkShader.frag')
     
     app.guiProgram = ShaderProgram('shaders/guiShader.vert', 'shaders/guiShader.frag')
+
+    app.entityProgram = ShaderProgram('shaders/entityShader.vert', 'shaders/entityShader.frag')
 
 def registerBlock(
     app,
@@ -445,6 +454,8 @@ def loadResources(app):
         loadGlTextures(app)
         app.textures = app.glTextures
         app.textureAtlas = loadTextureAtlas(app)
+        loadEntityModels(app)
+        loadEntityTextures(app)
     else:
         app.textures = app.tkTextures
         app.textureIndices = None

@@ -604,6 +604,38 @@ def renderInstancesGl(app, canvas):
 
         glDrawArrays(GL_TRIANGLES, 0, amt * 6)
 
+
+    app.entityProgram.useProgram()
+    glUniform1i(app.blockProgram.getUniformLocation("skin"), 0)
+    glUniformMatrix4fv(app.entityProgram.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
+    glUniformMatrix4fv(app.entityProgram.getUniformLocation("projection"), 1, GL_FALSE, projection) #type:ignore
+
+    modelPos = app.entityProgram.getUniformLocation("model")
+
+    glActiveTexture(GL_TEXTURE0)
+
+    for entity in app.entities:
+        model = app.entityModels[entity.kind]
+        texture = app.entityTextures[entity.kind]
+
+        glBindTexture(GL_TEXTURE_2D, texture)
+
+        modelMat = np.array([
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            entity.pos[0], entity.pos[1], entity.pos[2], 1.0
+        ], dtype='float32')
+
+        glUniformMatrix4fv(modelPos, 1, GL_FALSE, modelMat) #type:ignore
+
+        for (vao, num) in model.vaos:
+            glBindVertexArray(vao)
+            glDrawArrays(GL_TRIANGLES, 0, num * 5)
+
+
+
+
 def doTheDraw(app, modelUniformLoc, amt):
     #bId = chunk.blocks[i // 256, (i // 16) % 16, i % 16]
     
