@@ -35,8 +35,10 @@ class Player:
     height: float = 1.5
     radius: float = 0.3
 
-    velocity: List[float] = [0.0, 0.0, 0.0]
+    velocity: List[float]
     onGround: bool = False
+
+    pos: List[float]
 
     walkSpeed: float = 0.2
     reach: float = 4.0
@@ -48,6 +50,9 @@ class Player:
     inventory: List[Slot]
 
     def __init__(self, app, creative: bool):
+        self.pos = [0.0, 0.0, 0.0]
+        self.velocity = [0.0, 0.0, 0.0]
+
         self.creative = creative
 
         if self.creative:

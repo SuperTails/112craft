@@ -66,9 +66,6 @@ class Cube:
 
         result = (vertices + np.array([0.5, 0.5, 0.5, 0.0, 0.0])) * factor + offset
 
-        width = (self.size[0] + self.size[2]) * 2
-        height = (self.size[0] + self.size[2])
-
         for row in range(vertices.shape[0]):
             u = result[row, 3]
             if u == 0/4:
@@ -194,8 +191,15 @@ def openModels(path) -> dict[str, EntityModel]:
 
 class Entity:
     pos: List[float]
+    velocity: List[float]
     kind: EntityKind
+    radius: float
+    onGround: bool
 
     def __init__(self, kind: EntityKind, x: float, y: float, z: float):
         self.kind = kind
         self.pos = [x, y, z]
+        self.velocity = [0.0, 0.0, 0.0]
+        self.radius = 0.3
+        self.height = 1.5
+        self.onGround = False
