@@ -852,14 +852,14 @@ class Chunk:
 
                 #faceVertices = list(vertices[(faceIdx // 2) * 6 * 5:((faceIdx // 2) + 1) * 6 * 5])
                 for idx2 in range(6):
-                    faceVertices[idx2 * 6 + 0] += bx + self.pos.x * 16
-                    faceVertices[idx2 * 6 + 1] += by + self.pos.y * CHUNK_HEIGHT
-                    faceVertices[idx2 * 6 + 2] += bz + self.pos.z * 16
+                    faceVertices[idx2 * 7 + 0] += bx + self.pos.x * 16
+                    faceVertices[idx2 * 7 + 1] += by + self.pos.y * CHUNK_HEIGHT
+                    faceVertices[idx2 * 7 + 2] += bz + self.pos.z * 16
 
-                    faceVertices[idx2 * 6 + 3] *= 16.0
-                    faceVertices[idx2 * 6 + 3] += instData[2][blockId][faceIdx // 2] * 16.0
+                    faceVertices[idx2 * 7 + 3] *= 16.0
+                    faceVertices[idx2 * 7 + 3] += instData[2][blockId][faceIdx // 2] * 16.0
 
-                    faceVertices[idx2 * 6 + 5] = lightLevel
+                    faceVertices[idx2 * 7 + 5] = lightLevel
 
                 usedVertices += faceVertices
         
@@ -895,14 +895,17 @@ class Chunk:
         glBindBuffer(GL_ARRAY_BUFFER, vbo)
         glBufferData(GL_ARRAY_BUFFER, usedVertices.nbytes, usedVertices, GL_DYNAMIC_DRAW)
 
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * 4, ctypes.c_void_p(0))
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * 4, ctypes.c_void_p(0))
         glEnableVertexAttribArray(0)
 
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 6 * 4, ctypes.c_void_p(3 * 4))
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 7 * 4, ctypes.c_void_p(3 * 4))
         glEnableVertexAttribArray(1)
 
-        glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 6 * 4, ctypes.c_void_p(5 * 4))
+        glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 7 * 4, ctypes.c_void_p(5 * 4))
         glEnableVertexAttribArray(2)
+
+        glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 7 * 4, ctypes.c_void_p(6 * 4))
+        glEnableVertexAttribArray(3)
 
         glBindBuffer(GL_ARRAY_BUFFER, 0)
 
@@ -910,7 +913,7 @@ class Chunk:
 
         self.meshVaos[meshIdx] = vao
         self.meshVbos[meshIdx] = vbo
-        self.meshVertexCounts[meshIdx] = len(usedVertices) // 6
+        self.meshVertexCounts[meshIdx] = len(usedVertices) // 7
 
 
     def _coordsToIdx(self, pos: BlockPos) -> int:

@@ -8,6 +8,8 @@ import copy
 def tick(app):
     startTime = time.time()
 
+    app.time += 1
+
     world.loadUnloadChunks(app, app.cameraPos)
 
     world.tickChunks(app)

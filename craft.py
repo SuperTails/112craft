@@ -350,6 +350,18 @@ def submitChat(app, text: str):
             app.doDrawHud = True
         elif parts[0] == 'cinematic':
             app.cinematic = not app.cinematic
+        elif parts[0] == 'time':
+            if parts[1] == 'set':
+                if parts[2] == 'day':
+                    app.time = 1000
+                elif parts[2] == 'night':
+                    app.time = 13000
+                elif parts[2] == 'midnight':
+                    app.time = 18000
+                else:
+                    app.time = int(parts[2])
+            elif parts[1] == 'add':
+                app.time += int(parts[2])
 
     else:
         print(f"CHAT: {text}")
@@ -809,6 +821,8 @@ def appStarted(app):
 
     app.doDrawHud = True
     app.cinematic = False
+
+    app.time = 0
 
     app.yawSpeed = 0.0
     app.pitchSpeed = 0.0

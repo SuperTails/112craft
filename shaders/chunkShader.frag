@@ -11,6 +11,8 @@ in float light;
 uniform sampler2D blockTexture;
 uniform sampler2D breakTexture;
 
+uniform int gameTime;
+
 void main() {
     //FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
     //FragColor = vertexColor;
@@ -19,9 +21,14 @@ void main() {
     vec3 c = texture(blockTexture, TexCoord).rgb;
     vec4 d = texture(breakTexture, TexCoord);
 
+    float dayFrac = ((gameTime % 24000) / 24000.0) - 0.75;
+
+    float daylightFactor = sin(dayFrac * 2.0 * 3.14159 /2.0);
+    daylightFactor *= daylightFactor;
+
     vec3 baseColor = c - (d.rgb * d.a * breakColor);
 
-    float light2 = 0.18 + pow(light / 8.0, 1.5);
+    float light2 = 0.18 + pow((light * daylightFactor) / 8.0, 1.5);
 
     FragColor = vec4(baseColor * light2, 1.0);
 

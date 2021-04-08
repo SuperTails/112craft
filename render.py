@@ -595,6 +595,7 @@ def renderInstancesGl(app, canvas):
     glUniformMatrix4fv(app.chunkProgram.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
     glUniformMatrix4fv(app.chunkProgram.getUniformLocation("projection"), 1, GL_FALSE, projection) #type:ignore
     glUniform1f(app.chunkProgram.getUniformLocation("atlasWidth"), app.atlasWidth)
+    glUniform1i(app.chunkProgram.getUniformLocation("gameTime"), app.time)
 
     #print("drawing a chunk vao")
     for amt, chunkVao in chunkVaos:
@@ -602,7 +603,7 @@ def renderInstancesGl(app, canvas):
 
         glBindVertexArray(chunkVao)
 
-        glDrawArrays(GL_TRIANGLES, 0, amt * 6)
+        glDrawArrays(GL_TRIANGLES, 0, amt * 7)
     
     drawEntities(app, view, projection)
 

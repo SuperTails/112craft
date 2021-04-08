@@ -97,7 +97,7 @@ class App:
     
     def dispatchKeyEvent(self, window, key: int, scancode: int, action: int, mods: int):
         if ((ord('A') <= key and key <= ord('Z'))
-            or (ord('1') <= key and key <= ord('9'))):
+            or (ord('0') <= key and key <= ord('9'))):
             keyName = chr(key)
         elif key == glfw.KEY_MINUS:
             if mods & glfw.MOD_SHIFT:
