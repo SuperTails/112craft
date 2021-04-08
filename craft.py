@@ -715,9 +715,9 @@ class InventoryMode(Mode):
 def appStarted(app):
     loadResources(app)
 
-    #app.mode = WorldLoadMode(app, 'world', TitleMode)
-    def makePlayingMode(app): return PlayingMode(app, False)
-    app.mode = WorldLoadMode(app, 'cavetest', makePlayingMode)
+    app.mode = WorldLoadMode(app, 'world', TitleMode)
+    #def makePlayingMode(app): return PlayingMode(app, False)
+    #app.mode = WorldLoadMode(app, 'cavetest', makePlayingMode)
     #app.mode = CreateWorldMode(app)
 
     app.entities = [entity.Entity('creeper', 0.0, 71.0, 1.0), entity.Entity('fox', 5.0, 72.0, 3.0)]

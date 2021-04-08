@@ -457,12 +457,12 @@ def renderInstancesGl(app, canvas):
 
     view = glViewMat(app.cameraPos, app.cameraYaw, app.cameraPitch)
 
-    th = math.tan(0.5 * 0.785);
+    th = math.tan(0.5 * math.radians(70.0));
     zf = 100.0;
     zn = 0.1;
 
     projection = np.array([
-        [1.0 / th, 0.0, 0.0, 0.0],
+        [(app.height / app.width) / th, 0.0, 0.0, 0.0],
         [0.0, 1.0 / th, 0.0, 0.0],
         [0.0, 0.0, zf / (zf - zn), 1.0],
         [0.0, 0.0, -(zf * zn) / (zf - zn), 0.0],

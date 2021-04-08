@@ -319,7 +319,7 @@ class Entity:
         else:
             raise Exception(self.kind)
 
-        if boneName == 'head' and self.kind != 'fox':
+        if boneName == 'head':
             rot = [0.0, math.degrees(self.headAngle - self.bodyAngle), 0.0]
         elif anim is not None and boneName in anim.bones:
             (x, y, z) = anim.bones[boneName].rotation
@@ -350,8 +350,8 @@ class Entity:
         
         return result
 
-    def tick(self, world):
-        self.headAngle = math.atan2(0.0 - self.pos[0], 0.0 - self.pos[2])
+    def tick(self, world, playerX, playerZ):
+        self.headAngle = math.atan2(playerX - self.pos[0], playerZ - self.pos[2])
 
         if math.sqrt(self.velocity[0]**2 + self.velocity[2]**2) > 0.01:
             goalAngle = math.atan2(self.velocity[0], self.velocity[2])

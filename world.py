@@ -1545,7 +1545,7 @@ def tick(app):
         if collide(app, entity) and entity.onGround:
             entity.velocity[1] = 0.40
         
-        entity.tick(app.world)
+        entity.tick(app.world, player.pos[0], player.pos[2])
 
     endTime = time.time()
     app.tickTimes[app.tickTimeIdx] = (endTime - startTime)
