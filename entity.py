@@ -225,10 +225,10 @@ class EntityModel:
         self.bones = bones
         self.vaos = []
         for bone in self.bones:
-            if bone.cubes != []:
-                self.vaos.append(bone.toVao())
-            else:
+            if bone.cubes == [] or 'sleeping' in bone.name:
                 self.vaos.append((0, 0))
+            else:
+                self.vaos.append(bone.toVao())
 
 def parseCube(j) -> Cube:
     origin = tuple(j['origin'])

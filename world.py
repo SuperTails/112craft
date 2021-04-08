@@ -314,8 +314,8 @@ class Chunk:
 
     worldgenStage: WorldgenStage = WorldgenStage.NOT_STARTED
 
-    isTicking: bool = False
-    isVisible: bool = False
+    isTicking: bool
+    isVisible: bool
 
     vertexCnt: int = 0
 
@@ -326,6 +326,9 @@ class Chunk:
         self.lightLevels = np.full((16, CHUNK_HEIGHT, 16), 0)
         self.blockLightLevels = np.full((16, CHUNK_HEIGHT, 16), 0)
         self.instances = [None] * self.blocks.size
+
+        self.isTicking = False
+        self.isVisible = False
 
         self.tileEntities = dict()
 

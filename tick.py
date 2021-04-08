@@ -4,6 +4,7 @@ import world
 import time
 import math
 import copy
+import random
 
 def tick(app):
     startTime = time.time()
@@ -13,6 +14,9 @@ def tick(app):
     world.loadUnloadChunks(app, app.cameraPos)
 
     world.tickChunks(app)
+
+    doMobSpawning(app)
+    doMobDespawning(app)
 
     # Ticking is done in stages so that collision detection works as expected:
     # First we update the player's Y position and resolve Y collisions,
@@ -59,6 +63,66 @@ def tick(app):
     app.tickTimes[app.tickTimeIdx] = (endTime - startTime)
     app.tickTimeIdx += 1
     app.tickTimeIdx %= len(app.tickTimes)
+
+def doMobDespawning(app):
+    player = app.mode.player
+
+    idx = 0
+    while idx < len(app.entities):
+        [x, y, z] = app.entities[idx].pos
+        dist = math.sqrt((x-player.pos[0])**2 + (y-player.pos[1])**2 + (z-player.pos[2])**2)
+
+        maxDist = 128.0
+
+        if dist > maxDist:
+            app.entities.pop(idx)
+        else:
+            idx += 1
+
+def doMobSpawning(app):
+    mobCap = len(app.world.chunks) / 4
+
+    random.seed(time.time())
+
+    player = app.mode.player
+
+    for (chunkPos, chunk) in app.world.chunks.items():
+        chunk: world.Chunk
+        if chunk.isTicking:
+            if len(app.entities) > mobCap:
+                return
+
+            # FIXME: Random tick speed?
+            x = random.randrange(0, 16) + chunkPos.x * 16
+            y = random.randrange(0, world.CHUNK_HEIGHT) + chunkPos.y * world.CHUNK_HEIGHT
+            z = random.randrange(0, 16) + chunkPos.z * 16
+
+            dist = math.sqrt((x-player.pos[0])**2 + (y-player.pos[1])**2 + (z-player.pos[2])**2)
+
+            minSpawnDist = 24.0
+            
+            if dist < minSpawnDist:
+                continue
+
+            if not isValidSpawnLocation(app, BlockPos(x, y, z)): continue
+
+            packSize = 4
+            for _ in range(packSize):
+                x += random.randint(-2, 2)
+                z += random.randint(-2, 2)
+                if isValidSpawnLocation(app, BlockPos(x, y, z)):
+                    app.entities.append(Entity('creeper', x, y, z))
+
+def isValidSpawnLocation(app, pos: BlockPos):
+    floor = BlockPos(pos.x, pos.y - 1, pos.z)
+    feet = pos
+    head = BlockPos(pos.x, pos.y + 1, pos.z)
+    
+    isOk = (app.world.coordsOccupied(floor)
+        and not app.world.coordsOccupied(feet)
+        and not app.world.coordsOccupied(head))
+    
+    return isOk
 
 def collide(app, entity: Entity):
     entity.pos[1] += entity.velocity[1]
