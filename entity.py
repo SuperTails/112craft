@@ -4,6 +4,7 @@ import json
 import numpy as np
 import heapq
 import math
+import time
 from util import BlockPos
 from dataclasses import dataclass
 from OpenGL.GL import * #type:ignore
@@ -337,10 +338,13 @@ class Entity:
         return rot
     
     def calc(self, ex):
+        mag = math.sqrt(self.velocity[0]**2 + self.velocity[1]**2)
         if isinstance(ex, float):
             result = ex
+        elif '-variable.leg_rot' in ex:
+            result = -30.0 * math.sin(time.time() * 3.0) * mag * 15.0
         elif 'variable.leg_rot' in ex:
-            result = 0.0
+            result = 30.0 * math.sin(time.time() * 3.0) * mag * 15.0
         else:
             raise Exception("no")
         
