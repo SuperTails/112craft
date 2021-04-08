@@ -568,22 +568,68 @@ def findPath(start: BlockPos, end: BlockPos, world) -> Optional[List[BlockPos]]:
     
     return None
 
+def canStandAt(pos: BlockPos, world, needsFloor=True):
+    # FIXME: Height
+
+    if world.coordsOccupied(pos):
+        return False
+    elif not world.coordsOccupied(BlockPos(pos.x, pos.y - 1, pos.z)):
+        if needsFloor:
+            return False
+        else:
+            return True
+    else:
+        return True
+
+def isValidDir(start: BlockPos, dx: int, dz: int, world) -> Optional[int]:
+    # These are in order of most to least common, for efficiency
+    for dy in (0, 1, -1, -2, -3):
+        dest = BlockPos(start.x + dx, start.y + dy, start.z + dz)
+
+        if not canStandAt(dest, world):
+            continue
+
+        if dy == 0:
+            if dx != 0 and dz != 0:
+                # This is a simple, flat, diagonal path
+
+                corner1 = BlockPos(start.x + dx, start.y, start.z)
+                corner2 = BlockPos(start.x, start.y, start.z + dz)
+
+                if (not canStandAt(corner1, world, needsFloor=False)
+                    or not canStandAt(corner2, world, needsFloor=False)):
+
+                    continue
+            else:
+                # This is a straight path
+                return dy
+        elif dx != 0 and dz != 0:
+            # TODO:
+            continue
+        elif dy < 0:
+            corner = BlockPos(start.x + dx, start.y, start.z + dz)
+
+            if not canStandAt(corner, world, needsFloor=False):
+                continue
+        
+            return dy
+        elif dy > 0:
+            corner = BlockPos(start.x, start.y + 1, start.z)
+
+            if not canStandAt(corner, world, needsFloor=False):
+                continue
+        
+            return dy
+    
+    return None
+
 def destinations(start: BlockPos, world):
-    for (dx, dz) in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-        pos = BlockPos(start.x + dx, start.y, start.z + dz)
-        if world.coordsOccupied(pos): continue
+    for dx in (-1, 0, 1):
+        for dz in (-1, 0, 1):
+            if dx == 0 and dz == 0: continue
 
-        yield pos
-    
-    for (dx, dz) in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
-        pos = BlockPos(start.x + dx, start.y, start.z + dz)
-        if world.coordsOccupied(pos): continue
+            dy = isValidDir(start, dx, dz, world)
 
-        corner1 = BlockPos(start.x + dx, start.y, start.z)
-        corner2 = BlockPos(start.x, start.y, start.z + dz)
-
-        if world.coordsOccupied(corner1): continue
-        if world.coordsOccupied(corner2): continue
-
-        yield pos
-    
+            if dy is not None:
+                pos = BlockPos(start.x + dx, start.y + dy, start.z + dz)
+                yield (pos)
