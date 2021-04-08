@@ -11,8 +11,6 @@ from util import BlockPos, roundHalfUp
 from dataclasses import dataclass
 from OpenGL.GL import * #type:ignore
 
-EntityKind = str
-
 CUBE_MESH_VERTICES = np.array([
     # Left face
     -0.5,  0.5,  0.5,  1.0, 1.0, # top-right
@@ -273,11 +271,49 @@ def openModels(path) -> dict[str, EntityModel]:
 
 #print(models['fox'].bones[3].cubes[0].toVertices())
 
+@dataclass
+class EntityKind:
+    name: str
+    maxHealth: float
+    walkSpeed: float
+    radius: float
+    height: float
+    ai: 'Ai'
+
+def registerEntityKinds(app):
+    app.entityKinds = {
+        'creeper': EntityKind(
+            name='creeper',
+            maxHealth=20.0,
+            walkSpeed=0.05,
+            radius=0.3,
+            height=1.7,
+            ai=Ai([WanderTask()])
+        ),
+        'fox': EntityKind(
+            name='fox',
+            maxHealth=20.0,
+            walkSpeed=0.1,
+            radius=0.35,
+            height=0.6,
+            ai=Ai([FollowTask(), WanderTask()])
+        ),
+        'player': EntityKind(
+            name='player',
+            maxHealth=20.0,
+            walkSpeed=0.2,
+            radius=0.3,
+            height=1.5,
+            ai=Ai([])
+        ),
+    }
 
 class Entity:
     pos: List[float]
     velocity: List[float]
     kind: EntityKind
+
+    health: float
 
     radius: float
     height: float
@@ -290,10 +326,9 @@ class Entity:
 
     path: List[BlockPos]
 
-    ai: Any
+    ai: 'Ai'
 
-    def __init__(self, kind: EntityKind, x: float, y: float, z: float):
-        self.kind = kind
+    def __init__(self, app, kind: str, x: float, y: float, z: float):
         self.pos = [x, y, z]
         self.velocity = [0.0, 0.0, 0.0]
         self.radius = 0.3
@@ -306,10 +341,27 @@ class Entity:
 
         self.path = []
 
-        if self.kind == 'creeper':
-            self.ai = Ai([WanderTask()])
-        elif self.kind == 'fox':
-            self.ai = Ai([FollowTask(), WanderTask()])
+        self.kind = app.entityKinds[kind]
+
+        data: EntityKind = app.entityKinds
+
+        self.radius = self.kind.radius
+        self.height = self.kind.height
+        self.walkSpeed = self.kind.walkSpeed
+        self.health = self.kind.maxHealth
+        # FIXME: COPY??
+        self.ai = self.kind.ai
+
+    def getAABB(self) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
+        loX = self.pos[0] - self.radius
+        loY = self.pos[1]
+        loZ = self.pos[2] - self.radius
+
+        hiX = self.pos[0] + self.radius
+        hiY = self.pos[1] + self.height
+        hiZ = self.pos[2] + self.radius
+
+        return ((loX, loY, loZ), (hiX, hiY, hiZ))
         
     def getBlockPos(self) -> BlockPos:
         bx = roundHalfUp(self.pos[0])
@@ -318,13 +370,13 @@ class Entity:
         return BlockPos(bx, by, bz)
     
     def getRotation(self, app, i):
-        bone = app.entityModels[self.kind].bones[i]
+        bone = app.entityModels[self.kind.name].bones[i]
         boneName = bone.name
         boneRot = bone.bind_pose_rotation
 
-        if self.kind == 'creeper':
+        if self.kind.name == 'creeper':
             anim = app.entityAnimations['creeper.legs']
-        elif self.kind == 'fox':
+        elif self.kind.name == 'fox':
             #anim = app.entityAnimations['fox.sit']
             anim = None
         else:
@@ -441,7 +493,7 @@ class Ai:
 class FollowTask:
     def shouldStart(self, entity: Entity, world, entities: List[Entity]):
         for other in entities:
-            if other.kind == 'player':
+            if other.kind.name == 'player':
                 dx = entity.pos[0] - other.pos[0]
                 dy = entity.pos[1] - other.pos[1]
                 dz = entity.pos[2] - other.pos[2]
@@ -453,7 +505,7 @@ class FollowTask:
 
     def tick(self, entity: Entity, world, entities: List[Entity]):
         for other in entities:
-            if other.kind == 'player':
+            if other.kind.name == 'player':
                 dx = entity.pos[0] - other.pos[0]
                 dy = entity.pos[1] - other.pos[1]
                 dz = entity.pos[2] - other.pos[2]

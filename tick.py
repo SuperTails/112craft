@@ -1,10 +1,61 @@
 from entity import Entity
-from util import BlockPos, roundHalfUp
+from util import BlockPos, roundHalfUp, rayAABBIntersect
 import world
 import time
 import math
+from math import cos, sin
 import copy
 import random
+from typing import Optional
+
+def lookedAtEntity(app) -> Optional[int]:
+    lookX = cos(app.cameraPitch)*sin(-app.cameraYaw)
+    lookY = sin(app.cameraPitch)
+    lookZ = cos(app.cameraPitch)*cos(-app.cameraYaw)
+
+    if lookX == 0.0:
+        lookX = 1e-6
+    if lookY == 0.0:
+        lookY = 1e-6
+    if lookZ == 0.0:
+        lookZ = 1e-6
+
+    mag = math.sqrt(lookX**2 + lookY**2 + lookZ**2)
+    lookX /= mag
+    lookY /= mag
+    lookZ /= mag
+
+    rayOrigin = app.cameraPos
+    rayDir = (lookX, lookY, lookZ)
+
+    inters = []
+
+    for idx, entity in enumerate(app.entities):
+        if abs(entity.pos[0] - app.cameraPos[0]) + abs(entity.pos[2] - app.cameraPos[2]) > 2 * app.mode.player.reach:
+            continue
+
+        (aabb0, aabb1) = entity.getAABB()
+        inter = rayAABBIntersect(rayOrigin, rayDir, aabb0, aabb1)
+        if inter is not None:
+            inters.append((idx, inter))
+        
+    def dist(inter):
+        (_, i) = inter
+        dx = i[0] - rayOrigin[0]
+        dy = i[1] - rayOrigin[1]
+        dz = i[2] - rayOrigin[2]
+        return math.sqrt(dx**2 + dy**2 + dz**2)
+    
+    inters.sort(key=dist)
+
+    if inters == []:
+        return None
+    else:
+        inter = inters[0]
+        if dist(inter) > app.mode.player.reach:
+            return None
+        else:
+            return inter[0]
 
 def tick(app):
     startTime = time.time()
@@ -113,7 +164,7 @@ def doMobSpawning(app):
                 x += random.randint(-2, 2)
                 z += random.randint(-2, 2)
                 if isValidSpawnLocation(app, BlockPos(x, y, z)):
-                    app.entities.append(Entity('creeper', x, y, z))
+                    app.entities.append(Entity(app, 'creeper', x, y, z))
 
 def isValidSpawnLocation(app, pos: BlockPos):
     floor = BlockPos(pos.x, pos.y - 1, pos.z)

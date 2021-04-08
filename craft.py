@@ -15,10 +15,10 @@ import random
 import cmu_112_graphics
 import tkinter
 import entity
-import util
 import tick
+from util import ChunkPos
 from button import Button, ButtonManager, createSizedBackground
-from world import Chunk, ChunkPos, World
+from world import Chunk, World
 from typing import List, Optional, Tuple
 from enum import Enum
 from player import Player, Slot
@@ -430,6 +430,10 @@ class PlayingMode(Mode):
     def mousePressed(self, app, event):
         self.mouseHeld = True
 
+        idx = tick.lookedAtEntity(app)
+        if idx is not None:
+            print(idx)
+
     def rightMousePressed(self, app, event):
         block = world.lookedAtBlock(app)
         if block is not None:
@@ -815,7 +819,7 @@ def appStarted(app):
     app.mode = WorldLoadMode(app, 'demoworld', makePlayingMode, seed=random.random())
     #app.mode = CreateWorldMode(app)
 
-    app.entities = [entity.Entity('creeper', 0.0, 71.0, 1.0), entity.Entity('fox', 5.0, 72.0, 3.0)]
+    app.entities = [entity.Entity(app, 'creeper', 0.0, 71.0, 1.0), entity.Entity(app, 'fox', 5.0, 72.0, 3.0)]
 
     app.btnBg = createSizedBackground(app, 200, 40)
 

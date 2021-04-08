@@ -380,28 +380,28 @@ def loadGlTextures(app):
 
     app.entityProgram = ShaderProgram('shaders/entityShader.vert', 'shaders/entityShader.frag')
 
-def registerBlock(
-    app,
-    blockId: world.BlockId,
-    texturePath: Tuple[str, bool],
-    hardness: Tuple[Optional[str], float],
-    drops: dict[str, world.ItemId],
-):
-    # TODO: INTEGRATE WITH `loadTkTextures`
-
-    app.texturePaths[blockId] = texturePath
-    app.hardnesses[blockId] = hardness
-    app.blockDrops[blockId] = drops
-
-    # TODO: Block drops
-
-    # TODO: TkTextures (see below)
-
-    pass
-
 #def createTk
 
 #def createTkFace(im: Image.Image, offsetX: int, offsetY: int) -> List[int]:
+
+def registerBlock(
+    app,
+    blockId: str,
+    texturePath: Tuple[str, bool],
+    itemTexturePath: Optional[str],
+    hardness: Tuple[str, float],
+    drops: dict[str, Optional[str]],
+    opaque: bool = True,
+    collides: bool = True,
+    fuelValue: int = 0): 
+
+    # TODO: INTEGRATE WITH `loadTkTextures`
+
+    app.texturePaths[blockId] = texturePath
+    app.commonItemTextures[blockId] = itemTexturePath
+
+    # TODO: Everything else
+    
 
 def loadResources(app):
     app.sounds = {
@@ -475,6 +475,7 @@ def loadResources(app):
         loadEntityModels(app)
         loadEntityTextures(app)
         loadEntityAnimations(app)
+        entity.registerEntityKinds(app)
     else:
         app.textures = app.tkTextures
         app.textureIndices = None

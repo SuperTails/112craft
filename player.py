@@ -46,7 +46,7 @@ class Player(Entity):
     inventory: List[Slot]
 
     def __init__(self, app, creative: bool):
-        self.kind = 'player'
+        self.kind = app.entityKinds['player']
         self.pos = [0.0, 0.0, 0.0]
         self.velocity = [0.0, 0.0, 0.0]
         self.radius = 0.3
