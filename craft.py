@@ -333,8 +333,8 @@ def submitChat(app, text: str):
         print(f"COMMAND {text}")
 
         if parts[0] == 'pathfind':
-            player = app.mode.player
-            target = util.BlockPos(round(player.pos[0]), round(player.pos[1] + 0.01), round(player.pos[2]))
+            player: Player = app.mode.player
+            target = player.getBlockPos()
             for entity in app.entities:
                 entity.updatePath(app.world, target)
         elif parts[0] == 'give':

@@ -1,3 +1,4 @@
+from entity import Entity
 from typing import List, Optional
 from dataclasses import dataclass
 from util import ItemId, BlockPos
@@ -31,17 +32,12 @@ class Slot:
         else:
             return None
 
-class Player:
-    height: float = 1.5
-    radius: float = 0.3
+class Player(Entity):
+    height: float
+    radius: float
 
-    velocity: List[float]
-    onGround: bool = False
-
-    pos: List[float]
-
-    walkSpeed: float = 0.2
-    reach: float = 4.0
+    walkSpeed: float
+    reach: float
 
     hotbarIdx: int = 0
 
@@ -50,10 +46,21 @@ class Player:
     inventory: List[Slot]
 
     def __init__(self, app, creative: bool):
+        self.kind = 'player'
         self.pos = [0.0, 0.0, 0.0]
         self.velocity = [0.0, 0.0, 0.0]
+        self.radius = 0.3
+        self.height = 1.5
+        self.onGround = False
+        self.walkSpeed = 0.2
+
+        self.bodyAngle = 0.0
+        self.headAngle = 0.0
+
+        self.reach = 4.0
 
         self.creative = creative
+        
 
         if self.creative:
             if len(app.itemTextures) > 36:

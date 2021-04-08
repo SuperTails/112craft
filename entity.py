@@ -5,8 +5,9 @@ import numpy as np
 import heapq
 import math
 import time
-from world import World
-from util import BlockPos
+import random
+import decimal
+from util import BlockPos, roundHalfUp
 from dataclasses import dataclass
 from OpenGL.GL import * #type:ignore
 
@@ -272,19 +273,15 @@ def openModels(path) -> dict[str, EntityModel]:
 
 #print(models['fox'].bones[3].cubes[0].toVertices())
 
-class Ai:
-    target: BlockPos
-    path: List[BlockPos]
-
-    def __init__(self, target: BlockPos):
-        self.target = target
-        self.path = []
 
 class Entity:
     pos: List[float]
     velocity: List[float]
     kind: EntityKind
+
     radius: float
+    height: float
+
     onGround: bool
     walkSpeed: float
 
@@ -292,6 +289,8 @@ class Entity:
     headAngle: float
 
     path: List[BlockPos]
+
+    ai: Any
 
     def __init__(self, kind: EntityKind, x: float, y: float, z: float):
         self.kind = kind
@@ -306,6 +305,17 @@ class Entity:
         self.headAngle = 0.0
 
         self.path = []
+
+        if self.kind == 'creeper':
+            self.ai = Ai([WanderTask()])
+        elif self.kind == 'fox':
+            self.ai = Ai([FollowTask(), WanderTask()])
+        
+    def getBlockPos(self) -> BlockPos:
+        bx = roundHalfUp(self.pos[0])
+        by = roundHalfUp(self.pos[1])
+        bz = roundHalfUp(self.pos[2])
+        return BlockPos(bx, by, bz)
     
     def getRotation(self, app, i):
         bone = app.entityModels[self.kind].bones[i]
@@ -351,7 +361,7 @@ class Entity:
         
         return result
 
-    def tick(self, world: World, playerX, playerZ):
+    def tick(self, world, entities: List['Entity'], playerX, playerZ):
         self.headAngle = math.atan2(playerX - self.pos[0], playerZ - self.pos[2])
 
         if math.sqrt(self.velocity[0]**2 + self.velocity[2]**2) > 0.01:
@@ -369,6 +379,8 @@ class Entity:
                 change = diff
 
             self.bodyAngle += change
+        
+        self.ai.tick(self, world, entities)
 
         if len(self.path) > 0:
             x = self.path[0][0] - self.pos[0]
@@ -391,8 +403,8 @@ class Entity:
             self.velocity[0] = 0.0
             self.velocity[2] = 0.0
     
-    def updatePath(self, world: World, target: BlockPos):
-        start = BlockPos(round(self.pos[0]), round(self.pos[1] + 0.01), round(self.pos[2]))
+    def updatePath(self, world, target: BlockPos):
+        start = self.getBlockPos()
 
         if self.path == []:
             print(f"Finding path from {start} to {target}")
@@ -401,6 +413,93 @@ class Entity:
             if path is not None:
                 self.path = path
                 print(self.path)
+
+class Ai:
+    taskIdx: int
+    tasks: List[Any]
+
+    def __init__(self, tasks):
+        self.tasks = tasks
+        self.taskIdx = 0
+    
+    def tick(self, entity: Entity, world, entities: List[Entity]):
+        for highTask in range(self.taskIdx):
+            if self.tasks[highTask].shouldStart(entity, world, entities):
+                print(f"Switching to task {highTask} ({self.tasks[highTask]})")
+                self.taskIdx = highTask
+                break
+
+        isDone = self.tasks[self.taskIdx].tick(entity, world, entities)
+
+        if isDone:
+            print(f"Stopping task {self.taskIdx} ({self.tasks[self.taskIdx]})")
+            for lowTask in range(self.taskIdx+1, len(self.tasks)):
+                if self.tasks[lowTask].shouldStart(entity, world, entities):
+                    self.taskIdx = lowTask
+                    break
+
+class FollowTask:
+    def shouldStart(self, entity: Entity, world, entities: List[Entity]):
+        for other in entities:
+            if other.kind == 'player':
+                dx = entity.pos[0] - other.pos[0]
+                dy = entity.pos[1] - other.pos[1]
+                dz = entity.pos[2] - other.pos[2]
+                dist = math.sqrt(dx**2 + dy**2 + dz**2)
+                if dist < 16.0:
+                    # FIXME: CHECK FOR VALID PATH
+                    return True
+        return False
+
+    def tick(self, entity: Entity, world, entities: List[Entity]):
+        for other in entities:
+            if other.kind == 'player':
+                dx = entity.pos[0] - other.pos[0]
+                dy = entity.pos[1] - other.pos[1]
+                dz = entity.pos[2] - other.pos[2]
+                dist = math.sqrt(dx**2 + dy**2 + dz**2)
+
+                if dist > 16.0:
+                    return True
+                
+                if entity.path == [] and dist > 1.0:
+                    startPos = entity.getBlockPos()
+                    endPos = other.getBlockPos()
+                    path = findPath(startPos, endPos, world)
+                    if path is None:
+                        return True
+                    else:
+                        entity.path = path
+                        return False
+
+class NullTask:
+    def shouldStart(self, entity: Entity, world, entities):
+        return True
+
+    def tick(self, entity: Entity, world, entities):
+        return False
+
+class WanderTask:
+    def shouldStart(self, entity, world, entities):
+        return True
+
+    def tick(self, entity: Entity, world, entities):
+        wanderFreq = 0.01
+        wanderDist = 3
+        pos = entity.getBlockPos()
+        if entity.path == [] and random.random() < wanderFreq:
+            x = pos.x + random.randint(-wanderDist, wanderDist)
+            y = pos.y + random.randint(-2, 2)
+            z = pos.z + random.randint(-wanderDist, wanderDist)
+
+            if (not world.coordsOccupied(BlockPos(x, y, z))
+                and world.coordsOccupied(BlockPos(x, y - 1, z))):
+
+                path = findPath(pos, BlockPos(x, y, z), world)
+                if path is not None:
+                    entity.path = path
+        
+        return False
 
 
 def makePathFromChain(prevDirs, end: BlockPos) -> List[BlockPos]:
@@ -418,6 +517,8 @@ def makePathFromChain(prevDirs, end: BlockPos) -> List[BlockPos]:
     return result
 
 def findPath(start: BlockPos, end: BlockPos, world) -> Optional[List[BlockPos]]:
+    print(f"Start pos: {start} End pos: {end}")
+
     def heuristic(start: BlockPos, end: BlockPos):
         # Chebyshev distance
 
@@ -447,8 +548,6 @@ def findPath(start: BlockPos, end: BlockPos, world) -> Optional[List[BlockPos]]:
                 current = pos
                 minCost = costs[pos]
         assert(current is not None)
-
-        print(f"Trying {current}")
 
         openSet.remove(current)
         

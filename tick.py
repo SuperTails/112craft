@@ -1,5 +1,5 @@
 from entity import Entity
-from util import BlockPos
+from util import BlockPos, roundHalfUp
 import world
 import time
 import math
@@ -53,11 +53,13 @@ def tick(app):
     app.cameraPos = copy.copy(player.pos)
     app.cameraPos[1] += player.height
 
+    entities = app.entities + [player]
+
     for entity in app.entities:
         if collide(app, entity) and entity.onGround:
             entity.velocity[1] = 0.40
         
-        entity.tick(app.world, player.pos[0], player.pos[2])
+        entity.tick(app.world, entities, player.pos[0], player.pos[2])
 
     endTime = time.time()
     app.tickTimes[app.tickTimeIdx] = (endTime - startTime)
@@ -152,8 +154,8 @@ def collide(app, entity: Entity):
    
     hitWall = False
 
-    minY = round((entity.pos[1] + 0.1))
-    maxY = round((entity.pos[1] + entity.height))
+    minY = roundHalfUp((entity.pos[1]))
+    maxY = roundHalfUp((entity.pos[1] + entity.height))
 
     entity.pos[0] += entity.velocity[0]
 

@@ -889,19 +889,22 @@ def drawHud(app, canvas, startTime):
 
     drawTextOutlined(canvas, 10, 10, text=f'Frame Time: {frameTime:.2f}ms', anchor='nw')
 
-    drawTextOutlined(canvas, 10, 50, text=f"Pos: {app.cameraPos[0]:.2f}, {app.cameraPos[1]:.2f}, {app.cameraPos[2]:.2f}", anchor='nw')
-
+    drawTextOutlined(canvas, 10, 50, text=f"Eyes: {app.cameraPos[0]:.2f}, {app.cameraPos[1]:.2f}, {app.cameraPos[2]:.2f}", anchor='nw')
+    
     chunkX = math.floor(app.cameraPos[0] / 16)
     chunkY = math.floor(app.cameraPos[1] / world.CHUNK_HEIGHT)
     chunkZ = math.floor(app.cameraPos[2] / 16)
 
-    drawTextOutlined(canvas, 10, 90, text=f'Chunk coords: {chunkX}, {chunkY}, {chunkZ}', anchor='nw')
+    drawTextOutlined(canvas, 10, 140, text=f'Chunk coords: {chunkX}, {chunkY}, {chunkZ}', anchor='nw')
 
     # FIXME:
     if hasattr(app.mode, 'player'):
+        player = app.mode.player
+        drawTextOutlined(canvas, 10, 90, text=f"Feet: {player.pos[0]:.2f}, {player.pos[1]:.2f}, {player.pos[2]:.2f}", anchor='nw')
+
         feetPos = (app.cameraPos[0], app.cameraPos[1] - app.mode.player.height + 0.1, app.cameraPos[2])
         lightLevel = app.world.getLightLevel(world.nearestBlockPos(feetPos[0], feetPos[1], feetPos[2]))
-        drawTextOutlined(canvas, 10, 140, text=f'Light level: {lightLevel}', anchor='nw')
+        drawTextOutlined(canvas, 10, 190, text=f'Light level: {lightLevel}', anchor='nw')
 
 def redrawAll(app, canvas, doDrawHud=True):
     startTime = time.time()
