@@ -5,6 +5,7 @@ import numpy as np
 import heapq
 import math
 import time
+from world import World
 from util import BlockPos
 from dataclasses import dataclass
 from OpenGL.GL import * #type:ignore
@@ -350,7 +351,7 @@ class Entity:
         
         return result
 
-    def tick(self, world, playerX, playerZ):
+    def tick(self, world: World, playerX, playerZ):
         self.headAngle = math.atan2(playerX - self.pos[0], playerZ - self.pos[2])
 
         if math.sqrt(self.velocity[0]**2 + self.velocity[2]**2) > 0.01:
@@ -390,7 +391,7 @@ class Entity:
             self.velocity[0] = 0.0
             self.velocity[2] = 0.0
     
-    def updatePath(self, world, target: BlockPos):
+    def updatePath(self, world: World, target: BlockPos):
         start = BlockPos(round(self.pos[0]), round(self.pos[1] + 0.01), round(self.pos[2]))
 
         if self.path == []:

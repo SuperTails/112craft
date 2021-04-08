@@ -409,6 +409,10 @@ def loadResources(app):
         'destroy_grass': Sound('assets/destroy_grass.ogg')
     }
 
+    app.furnaceRecipes = {
+        'iron_ore': 'iron_ingot'
+    }
+
     app.texturePaths = {}
     app.hardnesses = {}
 
@@ -552,6 +556,7 @@ def loadResources(app):
         'stone_pickaxe': Image.open('assets/StonePickaxe.png'),
         'wooden_axe': Image.open('assets/WoodenAxe.png'),
         'wooden_shovel': Image.open('assets/WoodenShovel.png'),
+        'iron_ingot': Image.open('assets/Vanilla_Resource_Pack_1.16.220/textures/items/iron_ingot.png')
     }
 
     app.tkItemTextures = copy.copy(commonItemTextures)

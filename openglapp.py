@@ -99,6 +99,11 @@ class App:
         if ((ord('A') <= key and key <= ord('Z'))
             or (ord('1') <= key and key <= ord('9'))):
             keyName = chr(key)
+        elif key == glfw.KEY_MINUS:
+            if mods & glfw.MOD_SHIFT:
+                keyName = '_'
+            else:
+                keyName = '-'
         elif key == glfw.KEY_SLASH:
             keyName = '/'
         elif key == glfw.KEY_ESCAPE:
@@ -106,7 +111,7 @@ class App:
         elif key == glfw.KEY_ENTER:
             keyName = 'Enter'
         elif key == glfw.KEY_SPACE:
-            keyName = 'Space'
+            keyName = ' '
         elif key == glfw.KEY_BACKSPACE:
             keyName = 'Backspace'
         else:
@@ -118,7 +123,7 @@ class App:
         
         if action != glfw.REPEAT:
             if keyName is None:
-                print(f"Unknown key {key}")
+                print(f"Unknown key {key}, scancode {scancode}")
             elif action == glfw.PRESS:
                 self._callFn('keyPressed', self, event)
             else:

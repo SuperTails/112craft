@@ -16,6 +16,7 @@ import cmu_112_graphics
 import tkinter
 import entity
 import util
+import tick
 from button import Button, ButtonManager, createSizedBackground
 from world import Chunk, ChunkPos, World
 from typing import List, Optional, Tuple
@@ -327,13 +328,28 @@ def submitChat(app, text: str):
     if text.startswith('/'):
         text = text.removeprefix('/')
 
+        parts = text.split()
+
         print(f"COMMAND {text}")
 
-        if text == 'pathfind':
+        if parts[0] == 'pathfind':
             player = app.mode.player
             target = util.BlockPos(round(player.pos[0]), round(player.pos[1] + 0.01), round(player.pos[2]))
             for entity in app.entities:
                 entity.updatePath(app.world, target)
+        elif parts[0] == 'give':
+            itemId = parts[1]
+            if len(parts) == 3:
+                amount = int(parts[2])
+            else:
+                amount = 1
+            app.mode.player.pickUpItem(app, Slot(itemId, amount))
+        elif parts[0] == 'hide':
+            app.doDrawHud = False
+        elif parts[0] == 'show':
+            app.doDrawHud = True
+        elif parts[0] == 'cinematic':
+            app.cinematic = not app.cinematic
 
     else:
         print(f"CHAT: {text}")
@@ -383,14 +399,21 @@ class PlayingMode(Mode):
         self.player = Player(app, creative)
 
     def redrawAll(self, app, window, canvas):
-        render.redrawAll(app, canvas)
+        render.redrawAll(app, canvas, doDrawHud=app.doDrawHud)
     
     def timerFired(self, app):
         self.lookedAtBlock = world.lookedAtBlock(app)
 
+        if app.cinematic:
+            app.cameraPitch += app.pitchSpeed * 0.05
+            app.cameraYaw += app.yawSpeed * 0.05
+
+            app.pitchSpeed *= 0.95
+            app.yawSpeed *= 0.95
+
         updateBlockBreaking(app, self)
 
-        world.tick(app)
+        tick.tick(app)
 
     def mousePressed(self, app, event):
         self.mouseHeld = True
@@ -406,6 +429,10 @@ class PlayingMode(Mode):
 
             if app.world.getBlock(pos) == 'crafting_table':
                 app.mode = InventoryMode(app, self, name='crafting_table')
+            elif app.world.getBlock(pos) == 'furnace':
+                (ckPos, ckLocal) = world.toChunkLocal(pos)
+                furnace = app.world.chunks[ckPos].tileEntities[ckLocal]
+                app.mode = InventoryMode(app, self, name='furnace', extra=furnace)
             else:
                 slot = self.player.inventory[self.player.hotbarIdx]
                 if slot.amount == 0: return
@@ -437,7 +464,7 @@ class PlayingMode(Mode):
         elif key == 'E':
             app.mode = InventoryMode(app, self, name='inventory')
             app.w = app.s = app.a = app.d = False
-        elif key == 'SPACE':
+        elif key == 'SPACE' or key == ' ':
             if self.player.onGround:
                 app.mode.player.velocity[1] = 0.35
         elif key == 'ESCAPE':
@@ -457,6 +484,57 @@ class PlayingMode(Mode):
             app.a = False
         elif key == 'D':
             app.d = False
+
+class FurnaceGui:
+    furnace: world.Furnace
+
+    def __init__(self, furnace: world.Furnace):
+        self.furnace = furnace
+
+    def inputPos(self, app):
+        (_, _, w) = render.getSlotCenterAndSize(app, 0)
+        return (app.width / 2 - 50, app.height / 4 - 30)
+    
+    def fuelPos(self, app):
+        (_, _, w) = render.getSlotCenterAndSize(app, 0)
+        return (app.width / 2 - 50, app.height / 4 + 30)
+    
+    def outputPos(self, app):
+        (_, _, w) = render.getSlotCenterAndSize(app, 0)
+        return (app.width / 2 + 50, app.height / 4)
+    
+    def onClick(self, app, isRight, mx, my):
+        (_, _, w) = render.getSlotCenterAndSize(app, 0)
+
+        slot = None
+
+        (x, y) = self.inputPos(app)
+        if x-w/2 <= mx and mx <= x+w/2 and y-w/2 <= my and my <= y+w/2:
+            slot = self.furnace.inputSlot
+
+        (x, y) = self.outputPos(app)
+        if x-w/2 <= mx and mx <= x+w/2 and y-w/2 <= my and my <= y+w/2:
+            slot = self.furnace.outputSlot
+
+        (x, y) = self.fuelPos(app)
+        if x-w/2 <= mx and mx <= x+w/2 and y-w/2 <= my and my <= y+w/2:
+            slot = self.furnace.fuelSlot
+        
+        if slot is not None:
+            if isRight:
+                app.mode.onRightClickIntoNormalSlot(app, slot)
+            else:
+                app.mode.onLeftClickIntoNormalSlot(app, slot)
+    
+    def redrawAll(self, app, canvas):
+        (x, y) = self.inputPos(app)
+        render.drawSlot(app, canvas, x, y, self.furnace.inputSlot)
+
+        (x, y) = self.outputPos(app)
+        render.drawSlot(app, canvas, x, y, self.furnace.outputSlot)
+
+        (x, y) = self.fuelPos(app)
+        render.drawSlot(app, canvas, x, y, self.furnace.fuelSlot)
         
 class CraftingGui:
     craftInputs: List[List[Slot]]
@@ -544,7 +622,6 @@ class InventoryCraftingGui(CraftingGui):
 
         return x0 < mx and mx < x1 and y0 < my and my < y1
     
-
 class CraftingTableGui(CraftingGui):
     def __init__(self):
         super().__init__(3)
@@ -611,7 +688,7 @@ class InventoryMode(Mode):
     heldItem: Slot = Slot('', 0)
     player: Player
 
-    def __init__(self, app, submode: PlayingMode, name: str):
+    def __init__(self, app, submode: PlayingMode, name: str, extra=None):
         setMouseCapture(app, False)
         self.submode = submode
         self.heldItem = Slot('', 0)
@@ -623,8 +700,13 @@ class InventoryMode(Mode):
             self.gui = InventoryCraftingGui()
         elif name == 'crafting_table':
             self.gui = CraftingTableGui()
+        elif name == 'furnace':
+            self.gui = FurnaceGui(extra)
         else:
-            1 / 0
+            raise Exception(f"unknown gui {name}")
+        
+    def timerFired(self, app):
+        tick.tick(app)
 
     def redrawAll(self, app, window, canvas):
         self.submode.redrawAll(app, window, canvas)
@@ -702,10 +784,11 @@ class InventoryMode(Mode):
     def keyPressed(self, app, event):
         key = event.key.upper()
         if key == 'E':
-            dim = len(self.gui.craftInputs)
-            for r in range(dim):
-                for c in range(dim):
-                    self.submode.player.pickUpItem(app, self.gui.craftInputs[r][c])
+            if hasattr(self.gui, 'craftInputs'):
+                dim = len(self.gui.craftInputs)
+                for r in range(dim):
+                    for c in range(dim):
+                        self.submode.player.pickUpItem(app, self.gui.craftInputs[r][c])
             self.submode.player.pickUpItem(app, self.heldItem)
             self.heldItem = Slot('', 0)
             app.mode = self.submode
@@ -715,14 +798,20 @@ class InventoryMode(Mode):
 def appStarted(app):
     loadResources(app)
 
-    app.mode = WorldLoadMode(app, 'world', TitleMode)
-    #def makePlayingMode(app): return PlayingMode(app, False)
-    #app.mode = WorldLoadMode(app, 'cavetest', makePlayingMode)
+    #app.mode = WorldLoadMode(app, 'world', TitleMode)
+    def makePlayingMode(app): return PlayingMode(app, False)
+    app.mode = WorldLoadMode(app, 'demoworld', makePlayingMode, seed=random.random())
     #app.mode = CreateWorldMode(app)
 
     app.entities = [entity.Entity('creeper', 0.0, 71.0, 1.0), entity.Entity('fox', 5.0, 72.0, 3.0)]
 
     app.btnBg = createSizedBackground(app, 200, 40)
+
+    app.doDrawHud = True
+    app.cinematic = False
+
+    app.yawSpeed = 0.0
+    app.pitchSpeed = 0.0
 
     app.tickTimes = [0.0] * 10
     app.tickTimeIdx = 0
@@ -859,14 +948,17 @@ def mouseMovedOrDragged(app, event):
         xChange = -(event.x - app.prevMouse[0])
         yChange = -(event.y - app.prevMouse[1])
 
-        app.cameraPitch += yChange * 0.01
+        app.yawSpeed += 0.01 * (xChange - app.yawSpeed)
+        app.pitchSpeed += 0.01 * (yChange - app.pitchSpeed)
 
+        if not app.cinematic:
+            app.cameraPitch += yChange * 0.01
+            app.cameraYaw += xChange * 0.01
+        
         if app.cameraPitch < -math.pi / 2 * 0.95:
             app.cameraPitch = -math.pi / 2 * 0.95
         elif app.cameraPitch > math.pi / 2 * 0.95:
             app.cameraPitch = math.pi / 2 * 0.95
-
-        app.cameraYaw += xChange * 0.01
 
     if app.captureMouse:
         if config.USE_OPENGL_BACKEND:

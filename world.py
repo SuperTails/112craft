@@ -9,7 +9,7 @@ import config
 import anvil
 import os
 import copy
-from entity import Entity
+from player import Slot
 from enum import IntEnum
 from math import cos, sin
 from numpy import ndarray
@@ -260,12 +260,52 @@ CUBE_MESH_VERTICES = np.array([
     -0.5,  0.5,  0.5,  0.0, 0.0, # bottom-left
     ], dtype='float32')
 
+class Furnace:
+    inputSlot: Slot
+    outputSlot: Slot
+    fuelSlot: Slot
+
+    fuelLeft: int
+    progress: int
+
+    def __init__(self):
+        self.inputSlot = Slot('', 0)
+        self.outputSlot = Slot('', 0)
+        self.fuelSlot = Slot('', 0)
+
+        self.fuelLeft = 0
+        self.progress = 0
+    
+    def tick(self, app):
+        if self.fuelLeft > 0:
+            self.fuelLeft -= 1
+
+            if self.inputSlot.isEmpty():
+                self.progress = 0
+            else:
+                self.progress += 1
+            
+            if self.progress == 200:
+                self.progress = 0
+
+                if self.outputSlot.isEmpty():
+                    self.outputSlot.item = app.furnaceRecipes[self.inputSlot.item]
+                    self.outputSlot.amount = 1
+                else:
+                    self.outputSlot.amount += 1
+                self.inputSlot.amount -= 1
         
+        if self.fuelLeft == 0 and not self.inputSlot.isEmpty() and not self.fuelSlot.isEmpty():
+            self.fuelSlot.amount -= 1
+            self.fuelLeft = 1600
+
 class Chunk:
     pos: ChunkPos
     blocks: ndarray
     lightLevels: ndarray
     instances: List[Any]
+
+    tileEntities: dict[BlockPos, Any]
 
     meshVaos: List[int]
     meshVbos: List[int]
@@ -284,12 +324,19 @@ class Chunk:
 
         self.blocks = np.full((16, CHUNK_HEIGHT, 16), 'air', dtype=object)
         self.lightLevels = np.full((16, CHUNK_HEIGHT, 16), 0)
+        self.blockLightLevels = np.full((16, CHUNK_HEIGHT, 16), 0)
         self.instances = [None] * self.blocks.size
+
+        self.tileEntities = dict()
 
         self.meshVaos = [0] * (CHUNK_HEIGHT // MESH_HEIGHT)
         self.meshVbos = [0] * (CHUNK_HEIGHT // MESH_HEIGHT)
         self.meshVertexCounts = [0] * (CHUNK_HEIGHT // MESH_HEIGHT)
         self.meshDirtyFlags = [True] * (CHUNK_HEIGHT // MESH_HEIGHT)
+    
+    def tick(self, app):
+        for (pos, entity) in self.tileEntities.items():
+            entity.tick(app)
     
     def save(self, path):
         allBlocks = []
@@ -485,9 +532,9 @@ class Chunk:
 
         treePos = []
 
-        for treeIdx in range(3):
-            treeX = random.randint(1, 15)
-            treeZ = random.randint(1, 15)
+        for treeIdx in range(4):
+            treeX = random.randint(0, 15)
+            treeZ = random.randint(0, 15)
 
             for prevPos in treePos:
                 dist = abs(prevPos[0] - treeX) + abs(prevPos[1] - treeZ)
@@ -497,10 +544,11 @@ class Chunk:
             treePos.append((treeX, treeZ))
 
             baseY = CHUNK_HEIGHT - 1
-            # FIXME: y coords
             for yIdx in range(CHUNK_HEIGHT - 1, 0, -1):
-                if self.coordsOccupied(BlockPos(treeX, yIdx, treeZ)):
+                block = self.blocks[treeX, yIdx, treeZ]
+                if block == 'grass':
                     baseY = yIdx + 1
+                elif block == 'stone':
                     break
             
             globalPos = self._globalBlockPos(BlockPos(treeX, baseY, treeZ))
@@ -789,7 +837,7 @@ class Chunk:
 
                 faceVertices = [] 
                 for l in range(6):
-                    faceVertices += list(CUBE_MESH_VERTICES[((faceIdx // 2) * 6 + l) * 5:][:5]) + [0.0]
+                    faceVertices += list(CUBE_MESH_VERTICES[((faceIdx // 2) * 6 + l) * 5:][:5]) + [0.0, 0.0]
                 
                 adjBlockPos = adjacentBlockPos(BlockPos(bx, by, bz), faceIdx)
                 (ckPos, ckLocal) = toChunkLocal(self._globalBlockPos(adjBlockPos))
@@ -938,6 +986,12 @@ class Chunk:
             if doUpdateBuried:
                 self.updateBuriedStateAt(world, blockPos)
 
+        if blockPos in self.tileEntities:
+            self.tileEntities.pop(blockPos)
+        
+        if id == 'furnace':
+            self.tileEntities[blockPos] = Furnace()
+        
         '''
         for faceIdx in range(0, 12, 2):
             adjPos = adjacentBlockPos(blockPos, faceIdx)
@@ -1488,7 +1542,7 @@ def tickChunks(app, maxTime=0.030):
             if time.perf_counter() - startTime > maxTime:
                 keepGoing = False
 
-        if keepGoing and chunk.worldgenStage == WorldgenStage.OPTIMIZED and pop == 8:
+        if keepGoing and chunk.worldgenStage == WorldgenStage.OPTIMIZED and opt == 8:
             while keepGoing and chunk.createNextMesh(app.world, (app.textures, app.cube, app.textureIndices)):
                 if time.perf_counter() - startTime > maxTime:
                     keepGoing = False
@@ -1498,131 +1552,10 @@ def tickChunks(app, maxTime=0.030):
 
         if not keepGoing:
             break
-
-def tick(app):
-    startTime = time.time()
-
-    loadUnloadChunks(app, app.cameraPos)
-
-    tickChunks(app)
-
-    # Ticking is done in stages so that collision detection works as expected:
-    # First we update the player's Y position and resolve Y collisions,
-    # then we update the player's X position and resolve X collisions,
-    # and finally update the player's Z position and resolve Z collisions.
-
-    # W makes the player go forward, S makes them go backwards,
-    # and pressing both makes them stop!
-    z = float(app.w) - float(app.s)
-    # Likewise for side to side movement
-    x = float(app.d) - float(app.a)
-
-    player = app.mode.player
-
-    if x != 0.0 or z != 0.0:
-        mag = math.sqrt(x*x + z*z)
-        x /= mag
-        z /= mag
-
-        newX = math.cos(app.cameraYaw) * x - math.sin(app.cameraYaw) * z
-        newZ = math.sin(app.cameraYaw) * x + math.cos(app.cameraYaw) * z
-
-        x, z = newX, newZ
-
-        x *= player.walkSpeed 
-        z *= player.walkSpeed
     
-    player.velocity[0] = x
-    player.velocity[2] = z
-
-    player.pos = copy.copy(app.cameraPos)
-    player.pos[1] -= player.height
-    collide(app, player)
-    app.cameraPos = copy.copy(player.pos)
-    app.cameraPos[1] += player.height
-
-    for entity in app.entities:
-        if collide(app, entity) and entity.onGround:
-            entity.velocity[1] = 0.40
-        
-        entity.tick(app.world, player.pos[0], player.pos[2])
-
-    endTime = time.time()
-    app.tickTimes[app.tickTimeIdx] = (endTime - startTime)
-    app.tickTimeIdx += 1
-    app.tickTimeIdx %= len(app.tickTimes)
-
-def collide(app, entity: Entity):
-    entity.pos[1] += entity.velocity[1]
-
-    if entity.onGround:
-        if not hasBlockBeneath(app, entity):
-            entity.onGround = False
-    else:
-        entity.velocity[1] -= app.gravity
-        [_, yPos, _] = entity.pos
-        #yPos -= entity.height
-        yPos -= 0.1
-        feetPos = round(yPos)
-        if hasBlockBeneath(app, entity):
-            entity.onGround = True
-            entity.velocity[1] = 0.0
-            #app.cameraPos[1] = (feetPos + 0.5) + entity.height
-            entity.pos[1] = feetPos + 0.5
-
-    for x in [entity.pos[0] - entity.radius * 0.99, entity.pos[0] + entity.radius * 0.99]:
-        for z in [entity.pos[2] - entity.radius * 0.99, entity.pos[2] + entity.radius * 0.99]:
-            hiYCoord = round(entity.pos[1] + entity.height)
-
-            if app.world.coordsOccupied(BlockPos(round(x), hiYCoord, round(z))):
-                yEdge = hiYCoord - 0.5
-                entity.pos[1] = yEdge - entity.height
-   
-    hitWall = False
-
-    minY = round((entity.pos[1] + 0.1))
-    maxY = round((entity.pos[1] + entity.height))
-
-    entity.pos[0] += entity.velocity[0]
-
-    for y in range(minY, maxY + 1):
-        for z in [entity.pos[2] - entity.radius * 0.99, entity.pos[2] + entity.radius * 0.99]:
-            x = entity.pos[0]
-
-            hiXBlockCoord = round((x + entity.radius))
-            loXBlockCoord = round((x - entity.radius))
-
-            if app.world.coordsOccupied(BlockPos(hiXBlockCoord, y, round(z))):
-                # Collision on the right, so move to the left
-                xEdge = (hiXBlockCoord - 0.5)
-                entity.pos[0] = xEdge - entity.radius
-                hitWall = True
-            elif app.world.coordsOccupied(BlockPos(loXBlockCoord, y, round(z))):
-                # Collision on the left, so move to the right
-                xEdge = (loXBlockCoord + 0.5)
-                entity.pos[0] = xEdge + entity.radius
-                hitWall = True
-    
-    entity.pos[2] += entity.velocity[2]
-
-    for y in range(minY, maxY + 1):
-        for x in [entity.pos[0] - entity.radius * 0.99, entity.pos[0] + entity.radius * 0.99]:
-            z = entity.pos[2]
-
-            hiZBlockCoord = round((z + entity.radius))
-            loZBlockCoord = round((z - entity.radius))
-
-            if app.world.coordsOccupied(BlockPos(round(x), y, hiZBlockCoord)):
-                zEdge = (hiZBlockCoord - 0.5)
-                entity.pos[2] = zEdge - entity.radius
-                hitWall = True
-            elif app.world.coordsOccupied(BlockPos(round(x), y, loZBlockCoord)):
-                zEdge = (loZBlockCoord + 0.5)
-                entity.pos[2] = zEdge + entity.radius
-                hitWall = True
-    
-    return hitWall
-
+    for chunk in app.world.chunks.values():
+        if chunk.isTicking:
+            chunk.tick(app)
     
 def removeBlock(app, blockPos: BlockPos):
     setBlock(app, blockPos, 'air', doUpdateMesh=True)
