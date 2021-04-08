@@ -303,6 +303,7 @@ class Chunk:
     pos: ChunkPos
     blocks: ndarray
     lightLevels: ndarray
+    blockLightLevels: ndarray
     instances: List[Any]
 
     tileEntities: dict[BlockPos, Any]
@@ -342,6 +343,9 @@ class Chunk:
             entity.tick(app)
     
     def save(self, path):
+        np.savez(path, blocks=self.blocks, lightLevels=self.lightLevels, blockLightLevels=self.blockLightLevels)
+
+        '''
         allBlocks = []
         allLights = []
         for yIdx in range(0, CHUNK_HEIGHT):
@@ -354,6 +358,7 @@ class Chunk:
             f.write(','.join(allBlocks))
             f.write('\n')
             f.write(','.join(allLights))
+        '''
     
     @timed()
     def loadFromAnvilChunk(self, world, instData, chunk):
@@ -440,6 +445,7 @@ class Chunk:
         self.worldgenStage = WorldgenStage.POPULATED
     
     def load(self, world, instData, path):
+        '''
         with open(path, "r") as f:
             [blockList, lightList] = f.readlines()
             blockList = blockList.strip().split(',')
@@ -452,6 +458,15 @@ class Chunk:
 
                 self.setBlock(world, instData, BlockPos(x, y, z), b, doUpdateLight=False, doUpdateBuried=False)
                 self.lightLevels[x, y, z] = int(l)
+        '''
+
+        # TODO: See if I can serialize strings some other way
+        with np.load(path, allow_pickle=True) as npz:
+            self.blocks = npz['blocks']
+            self.lightLevels = npz['lightLevels']
+            self.blockLightLevels = npz['blockLightLevels']
+        
+        self.setAllBlocks(world, instData)
         
         self.worldgenStage = WorldgenStage.POPULATED
 
@@ -846,12 +861,15 @@ class Chunk:
                 (ckPos, ckLocal) = toChunkLocal(self._globalBlockPos(adjBlockPos))
                 if self.pos == ckPos:
                     lightLevel = self.lightLevels[ckLocal.x, ckLocal.y, ckLocal.z]
+                    blockLightLevel = self.blockLightLevels[ckLocal.x, ckLocal.y, ckLocal.z]
                 else:
                     ckPos = ChunkPos(ckPos.x + self.pos.x, ckPos.y + self.pos.y, ckPos.z + self.pos.z)
                     if ckPos not in world.chunks:
                         lightLevel = 7
+                        blockLightLevel = 0
                     else:
                         lightLevel = world.chunks[ckPos].lightLevels[ckLocal.x, ckLocal.y, ckLocal.z]
+                        blockLightLevel = world.chunks[ckPos].blockLightLevels[ckLocal.x, ckLocal.y, ckLocal.z]
 
                 #faceVertices = list(vertices[(faceIdx // 2) * 6 * 5:((faceIdx // 2) + 1) * 6 * 5])
                 for idx2 in range(6):
@@ -863,6 +881,7 @@ class Chunk:
                     faceVertices[idx2 * 7 + 3] += instData[2][blockId][faceIdx // 2] * 16.0
 
                     faceVertices[idx2 * 7 + 5] = lightLevel
+                    faceVertices[idx2 * 7 + 6] = blockLightLevel
 
                 usedVertices += faceVertices
         
@@ -972,6 +991,25 @@ class Chunk:
     def coordsOccupied(self, pos: BlockPos) -> bool:
         (x, y, z) = pos
         return self.blocks[x, y, z] != 'air'
+    
+    def setAllBlocks(self, world, instData):
+        self.meshDirtyFlags = [True] * len(self.meshDirtyFlags)
+
+        (textures, cube, _) = instData
+
+        self.tileEntities = {}
+
+        for ((x, y, z), block) in np.ndenumerate(self.blocks):
+            blockPos = BlockPos(x, y, z)
+            idx = self._coordsToIdx(blockPos)
+            if block == 'air':
+                self.instances[idx] = None
+            else:
+                texture = textures[block]
+                [modelX, modelY, modelZ] = blockToWorld(self._globalBlockPos(blockPos))
+                self.instances[idx] = [render.Instance(cube, np.array([[modelX, modelY, modelZ]]), texture), True]
+                if block == 'furnace':
+                    self.tileEntities[blockPos] = Furnace()
 
     def setBlock(self, world, instData, blockPos: BlockPos, id: BlockId, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False):
         meshIdx = blockPos.y // MESH_HEIGHT
@@ -1037,7 +1075,8 @@ class Chunk:
         
         if doUpdateLight:
             globalPos = self._globalBlockPos(blockPos)
-            world.updateLight(globalPos)
+            world.updateLight(globalPos, isSky=True)
+            world.updateLight(globalPos, isSky=False)
         
         if doUpdateMesh:
             self.createMesh(world, instData)
@@ -1109,7 +1148,7 @@ class World:
         return self.chunks[chunkPos].blocks[localPos.x, localPos.y, localPos.z]
     
     def chunkFileName(self, pos: ChunkPos) -> str:
-        return f'saves/{self.name}/c_{pos.x}_{pos.y}_{pos.z}.txt'
+        return f'saves/{self.name}/c_{pos.x}_{pos.y}_{pos.z}.npz'
     
     def save(self):
         print("Saving world... ", end='')
@@ -1213,17 +1252,28 @@ class World:
     def getLightLevel(self, blockPos: BlockPos) -> int:
         (chunk, (x, y, z)) = self.getChunk(blockPos)
         return chunk.lightLevels[x, y, z]
+    
+    def getBlockLightLevel(self, blockPos: BlockPos) -> int:
+        (chunk, (x, y, z)) = self.getChunk(blockPos)
+        return chunk.blockLightLevels[x, y, z]
 
     def setLightLevel(self, blockPos: BlockPos, level: int):
         (chunk, (x, y, z)) = self.getChunk(blockPos)
         chunk.lightLevels[x, y, z] = level
 
-    def updateLight(self, blockPos: BlockPos):
+    def setBlockLightLevel(self, blockPos: BlockPos, level: int):
+        (chunk, (x, y, z)) = self.getChunk(blockPos)
+        chunk.blockLightLevels[x, y, z] = level
+    
+    def updateLight(self, blockPos: BlockPos, isSky: bool):
         self.meshDirty = True
 
         added = self.coordsOccupied(blockPos)
 
         (chunk, localPos) = self.getChunk(blockPos)
+
+        block = chunk.blocks[localPos.x, localPos.y, localPos.z]
+        prevBlockLight = chunk.blockLightLevels[localPos.x, localPos.y, localPos.z]
 
         skyExposed = True
         for y in range(localPos.y + 1, CHUNK_HEIGHT):
@@ -1232,7 +1282,43 @@ class World:
                 skyExposed = False
                 break
 
-        if added:
+        if isSky:
+            decreased = added
+        else:
+            if added:
+                lum = getLuminance(block)
+                decreased = False
+                for faceIdx in range(0, 12, 2):
+                    gPos = adjacentBlockPos(blockPos, faceIdx)
+
+                    if self.coordsOccupied(gPos):
+                        continue
+
+                    if not self.coordsInBounds(gPos):
+                        continue
+
+                    if self.getBlockLightLevel(gPos) > lum:
+                        decreased = True
+                        break
+            else:
+                decreased = True
+                for faceIdx in range(0, 12, 2):
+                    gPos = adjacentBlockPos(blockPos, faceIdx)
+
+                    if self.coordsOccupied(gPos):
+                        continue
+
+                    if not self.coordsInBounds(gPos):
+                        continue
+
+                    if self.getBlockLightLevel(gPos) > prevBlockLight:
+                        decreased = False
+                        break
+
+
+        print(f"decreased: {decreased}")
+
+        if decreased:
             # When a block is ADDED:
             # If the block is directly skylit:
             #   Mark all blocks visibly beneath as ex-sources
@@ -1243,16 +1329,16 @@ class World:
             # Propogate from the actual sources
 
             exSources = []
-            
+
             # FIXME: If I ever add vertical chunks this needs to change
-            if skyExposed:
+            if skyExposed and isSky:
                 for y in range(localPos.y - 1, -1, -1):
                     checkPos = BlockPos(localPos.x, y, localPos.z)
                     if chunk.coordsOccupied(checkPos):
                         break
 
                     heapq.heappush(exSources, (-7, BlockPos(blockPos.x, y, blockPos.z)))
-            
+                
             for faceIdx in range(0, 12, 2):
                 gPos = adjacentBlockPos(blockPos, faceIdx)
 
@@ -1262,9 +1348,11 @@ class World:
                 if not self.coordsInBounds(gPos):
                     continue
 
-                lightLevel = self.getLightLevel(gPos)
+                lightLevel = self.getLightLevel(gPos) if isSky else self.getBlockLightLevel(gPos)
 
                 heapq.heappush(exSources, (-lightLevel, gPos))
+            
+            self.setBlockLightLevel(blockPos, getLuminance(block))
 
             exVisited = []
 
@@ -1277,12 +1365,20 @@ class World:
                     continue
                 exVisited.append(pos)
 
-                existingLight = self.getLightLevel(pos)
+                existingLight = self.getLightLevel(pos) if isSky else self.getBlockLightLevel(pos)
+
+                if isSky:
+                    print(f"Setting {pos} to 0")
+                    self.setLightLevel(pos, 0)
+                else:
+                    self.setBlockLightLevel(pos, 0)
+
                 if existingLight > neglight:
                     heapq.heappush(queue, (-existingLight, pos))
                     continue
-
-                self.setLightLevel(pos, 0)
+                
+                if neglight == 0:
+                    continue
 
                 nextLight = max(neglight - 1, 0)
                 for faceIdx in range(0, 12, 2):
@@ -1296,7 +1392,11 @@ class World:
 
                     heapq.heappush(exSources, (-nextLight, nextPos))
             
-            chunk.lightLevels[localPos.x, localPos.y, localPos.z] = 0
+            if isSky:
+                chunk.lightLevels[localPos.x, localPos.y, localPos.z] = 0
+            else:
+                chunk.blockLightLevels[localPos.x, localPos.y, localPos.z] = 0
+
         else:
             # When a block is REMOVED:
             # Note that this can only ever *increase* the light level of a block! So:
@@ -1309,7 +1409,7 @@ class World:
             queue = []
 
             # FIXME: If I ever add vertical chunks this needs to change
-            if skyExposed:
+            if skyExposed and isSky:
                 for y in range(localPos.y, -1, -1):
                     checkPos = BlockPos(localPos.x, y, localPos.z)
                     if chunk.coordsOccupied(checkPos):
@@ -1323,10 +1423,15 @@ class World:
                 if not self.coordsInBounds(gPos):
                     continue
 
-                lightLevel = self.getLightLevel(gPos)
+                lightLevel = self.getLightLevel(gPos) if isSky else max(getLuminance(block) - 1, 0)
 
                 heapq.heappush(queue, (-lightLevel, gPos))
 
+
+            if not isSky:
+                self.setBlockLightLevel(blockPos, getLuminance(block))
+        
+        print(queue)
 
         visited = []
         
@@ -1336,10 +1441,17 @@ class World:
             if pos in visited:
                 continue
             visited.append(pos)
-            self.setLightLevel(pos, light)
 
-            nextLight = max(light - 1, 0)
+            if isSky:
+                self.setLightLevel(pos, light)
+            else:
+                self.setBlockLightLevel(pos, light)
+
             for faceIdx in range(0, 12, 2):
+                if isSky and faceIdx == 8 and light == 7:
+                    nextLight = 7
+                else:
+                    nextLight = max(light - 1, 0)
                 nextPos = adjacentBlockPos(pos, faceIdx)
                 if nextPos in visited:
                     continue
@@ -1348,13 +1460,19 @@ class World:
                 if self.coordsOccupied(nextPos):
                     continue
 
-                existingLight = self.getLightLevel(nextPos)
+                existingLight = self.getLightLevel(nextPos) if isSky else self.getBlockLightLevel(nextPos)
 
                 if nextLight > existingLight:
                     heapq.heappush(queue, (-nextLight, nextPos))
 
 
     # app.instances[idx] = [Instance(app.cube, np.array([[modelX], [modelY], [modelZ]]), texture), False]
+
+def getLuminance(block: BlockId):
+    if block == 'glowstone':
+        return 7
+    else:
+        return 0
 
 def updateBuriedStateAt(world: World, pos: BlockPos):
     (chunk, innerPos) = world.getChunk(pos)
@@ -1381,7 +1499,7 @@ def toChunkLocal(pos: BlockPos) -> Tuple[ChunkPos, BlockPos]:
     return (chunkPos, blockPos)
 
 def nearestBlockCoord(coord: float) -> int:
-    return round(coord)
+    return roundHalfUp(coord)
 
 def nearestBlockPos(x: float, y: float, z: float) -> BlockPos:
     blockX: int = nearestBlockCoord(x)

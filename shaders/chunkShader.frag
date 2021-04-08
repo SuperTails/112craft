@@ -7,6 +7,7 @@ in vec2 TexCoord;
 
 in float breakColor;
 in float light;
+in float blockLight;
 
 uniform sampler2D blockTexture;
 uniform sampler2D breakTexture;
@@ -26,9 +27,13 @@ void main() {
     float daylightFactor = sin(dayFrac * 2.0 * 3.14159 /2.0);
     daylightFactor *= daylightFactor;
 
+    float daylight = light * daylightFactor;
+    
+    float totalLight = max(blockLight, daylight);
+
     vec3 baseColor = c - (d.rgb * d.a * breakColor);
 
-    float light2 = 0.18 + pow((light * daylightFactor) / 8.0, 1.5);
+    float light2 = 0.18 + pow(totalLight / 8.0, 1.5);
 
     FragColor = vec4(baseColor * light2, 1.0);
 

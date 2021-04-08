@@ -904,7 +904,8 @@ def drawHud(app, canvas, startTime):
 
         feetPos = (app.cameraPos[0], app.cameraPos[1] - app.mode.player.height + 0.1, app.cameraPos[2])
         lightLevel = app.world.getLightLevel(world.nearestBlockPos(feetPos[0], feetPos[1], feetPos[2]))
-        drawTextOutlined(canvas, 10, 190, text=f'Light level: {lightLevel}', anchor='nw')
+        blockLightLevel = app.world.getBlockLightLevel(world.nearestBlockPos(feetPos[0], feetPos[1], feetPos[2]))
+        drawTextOutlined(canvas, 10, 190, text=f'Sky {lightLevel}, Block {blockLightLevel}', anchor='nw')
 
 def redrawAll(app, canvas, doDrawHud=True):
     startTime = time.time()

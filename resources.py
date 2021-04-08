@@ -428,7 +428,8 @@ def loadResources(app):
         'bedrock': ('assets/bedrock.png', True),
         'planks': ('assets/oak_planks.png', True),
         'crafting_table': ('assets/crafting_table.png', False),
-        'furnace': ('assets/furnace.png', False)
+        'furnace': ('assets/furnace.png', False),
+        'glowstone': ('assets/Vanilla_Resource_Pack_1.16.220/textures/blocks/glowstone.png', True),
     }
 
     app.hardnesses = {
@@ -436,6 +437,7 @@ def loadResources(app):
         'dirt': ('shovel', 0.8),
         'stone': ('pickaxe', 5.0),
         'furnace': ('pickaxe', 5.0),
+        'glowstone': ('pickaxe', 2.0),
         'coal_ore': ('pickaxe', 6.0),
         'iron_ore': ('pickaxe', 6.0),
         'cobblestone': ('pickaxe', 6.0),
@@ -459,6 +461,7 @@ def loadResources(app):
         'planks': { '': 'planks' },
         'crafting_table': { '': 'crafting_table' },
         'bedrock': { '': None },
+        'glowstone': { '': 'glowstone' },
     }
 
     loadTkTextures(app)
