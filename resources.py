@@ -430,6 +430,7 @@ def loadResources(app):
         'crafting_table': ('assets/crafting_table.png', False),
         'furnace': ('assets/furnace.png', False),
         'glowstone': ('assets/Vanilla_Resource_Pack_1.16.220/textures/blocks/glowstone.png', True),
+        'torch':     ('assets/Vanilla_Resource_Pack_1.16.220/textures/blocks/torch_on.png', True),
     }
 
     app.hardnesses = {
@@ -446,6 +447,7 @@ def loadResources(app):
         'planks': ('axe', 2.0),
         'crafting_table': ('axe', 2.0),
         'bedrock': (None, float('inf')),
+        'torch': (None, 0.1),
     }
 
     app.blockDrops = {
@@ -462,6 +464,7 @@ def loadResources(app):
         'crafting_table': { '': 'crafting_table' },
         'bedrock': { '': None },
         'glowstone': { '': 'glowstone' },
+        'torch': { '': 'torch' },
     }
 
     loadTkTextures(app)
@@ -548,6 +551,15 @@ def loadResources(app):
             ],
             Slot('furnace', 1),
             { 'c': 'cobblestone' }
+        ),
+        Recipe(
+            [
+                'c--',
+                's--',
+                '---',
+            ],
+            Slot('torch', 4),
+            { 'c': 'coal', 's': 'stick' }
         )
     ]
 
@@ -559,13 +571,17 @@ def loadResources(app):
         'stone_pickaxe': Image.open('assets/StonePickaxe.png'),
         'wooden_axe': Image.open('assets/WoodenAxe.png'),
         'wooden_shovel': Image.open('assets/WoodenShovel.png'),
-        'iron_ingot': Image.open('assets/Vanilla_Resource_Pack_1.16.220/textures/items/iron_ingot.png')
+        'iron_ingot': Image.open('assets/Vanilla_Resource_Pack_1.16.220/textures/items/iron_ingot.png'),
+        'torch': Image.open('assets/Vanilla_Resource_Pack_1.16.220/textures/blocks/torch_on.png'),
     }
 
     app.tkItemTextures = copy.copy(commonItemTextures)
     app.glItemTextures = commonItemTextures
 
     for (name, _) in app.textures.items():
+        if name in commonItemTextures:
+            continue
+
         if config.USE_OPENGL_BACKEND:
             (path, tess) = app.texturePaths[name]
             newGlTex = render.drawItemFromBlock2(25, loadBlockImage(path, tesselate=tess))

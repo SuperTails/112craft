@@ -855,7 +855,21 @@ class Chunk:
 
                 faceVertices = [] 
                 for l in range(6):
-                    faceVertices += list(CUBE_MESH_VERTICES[((faceIdx // 2) * 6 + l) * 5:][:5]) + [0.0, 0.0]
+                    vert = CUBE_MESH_VERTICES[((faceIdx // 2) * 6 + l) * 5:][:5]
+
+                    if blockId == 'torch':
+                        if faceIdx < 8:
+                            uSize, vSize = 2/16, 10/16
+                            uOffset, vOffset = 7/16, 0/16
+                        else:
+                            uSize, vSize = 2/16, 2/16
+                            uOffset, vOffset = 7/16, 8/16
+                        vert = (vert * [2/16, 10/16, 2/16, uSize, vSize]) + [0.0, -3/16, 0.0, uOffset, vOffset]
+
+                    faceVertices += list(vert)
+
+                    faceVertices.append(0.0)
+                    faceVertices.append(0.0)
                 
                 adjBlockPos = adjacentBlockPos(BlockPos(bx, by, bz), faceIdx)
                 (ckPos, ckLocal) = toChunkLocal(self._globalBlockPos(adjBlockPos))
@@ -1470,6 +1484,8 @@ class World:
 
 def getLuminance(block: BlockId):
     if block == 'glowstone':
+        return 7
+    elif block == 'torch':
         return 7
     else:
         return 0
