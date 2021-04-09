@@ -22,7 +22,7 @@ from world import Chunk, World
 from typing import List, Optional, Tuple
 from enum import Enum
 from player import Player, Slot
-from resources import loadResources, getHardnessAgainst, getBlockDrop
+from resources import loadResources, getHardnessAgainst, getBlockDrop, getAttackDamage
 
 # =========================================================================== #
 # ----------------------------- THE APP ------------------------------------- #
@@ -432,7 +432,21 @@ class PlayingMode(Mode):
 
         idx = tick.lookedAtEntity(app)
         if idx is not None:
-            print(idx)
+            entity = app.entities[idx]
+
+            knockback = [entity.pos[0] - self.player.pos[0], entity.pos[2] - self.player.pos[2]]
+            mag = math.sqrt(knockback[0]**2 + knockback[1]**2)
+            knockback[0] /= mag
+            knockback[1] /= mag
+
+            slot = self.player.inventory[self.player.hotbarIdx]
+            
+            if slot.isEmpty():
+                dmg = 1.0
+            else:
+                dmg = 1.0 + getAttackDamage(app, slot.item)
+
+            entity.hit(dmg, knockback)
 
     def rightMousePressed(self, app, event):
         block = world.lookedAtBlock(app)

@@ -53,6 +53,7 @@ def lookedAtEntity(app) -> Optional[int]:
     else:
         inter = inters[0]
         if dist(inter) > app.mode.player.reach:
+            print(f"dist: {dist(inter)}")
             return None
         else:
             return inter[0]
@@ -127,7 +128,7 @@ def doMobDespawning(app):
 
         maxDist = 128.0
 
-        if dist > maxDist:
+        if dist > maxDist or app.entities[idx].health <= 0.0:
             app.entities.pop(idx)
         else:
             idx += 1

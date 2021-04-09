@@ -7,6 +7,7 @@ import math
 import time
 import random
 import decimal
+import copy
 from util import BlockPos, roundHalfUp
 from dataclasses import dataclass
 from OpenGL.GL import * #type:ignore
@@ -339,6 +340,8 @@ class Entity:
         self.bodyAngle = 0.0
         self.headAngle = 0.0
 
+        self.immunity = 0
+
         self.path = []
 
         self.kind = app.entityKinds[kind]
@@ -349,8 +352,18 @@ class Entity:
         self.height = self.kind.height
         self.walkSpeed = self.kind.walkSpeed
         self.health = self.kind.maxHealth
-        # FIXME: COPY??
-        self.ai = self.kind.ai
+        self.ai = copy.deepcopy(self.kind.ai)
+    
+    def hit(self, damage: float, knockback: Tuple[float, float]):
+        print("got hit")
+        if self.immunity == 0:
+            self.health -= damage
+
+            self.velocity[0] += knockback[0] * 0.25
+            self.velocity[1] += 0.2
+            self.velocity[2] += knockback[1] * 0.25
+
+            self.immunity = 10
 
     def getAABB(self) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
         loX = self.pos[0] - self.radius
@@ -432,6 +445,9 @@ class Entity:
 
             self.bodyAngle += change
         
+        if self.immunity > 0:
+            self.immunity -= 1
+        
         self.ai.tick(self, world, entities)
 
         if len(self.path) > 0:
@@ -442,6 +458,9 @@ class Entity:
 
             if mag < 0.5:
                 self.path.pop(0)
+                if self.path == []:
+                    self.velocity[0] = 0.0
+                    self.velocity[2] = 0.0
             else:
                 x /= mag
                 z /= mag
@@ -451,7 +470,7 @@ class Entity:
 
                 self.velocity[0] = x
                 self.velocity[2] = z
-        else:
+        elif self.onGround:
             self.velocity[0] = 0.0
             self.velocity[2] = 0.0
     

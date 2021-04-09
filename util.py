@@ -41,19 +41,31 @@ def rayAABBIntersect(
     else:
         return results[0]
 
+
 def rayAlignedPlaneIntersect(
     rayOrigin: Tuple[float, float, float],
     rayDir: Tuple[float, float, float],
     plane0: Tuple[float, float, float],
     plane1: Tuple[float, float, float]) -> Optional[Tuple[float, float, float]]:
 
-    planeMinX = min(plane0[0], plane1[0]) - rayOrigin[0]
-    planeMinY = min(plane0[1], plane1[1]) - rayOrigin[1]
-    planeMinZ = min(plane0[2], plane1[2]) - rayOrigin[2]
+    plane0 = (plane0[0] - rayOrigin[0], plane0[1] - rayOrigin[1], plane0[2] - rayOrigin[2])
+    plane1 = (plane1[0] - rayOrigin[0], plane1[1] - rayOrigin[1], plane1[2] - rayOrigin[2])
 
-    planeMaxX = max(plane0[0], plane1[0]) - rayOrigin[0]
-    planeMaxY = max(plane0[1], plane1[1]) - rayOrigin[1]
-    planeMaxZ = max(plane0[2], plane1[2]) - rayOrigin[2]
+    result = rayAlignedPlaneIntersect2(rayDir, plane0, plane1)
+
+    if result is None:
+        return None
+    else:
+        return (result[0] + rayOrigin[0], result[1] + rayOrigin[1], result[2] + rayOrigin[2])
+
+def rayAlignedPlaneIntersect2(rayDir, plane0, plane1):
+    planeMinX = min(plane0[0], plane1[0])
+    planeMinY = min(plane0[1], plane1[1])
+    planeMinZ = min(plane0[2], plane1[2])
+
+    planeMaxX = max(plane0[0], plane1[0])
+    planeMaxY = max(plane0[1], plane1[1])
+    planeMaxZ = max(plane0[2], plane1[2])
 
     if planeMinX == planeMaxX:
         x = planeMinX

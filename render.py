@@ -647,6 +647,9 @@ def drawEntities(app, view, projection):
             glUniform1f(app.entityProgram.getUniformLocation("rotY"), y)
             glUniform1f(app.entityProgram.getUniformLocation("rotZ"), z)
 
+            immunity = 1.0 if entity.immunity > 0 else 0.0
+            glUniform1f(app.entityProgram.getUniformLocation("immunity"), immunity)
+
             glBindVertexArray(vao)
             glDrawArrays(GL_TRIANGLES, 0, num * 5)
 

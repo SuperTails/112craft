@@ -402,6 +402,15 @@ def registerBlock(
 
     # TODO: Everything else
     
+def getAttackDamage(app, item: str):
+    if item == 'wooden_sword':
+        return 4.5
+    elif item == 'stone_sword':
+        return 6.0
+    elif item == 'iron_sword':
+        return 6.5
+    else:
+        return 0.0
 
 def loadResources(app):
     app.sounds = {
@@ -561,7 +570,34 @@ def loadResources(app):
             ],
             Slot('torch', 4),
             { 'c': 'coal', 's': 'stick' }
-        )
+        ),
+        Recipe(
+            [
+                'p--',
+                'p--',
+                's--',
+            ],
+            Slot('wooden_sword', 1),
+            { 'p': 'planks', 's': 'stick' }
+        ),
+        Recipe(
+            [
+                'p--',
+                'p--',
+                's--',
+            ],
+            Slot('stone_sword', 1),
+            { 'p': 'cobblestone', 's': 'stick' }
+        ),
+        Recipe(
+            [
+                'p--',
+                'p--',
+                's--',
+            ],
+            Slot('iron_sword', 1),
+            { 'p': 'iron_ingot', 's': 'stick' }
+        ),
     ]
 
     commonItemTextures = {
@@ -572,6 +608,9 @@ def loadResources(app):
         'stone_pickaxe': Image.open('assets/StonePickaxe.png'),
         'wooden_axe': Image.open('assets/WoodenAxe.png'),
         'wooden_shovel': Image.open('assets/WoodenShovel.png'),
+        'iron_sword': Image.open('assets/Vanilla_Resource_Pack_1.16.220/textures/items/iron_sword.png'),
+        'stone_sword': Image.open('assets/Vanilla_Resource_Pack_1.16.220/textures/items/stone_sword.png'),
+        'wooden_sword': Image.open('assets/Vanilla_Resource_Pack_1.16.220/textures/items/wood_sword.png'),
         'iron_ingot': Image.open('assets/Vanilla_Resource_Pack_1.16.220/textures/items/iron_ingot.png'),
         'torch': Image.open('assets/Vanilla_Resource_Pack_1.16.220/textures/blocks/torch_on.png'),
     }
