@@ -875,6 +875,8 @@ class Chunk:
 
                     faceVertices.append(0.0)
                     faceVertices.append(0.0)
+                    faceVertices.append(0.0)
+                    faceVertices.append(0.0)
                 
                 adjBlockPos = adjacentBlockPos(BlockPos(bx, by, bz), faceIdx)
                 (ckPos, ckLocal) = toChunkLocal(self._globalBlockPos(adjBlockPos))
@@ -892,15 +894,18 @@ class Chunk:
 
                 #faceVertices = list(vertices[(faceIdx // 2) * 6 * 5:((faceIdx // 2) + 1) * 6 * 5])
                 for idx2 in range(6):
-                    faceVertices[idx2 * 7 + 0] += bx + self.pos.x * 16
-                    faceVertices[idx2 * 7 + 1] += by + self.pos.y * CHUNK_HEIGHT
-                    faceVertices[idx2 * 7 + 2] += bz + self.pos.z * 16
+                    faceVertices[idx2 * 9 + 0] += bx + self.pos.x * 16
+                    faceVertices[idx2 * 9 + 1] += by + self.pos.y * CHUNK_HEIGHT
+                    faceVertices[idx2 * 9 + 2] += bz + self.pos.z * 16
 
-                    faceVertices[idx2 * 7 + 3] *= 16.0
-                    faceVertices[idx2 * 7 + 3] += instData[2][blockId][faceIdx // 2] * 16.0
+                    faceVertices[idx2 * 9 + 5] = lightLevel
+                    faceVertices[idx2 * 9 + 6] = blockLightLevel
 
-                    faceVertices[idx2 * 7 + 5] = lightLevel
-                    faceVertices[idx2 * 7 + 6] = blockLightLevel
+                    # Block index
+                    faceVertices[idx2 * 9 + 7] = bx * 16 * MESH_HEIGHT + (by % MESH_HEIGHT) * 16 + bz
+                    
+                    # Texture atlas index
+                    faceVertices[idx2 * 9 + 8] = instData[2][blockId][faceIdx // 2]
 
                 usedVertices += faceVertices
         
@@ -936,17 +941,23 @@ class Chunk:
         glBindBuffer(GL_ARRAY_BUFFER, vbo)
         glBufferData(GL_ARRAY_BUFFER, usedVertices.nbytes, usedVertices, GL_DYNAMIC_DRAW)
 
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * 4, ctypes.c_void_p(0))
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * 4, ctypes.c_void_p(0))
         glEnableVertexAttribArray(0)
 
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 7 * 4, ctypes.c_void_p(3 * 4))
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 9 * 4, ctypes.c_void_p(3 * 4))
         glEnableVertexAttribArray(1)
 
-        glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 7 * 4, ctypes.c_void_p(5 * 4))
+        glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 9 * 4, ctypes.c_void_p(5 * 4))
         glEnableVertexAttribArray(2)
 
-        glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 7 * 4, ctypes.c_void_p(6 * 4))
+        glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 9 * 4, ctypes.c_void_p(6 * 4))
         glEnableVertexAttribArray(3)
+
+        glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, 9 * 4, ctypes.c_void_p(7 * 4))
+        glEnableVertexAttribArray(4)
+
+        glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, 9 * 4, ctypes.c_void_p(8 * 4))
+        glEnableVertexAttribArray(5)
 
         glBindBuffer(GL_ARRAY_BUFFER, 0)
 

@@ -3,11 +3,14 @@
 out vec4 FragColor;
 
 //in vec3 ourColor;
-in vec2 TexCoord;
+in vec2 FaceTexCoord;
+in vec2 AtlasTexCoord;
 
 in float breakColor;
 in float light;
 in float blockLight;
+
+flat in int blockIdx;
 
 uniform sampler2D blockTexture;
 uniform sampler2D breakTexture;
@@ -19,8 +22,9 @@ void main() {
     //FragColor = vertexColor;
     //FragColor = vec4(ourColor, 1.0);
 
-    vec3 c = texture(blockTexture, TexCoord).rgb;
-    vec4 d = texture(breakTexture, TexCoord);
+    vec3 c = texture(blockTexture, AtlasTexCoord).rgb;
+
+    vec4 d = texture(breakTexture, FaceTexCoord);
 
     float dayFrac = ((gameTime % 24000) / 24000.0) - 0.75;
 
@@ -32,6 +36,7 @@ void main() {
     float totalLight = max(blockLight, daylight);
 
     vec3 baseColor = c - (d.rgb * d.a * breakColor);
+    //vec3 baseColor = d.rgb;
 
     float light2 = 0.18 + pow(totalLight / 8.0, 1.5);
 

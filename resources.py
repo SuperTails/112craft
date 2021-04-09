@@ -370,7 +370,7 @@ def loadGlTextures(app):
 
     app.breakTextures = []
     for i in range(10):
-        app.breakTextures.append(loadTexture(f'assets/destroy_stage_{i}.png', tesselate=True))
+        app.breakTextures.append(loadTexture(f'assets/destroy_stage_{i}.png', tesselate=False))
 
     app.blockProgram = ShaderProgram('shaders/blockShader.vert', 'shaders/blockShader.frag')
 

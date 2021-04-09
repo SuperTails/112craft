@@ -449,12 +449,6 @@ def renderInstancesTk(app, canvas):
     drawToCanvas(app, canvas, faces)
 
 def renderInstancesGl(app, canvas):
-    check1 = makeFrustrumCullCheck(app, app.cameraPitch, app.cameraYaw)
-    check2 = makeFrustrumCullCheck(app, app.cameraPitch, app.cameraYaw + (app.horizFov / 2))
-    check3 = makeFrustrumCullCheck(app, app.cameraPitch, app.cameraYaw - (app.horizFov / 2))
-    check4 = makeFrustrumCullCheck(app, app.cameraPitch - (app.vertFov / 2), app.cameraYaw)
-    check5 = makeFrustrumCullCheck(app, app.cameraPitch + (app.vertFov / 2), app.cameraYaw)
-
     view = glViewMat(app.cameraPos, app.cameraYaw, app.cameraPitch)
 
     th = math.tan(0.5 * math.radians(70.0));
@@ -468,40 +462,11 @@ def renderInstancesGl(app, canvas):
         [0.0, 0.0, -(zf * zn) / (zf - zn), 0.0],
     ], dtype='float32')
 
-    app.blockProgram.useProgram()
-    glUniformMatrix4fv(app.blockProgram.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
-    glUniformMatrix4fv(app.blockProgram.getUniformLocation("projection"), 1, GL_FALSE, projection) #type:ignore
-
-
     glBindVertexArray(app.cubeVao)
-
-    modelUniformLoc = app.blockProgram.getUniformLocation("model")
-
-    '''
-    model = np.array([
-        [1.0, 0.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0, 0.0],
-        [0.0, 0.0, 1.0, 0.0],
-        [1.0, 1.0, 1.0, 1.0],
-    ], dtype='float32')
-
-    glUniformMatrix4fv(modelUniformLoc, 1, GL_FALSE, model) #type:ignore
-    '''
-
-    modelKinds = {
-        'grass': [],
-        'stone': [],
-        'leaves': [],
-        'log': [],
-        'planks': [],
-        'bedrock': [],
-        'cobblestone': [],
-        'crafting_table': [],
-    }
 
     chunkVaos = []
 
-    for chunk in app.world.chunks.values():
+    for (pos, chunk) in app.world.chunks.items():
         if not chunk.isVisible: continue 
 
         [cx, cy, cz] = chunk.pos
@@ -511,44 +476,11 @@ def renderInstancesGl(app, canvas):
 
         if hasattr(chunk, 'meshVaos'):
             for i in range(len(chunk.meshVaos)):
-                chunkVaos.append((chunk.meshVertexCounts[i], chunk.meshVaos[i]))
-
-        '''
-        for i, inst in enumerate(chunk.instances):
-            if inst is None: continue
-
-            inst, unburied = inst
-            if unburied:
-                #wx = chunk.pos[0] * 16 + (i // 256)
-                #wy = chunk.pos[1] * 16 + (i // 16) % 16
-                #wz = chunk.pos[2] * 16 + (i % 16)
-
-                bx = i // (16 * world.CHUNK_HEIGHT)
-                by = (i // 16) % world.CHUNK_HEIGHT
-                bz = (i % 16)
-
-                wx = cx + bx
-                wy = cy + by
-                wz = cz + bz
-
-                blockPos = BlockPos(wx, wy, wz)
-
-                #if not check1(blockPos): continue
-                #if not check2(blockPos): continue
-                #if not check3(blockPos): continue
-                #if not check4(blockPos): continue
-                #if not check5(blockPos): continue
-
-                bid = chunk.blocks[bx, by, bz]
-
-                modelKinds[bid].append([wx, wy, wz, 0.0])
-        '''
+                chunkVaos.append((chunk.meshVertexCounts[i], chunk.meshVaos[i], pos, i))
     
     breakingBlockAmount = 0.0
 
     if app.breakingBlock != 0.0 and hasattr(app.mode, 'player'):
-        avg = (255.0 * 3.0) / 3.0
-
         toolSlot = app.mode.player.inventory[app.mode.player.hotbarIdx]
         if toolSlot.isEmpty():
             tool = ''
@@ -564,42 +496,32 @@ def renderInstancesGl(app, canvas):
 
     b = math.floor(breakingBlockAmount * 10.0)
 
-    '''
-    glActiveTexture(GL_TEXTURE1)
-    glBindTexture(GL_TEXTURE_2D, app.breakTextures[b])
-
-    glUniform1i(app.blockProgram.getUniformLocation("blockTexture"), 0)
-    glUniform1i(app.blockProgram.getUniformLocation("breakTexture"), 1)
-
-    bp = app.breakingBlockPos
-    
-    glUniform4i(app.blockProgram.getUniformLocation("breakingBlockPos"), bp.x, bp.y, bp.z, 0)
-    glUniform1f(app.blockProgram.getUniformLocation("breakingBlockAmount"), breakingBlockAmount)
-    
-    for (bid, data) in modelKinds.items():
-        amt = len(data)
-
-        glActiveTexture(GL_TEXTURE0)
-        glBindTexture(GL_TEXTURE_2D, app.textures[bid])
-
-        glBindBuffer(GL_ARRAY_BUFFER, app.cubeBuffer)
-        glBufferData(GL_ARRAY_BUFFER, amt * 4 * 4, np.asarray(data, dtype='int32'), GL_DYNAMIC_DRAW)
-
-        #doTheDraw(app, modelUniformLoc, amt)
-    '''
-
-    glActiveTexture(GL_TEXTURE0)
-    glBindTexture(GL_TEXTURE_2D, app.textureAtlas)
-
     app.chunkProgram.useProgram()
     glUniformMatrix4fv(app.chunkProgram.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
     glUniformMatrix4fv(app.chunkProgram.getUniformLocation("projection"), 1, GL_FALSE, projection) #type:ignore
     glUniform1f(app.chunkProgram.getUniformLocation("atlasWidth"), app.atlasWidth)
     glUniform1i(app.chunkProgram.getUniformLocation("gameTime"), app.time)
 
+    glUniform1i(app.chunkProgram.getUniformLocation("blockTexture"), 0)
+    glUniform1i(app.blockProgram.getUniformLocation("breakTexture"), 1)
+
+    glActiveTexture(GL_TEXTURE0)
+    glBindTexture(GL_TEXTURE_2D, app.textureAtlas)
+
+    glActiveTexture(GL_TEXTURE1)
+    glBindTexture(GL_TEXTURE_2D, app.breakTextures[b])
+
+    (cp, lp) = world.toChunkLocal(app.breakingBlockPos)
+    breakBlockIdx = lp.x * 16 * 16 + (lp.y % world.MESH_HEIGHT) * 16 + lp.z
+    breakBlockLoc = app.chunkProgram.getUniformLocation("breakBlockIdx")
+
     #print("drawing a chunk vao")
-    for amt, chunkVao in chunkVaos:
-        #chunkVao = chunkVaos[0]
+    for amt, chunkVao, pos, i in chunkVaos:
+        if breakingBlockAmount > 0.0 and cp == pos and (lp.y // world.MESH_HEIGHT) == i:
+            glUniform1i(breakBlockLoc, breakBlockIdx)
+        else:
+            glUniform1i(breakBlockLoc, -1)
+
 
         glBindVertexArray(chunkVao)
 
