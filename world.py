@@ -509,7 +509,12 @@ class Chunk:
                 if noise < minVal: minVal = noise
                 if noise > maxVal: maxVal = noise
 
-                topY = int(noise * (CHUNK_HEIGHT / 40) + 8 + ((CHUNK_HEIGHT - 16) / 240) * (72 - 8))
+                if CHUNK_HEIGHT == 16: #type:ignore
+                    factor = 2
+                else:
+                    factor = 10
+
+                topY = int(noise * factor + 8 + ((CHUNK_HEIGHT - 16) / 240) * (72 - 8))
 
                 for yIdx in range(0, topY):
                     if BlockPos(xIdx, yIdx, zIdx) in positions:

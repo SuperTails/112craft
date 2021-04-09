@@ -43,6 +43,8 @@ class Player(Entity):
 
     creative: bool
 
+    flying: bool
+
     inventory: List[Slot]
 
     def __init__(self, app, creative: bool):
@@ -60,8 +62,8 @@ class Player(Entity):
         self.reach = 4.0
 
         self.creative = creative
+        self.flying = False
         
-
         if self.creative:
             if len(app.itemTextures) > 36:
                 # TODO:
@@ -72,7 +74,7 @@ class Player(Entity):
                 self.inventory.append(Slot('', 0))
         else:
             self.inventory = [Slot('', 0) for _ in range(36)]
-    
+        
     def pickUpItem(self, app, newItem: Slot):
         """Adds an item to the player's inventory."""
 

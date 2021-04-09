@@ -104,6 +104,8 @@ class App:
                 keyName = '_'
             else:
                 keyName = '-'
+        elif key == glfw.KEY_LEFT_SHIFT:
+            keyName = 'Shift'
         elif key == glfw.KEY_SLASH:
             keyName = '/'
         elif key == glfw.KEY_ESCAPE:

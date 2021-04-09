@@ -362,6 +362,11 @@ def submitChat(app, text: str):
                     app.time = int(parts[2])
             elif parts[1] == 'add':
                 app.time += int(parts[2])
+        elif parts[0] == 'gamemode':
+            if parts[1] == 'creative':
+                app.mode.player.creative = True
+            elif parts[1] == 'survival':
+                app.mode.player.creative = False
 
     else:
         print(f"CHAT: {text}")
@@ -422,6 +427,14 @@ class PlayingMode(Mode):
 
             app.pitchSpeed *= 0.95
             app.yawSpeed *= 0.95
+        
+        if self.player.flying:
+            if app.space:
+                self.player.velocity[1] = 0.2
+            elif app.shift:
+                self.player.velocity[1] = -0.2
+            else:
+                self.player.velocity[1] = 0.0
 
         updateBlockBreaking(app, self)
 
@@ -495,14 +508,21 @@ class PlayingMode(Mode):
             app.mode = InventoryMode(app, self, name='inventory')
             app.w = app.s = app.a = app.d = False
         elif key == 'SPACE' or key == ' ':
+            app.space = True
             if self.player.onGround:
                 app.mode.player.velocity[1] = 0.35
+            elif self.player.creative and not self.player.onGround:
+                self.player.flying = True
+        elif key == 'SHIFT':
+            app.shift = True
         elif key == 'ESCAPE':
             setMouseCapture(app, not app.captureMouse)
         elif key == 'T':
             app.mode = ChatMode(app, self, '')
         elif key == '/':
             app.mode = ChatMode(app, self, '/')
+        elif self.player.flying:
+            self.player.velocity[1] = 0.0
 
     def keyReleased(self, app, event):
         key = event.key.upper()
@@ -514,6 +534,10 @@ class PlayingMode(Mode):
             app.a = False
         elif key == 'D':
             app.d = False
+        elif key == 'SHIFT':
+            app.shift = False
+        elif key == 'SPACE' or key == ' ':
+            app.space = False
 
 class FurnaceGui:
     furnace: world.Furnace
@@ -891,6 +915,8 @@ def appStarted(app):
     app.s = False
     app.a = False
     app.d = False
+    app.space = False
+    app.shift = False
 
     app.prevMouse = None
 

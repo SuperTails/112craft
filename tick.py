@@ -185,13 +185,15 @@ def collide(app, entity: Entity):
         if not world.hasBlockBeneath(app, entity):
             entity.onGround = False
     else:
+        #if not hasattr(entity, 'flying') or not entity.flying: #type:ignore
         entity.velocity[1] -= app.gravity
         [_, yPos, _] = entity.pos
         #yPos -= entity.height
         yPos -= 0.1
         feetPos = round(yPos)
-        if world.hasBlockBeneath(app, entity):
+        if world.hasBlockBeneath(app, entity): 
             entity.onGround = True
+            if hasattr(entity, 'flying'): entity.flying = False #type:ignore
             entity.velocity[1] = 0.0
             #app.cameraPos[1] = (feetPos + 0.5) + entity.height
             entity.pos[1] = feetPos + 0.5
