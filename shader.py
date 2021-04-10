@@ -1,4 +1,8 @@
-"""This module represents a vertex+fragment shader pair."""
+"""This module represents a vertex+fragment shader pair.
+
+This is a simple abstraction to make loading them from disk and using
+them easier.
+"""
 
 from OpenGL.GL import * #type:ignore
 

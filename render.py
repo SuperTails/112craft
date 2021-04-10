@@ -8,6 +8,8 @@ In particualar, it has:
 
 This module does NOT handle mesh/buffer creation. Those are created in
 the modules where they are needed. This one is only for drawing them.
+
+The `redrawAll` function is the most interesting place to start.
 """
 
 import math

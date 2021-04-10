@@ -1,4 +1,8 @@
-"""This simulates the events and functionality of `cmu_112_graphics`."""
+"""This simulates the events and functionality of `cmu_112_graphics`.
+
+It tries to stick as closely as possible to the design of the original,
+and their usage is mostly the same.
+"""
 
 import glfw
 import inspect
@@ -19,6 +23,7 @@ class App:
         if not glfw.init():
             print("Init failed")
 
+        # This trick borrowed from `cmu_112_graphics`
         self._callersGlobals = inspect.stack()[1][0].f_globals
 
         glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 3)
