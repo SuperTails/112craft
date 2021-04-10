@@ -516,27 +516,27 @@ class Chunk:
 
         positions = []
 
-        minIdx = binarySearchMin(cavePositions, self.pos.x * 16 - 1)
-        maxIdx = binarySearchMax(cavePositions, (self.pos.x + 1) * 16)
+        for cave in cavePositions:
+            minIdx = binarySearchMin(cave, self.pos.x * 16 - 1)
+            maxIdx = binarySearchMax(cave, (self.pos.x + 1) * 16)
 
-        if minIdx is not None or maxIdx is not None:
-            if minIdx is None:
-                minIdx = 0
-            if maxIdx is None:
-                maxIdx = len(cavePositions) - 1
+            if minIdx is not None or maxIdx is not None:
+                if minIdx is None:
+                    minIdx = 0
+                if maxIdx is None:
+                    maxIdx = len(cave) - 1
 
-            for posIdx in range(minIdx, maxIdx + 1):
-                pos = cavePositions[posIdx]
-                for xOff in range(-1, 2):
-                    for yOff in range(-1, 2):
-                        for zOff in range(-1, 2):
-                            pos2 = BlockPos(pos.x + xOff, pos.y + yOff, pos.z + zOff)
-                            (ckPos, ckLocal) = toChunkLocal(pos2)
-                            if ckPos == self.pos:
-                                positions.append(ckLocal)
-            
-        print(f"{len(positions)}-many positions: ")
-
+                for posIdx in range(minIdx, maxIdx + 1):
+                    pos = cave[posIdx]
+                    for xOff in range(-1, 2):
+                        for yOff in range(-1, 2):
+                            for zOff in range(-1, 2):
+                                pos2 = BlockPos(pos.x + xOff, pos.y + yOff, pos.z + zOff)
+                                (ckPos, ckLocal) = toChunkLocal(pos2)
+                                if ckPos == self.pos:
+                                    positions.append(ckLocal)
+                
+        print(f"{len(positions)}-many positions")
 
         for xIdx in range(0, 16):
             for zIdx in range(0, 16):
@@ -1065,8 +1065,9 @@ class World:
 
     regions: dict[Tuple[int, int], anvil.Region]
     importPath: str
-
-    caveBlocks: List[BlockPos]
+    
+    caveChecked: set[ChunkPos]
+    caves: dict[ChunkPos, List[BlockPos]]
 
     def getHighestBlock(self, x: int, z: int) -> int:
         for y in range(CHUNK_HEIGHT - 1, -1, -1):
@@ -1079,6 +1080,9 @@ class World:
         self.name = name
         self.importPath = importPath
         self.regions = {}
+
+        self.caveChecked = set()
+        self.caves = {}
 
         if self.importPath != '' and not self.importPath.endswith('/'):
             self.importPath += '/'
@@ -1106,10 +1110,7 @@ class World:
 
         except FileNotFoundError:
             self.saveMetaFile()
-    
-        self.caveBlocks = generateCaveCenter(BlockPos(8, 72, 8), self.seed)
-        print(self.caveBlocks)
-        
+
     def saveMetaFile(self):
         with open(f"saves/{self.name}/meta.txt", "w") as f:
             f.write(f"seed={self.seed}\n")
@@ -1149,28 +1150,31 @@ class World:
                 chunk = anvil.Chunk.from_region(self.regions[regionPos], pos2.x, pos2.z)
                 ck.loadFromAnvilChunk(self, instData, chunk)
             else:
-                ck.generate(self, instData, self.caveBlocks, self.seed)
+                ck.generate(self, instData, self.caves.values(), self.seed)
 
         return ck
     
+    def checkCavesAround(self, centerPos: ChunkPos):
+        dist = math.ceil(MAX_CAVE_DISP / 16)
+        for pos in adjacentChunks(centerPos, dist):
+            if pos not in self.caveChecked:
+                random.seed(hash((pos, self.seed)))
+
+                self.caveChecked.add(pos)
+
+                if random.random() < 0.1:
+                    caveX = pos.x * 16 + random.randrange(0, 16)
+                    caveY = pos.y * CHUNK_HEIGHT + random.randrange(20, 100)
+                    caveZ = pos.z * 16 + random.randrange(0, 16)
+
+                    caveStart = BlockPos(caveX, caveY, caveZ)
+
+                    self.caves[pos] = generateCaveCenter(caveStart, self.seed)
+    
     def loadChunk(self, instData, pos: ChunkPos):
         print(f"Loading chunk at {pos}")
+        self.checkCavesAround(pos)
         self.chunks[pos] = self.createChunk(instData, pos)
-
-        '''
-        if ChunkPos(0, 0, 0) in self.chunks and self.emu is None and self.chunks[ChunkPos(0, 0, 0)].worldgenStage >= WorldgenStage.POPULATED and len(self.chunks) > 8:
-            self.emu = Emu(BlockPos(4, self.getHighestBlock(4, 8), 8))
-            if self.emu.count == 0:
-                ok = True
-                while ok:
-                    ok = not self.emu.step(self.seed)
-                    print(f"Pos is {self.emu.x} {self.emu.y} {self.emu.z}")
-
-                    self.emu.clearNearby(self, instData)
-        '''
-
-                #for chunk in self.chunks.values():
-                #    chunk.createMesh(self, instData)
     
     def unloadChunk(self, app, pos: ChunkPos):
         print(f"Unloading chunk at {pos}")
