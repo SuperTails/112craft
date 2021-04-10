@@ -1,3 +1,5 @@
+"""Types and functions useful for the whole codebase."""
+
 import decimal
 from typing import NamedTuple, Tuple, Optional
 

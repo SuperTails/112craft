@@ -100,7 +100,7 @@ class Emu:
         self.z = pos.z
 
         self.yaw = 0.0
-        self.pitch = -60.0
+        self.pitch = math.radians(-35.0)
 
         self.count = 0
 
@@ -111,10 +111,12 @@ class Emu:
 
         # Caves should not intersect with the bottom of the world,
         # so make them go back upwards if they're too low
-        if self.y > 10 or self.pitch > 0.0:
-            pitchOffset = 0.0
-        else:
+        if self.y > 100 and self.pitch > 0.0:
+            pitchOffset = -math.exp(-0.1 * (128 - self.y))
+        if self.y < 10 and self.pitch < 0.0:
             pitchOffset = math.exp(-0.5 * self.y)
+        else:
+            pitchOffset = 0.0
 
         self.pitch += ((random.random() * 2.0) - 1.0 + pitchOffset) * math.radians(20.0)
 
@@ -476,7 +478,7 @@ class Chunk:
         minVal = 100.0
         maxVal = -100.0
 
-        positions = set()
+        positions = []
 
         minIdx = binarySearchMin(cavePositions, self.pos.x * 16 - 1)
         maxIdx = binarySearchMax(cavePositions, (self.pos.x + 1) * 16)
@@ -486,7 +488,7 @@ class Chunk:
                 minIdx = 0
             if maxIdx is None:
                 maxIdx = len(cavePositions) - 1
-            
+
             for posIdx in range(minIdx, maxIdx + 1):
                 pos = cavePositions[posIdx]
                 for xOff in range(-1, 2):
@@ -495,10 +497,10 @@ class Chunk:
                             pos2 = BlockPos(pos.x + xOff, pos.y + yOff, pos.z + zOff)
                             (ckPos, ckLocal) = toChunkLocal(pos2)
                             if ckPos == self.pos:
-                                positions.add(ckLocal)
+                                positions.append(ckLocal)
             
+        print(f"{len(positions)}-many positions: ")
 
-            print(f"{len(positions)}-many positions: ")
 
         for xIdx in range(0, 16):
             for zIdx in range(0, 16):
@@ -1164,7 +1166,7 @@ class World:
         except FileNotFoundError:
             self.saveMetaFile()
     
-        self.caveBlocks = generateCaveCenter(BlockPos(8, 78, 8), self.seed)
+        self.caveBlocks = generateCaveCenter(BlockPos(8, 72, 8), self.seed)
         print(self.caveBlocks)
         
     def saveMetaFile(self):

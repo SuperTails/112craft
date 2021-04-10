@@ -65,10 +65,13 @@ def worldToFolderName(name: str) -> str:
 class WorldLoadMode(Mode):
     loadStage: int = 0
 
-    def __init__(self, app, worldName, nextMode, seed=40, importPath=''):
+    def __init__(self, app, worldName, nextMode, seed=None, importPath=''):
         self.nextMode = nextMode
 
         app.timerDelay = 10
+
+        if seed is None:
+            seed = random.random()
 
         #app.world = World(worldName, seed, anvilpath='C:/Users/Carson/AppData/Roaming/.minecraft/saves/TheTempleofNotch/region/')
         app.world = World(worldName, seed, importPath=importPath)
@@ -854,7 +857,7 @@ def appStarted(app):
 
     app.mode = WorldLoadMode(app, 'world', TitleMode)
     #def makePlayingMode(app): return PlayingMode(app, False)
-    #app.mode = WorldLoadMode(app, 'demoworld', makePlayingMode, seed=random.random())
+    #app.mode = WorldLoadMode(app, 'cavetest3', makePlayingMode, seed=random.random())
     #app.mode = CreateWorldMode(app)
 
     app.entities = [entity.Entity(app, 'creeper', 0.0, 71.0, 1.0), entity.Entity(app, 'fox', 5.0, 72.0, 3.0)]
