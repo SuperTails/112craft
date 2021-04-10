@@ -1,4 +1,7 @@
-"""Types and functions useful for the whole codebase."""
+"""Various types and functions useful for the whole codebase.
+
+Very important are BlockPos, ChunkPos, BlockId, and ItemId.
+"""
 
 import decimal
 from typing import NamedTuple, Tuple, Optional

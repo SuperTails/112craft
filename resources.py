@@ -1,3 +1,9 @@
+"""This module is used to manage most of the game's assets.
+
+Textures, block attributes, mob kinds, etc. are all loaded into the `app`.
+This also creates the texture atlas used for rendering chunks.
+"""
+
 import numpy as np
 import world
 import render

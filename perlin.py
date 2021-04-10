@@ -1,3 +1,10 @@
+"""This module is used for sampling perlin noise.
+
+getPerlinNoise returns a single level of the noise.
+getPerlinFractal returns several layers of noise added together, which is
+used for the height of terrain during worldgen.
+"""
+
 import random, math
 from functools import lru_cache
 

@@ -1,3 +1,5 @@
+"""This simulates the events and functionality of `cmu_112_graphics`."""
+
 import glfw
 import inspect
 import time
@@ -42,6 +44,7 @@ class App:
 
         self.run()
     
+    # From cmu_112_graphics
     def _callFn(self, fn, *args):
         if (fn in self._callersGlobals): self._callersGlobals[fn](*args)
     

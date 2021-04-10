@@ -1,4 +1,17 @@
-from os import X_OK
+"""Rendering, representation, and behavior of entities is handled here.
+
+Entity models are made up of bones. Each bone is individually posable. 
+Each bone is made up of cubes, which stay in a fixed arrangement.
+
+Every entity has a `kind`, which determines its attributes and behavior.
+
+For behavior, an `Ai` is used. This simply stores a list of `Task`s.
+Tasks run every tick until they are interrupted by a task with a higher
+priority, or when they mark themselves as finished.
+For example, most entities have a `WanderTask` with low priority, so when
+they do not have any other goals, they will occasionally move around.
+"""
+
 from typing import List, Tuple, Optional, Any
 import json
 import numpy as np
@@ -346,8 +359,6 @@ class Entity:
 
         self.kind = app.entityKinds[kind]
 
-        data: EntityKind = app.entityKinds
-
         self.radius = self.kind.radius
         self.height = self.kind.height
         self.walkSpeed = self.kind.walkSpeed
@@ -355,7 +366,6 @@ class Entity:
         self.ai = copy.deepcopy(self.kind.ai)
     
     def hit(self, damage: float, knockback: Tuple[float, float]):
-        print("got hit")
         if self.immunity == 0:
             self.health -= damage
 
@@ -587,19 +597,22 @@ def makePathFromChain(prevDirs, end: BlockPos) -> List[BlockPos]:
 
     return result
 
-def findPath(start: BlockPos, end: BlockPos, world) -> Optional[List[BlockPos]]:
+def approxDistance(start: BlockPos, end: BlockPos):
+    # Chebyshev distance
+
+    xDist = abs(start.x - end.x)
+    yDist = abs(start.y - end.y)
+    zDist = abs(start.z - end.z)
+
+    return (max(xDist, zDist) + yDist)
+
+
+def findPath(start: BlockPos, end: BlockPos, world, maxDist=1) -> Optional[List[BlockPos]]:
     print(f"Start pos: {start} End pos: {end}")
 
-    def heuristic(start: BlockPos, end: BlockPos):
-        # Chebyshev distance
-
-        xDist = abs(start.x - end.x)
-        yDist = abs(start.y - end.y)
-        zDist = abs(start.z - end.z)
-
-        return (max(xDist, zDist) + yDist)
-
     # https://en.wikipedia.org/wiki/A*_search_algorithm
+
+    heuristic = approxDistance
 
     prevDirs = dict()
 
@@ -622,7 +635,7 @@ def findPath(start: BlockPos, end: BlockPos, world) -> Optional[List[BlockPos]]:
 
         openSet.remove(current)
         
-        if current == end:
+        if heuristic(current, end) <= maxDist:
             return makePathFromChain(prevDirs, end)
 
         for nextPos in destinations(current, world):

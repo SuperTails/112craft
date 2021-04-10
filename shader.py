@@ -1,3 +1,5 @@
+"""This module represents a vertex+fragment shader pair."""
+
 from OpenGL.GL import * #type:ignore
 
 def readFile(path):

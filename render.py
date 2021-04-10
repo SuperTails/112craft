@@ -1,3 +1,15 @@
+"""This module does all of the drawing for both backends.
+
+In particualar, it has:
+- View and camera matrix calculation
+- The entire process of drawing models
+- Hidden surface/view frustrum/back face culling
+- GUI drawing helper functions
+
+This module does NOT handle mesh/buffer creation. Those are created in
+the modules where they are needed. This one is only for drawing them.
+"""
+
 import math
 import time
 from tkinter.constants import X

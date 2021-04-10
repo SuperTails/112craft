@@ -1,3 +1,5 @@
+"""A simple shim script to profile 112craft"""
+
 import cProfile
 import craft
 import pstats

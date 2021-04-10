@@ -1,3 +1,35 @@
+"""The main entry point of the app.
+
+All of the different parts of the game are divided into "Modes".
+Any events that occur are delegated to the current mode to be handled.
+The modes act like an FSM. For example, pressing 'E' in `PlayingMode` will
+result in a transition to the `InventoryMode` state.
+
+# WorldLoadMode #
+Displays a loading screen while a World is generated or loaded from disk.
+
+# WorldListMode #
+Displays a list of the currently saved worlds and allows the player to 
+select one or create a new world.
+
+# CreateWorldMode #
+Displays various options the player can set to create a new world. 
+
+# TitleMode # 
+Used at the title screen. Not very exciting.
+
+# ChatMode #
+Used when the chat box is opened during gameplay.
+
+# PlayingMode #
+The 'normal' state of gameplay. The player can walk, look around, etc.
+
+# InventoryMode #
+Used when the player has an inventory window opened. This can include
+when the player right clicks on, for example, a furnace or a crafting table.
+This mode keeps a reference to what kind of GUI is opened.
+"""
+
 import openglapp
 from PIL import Image
 from PIL import ImageDraw

@@ -1,3 +1,11 @@
+"""Provides a `ButtonManager` for drawing and interacting with buttons.
+
+A `Button` has an ID, a position, and some text or a background.
+Multiple buttons can be added to a ButtonManager, and then they are all
+checked at once when the mouse is pressed. The button manager then returns
+the ID of the button that was pressed.
+"""
+
 from typing import Callable, List, Optional
 from PIL import Image
 import math

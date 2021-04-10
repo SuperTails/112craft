@@ -1,3 +1,9 @@
+"""Provides the `tick` function, which does all of the game's updates.
+
+At regular intervals, the AI of all entities are processed, gravity is applied,
+new entities are spawned, other entities are removed, collisions occur, etc.
+"""
+
 from entity import Entity
 from util import BlockPos, roundHalfUp, rayAABBIntersect
 import world

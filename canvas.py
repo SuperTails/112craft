@@ -1,3 +1,20 @@
+"""Provides a wrapper struct that is meant to simulate a TKinter canvas.
+
+This canvas allows for using the same GUI/text drawing code between both
+the TKinter and OpenGL backends.
+It draws on a PIL image and then renders to an OpenGL texture.
+
+In theory any set of drawing calls to this canvas should appear identical
+to the same set of drawing calls to a TKinter canvas...
+...but it's not perfect.
+
+Due to a limitation in PIL drawing functions, this canvas does not have
+an alpha channel that works properly. Instead, any pixels that are
+ALPHA_COLOR are removed from the image.
+
+I miss the TKinter canvas.
+"""
+
 from shader import ShaderProgram
 import typing
 from PIL import Image, ImageDraw, ImageFont

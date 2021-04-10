@@ -1,3 +1,15 @@
+"""Simply represents the player and their inventory.
+
+Slot *should* probably be titled `ItemStack` but I haven't gotten 
+around to that yet. It represents an item and an amount of that item.
+
+Most of the player's behavior actually happens in `craft.py`,
+which I may move in the future.
+
+A player is simply an `Entity` with a few extra attributes, so there's
+not that much too this module.
+"""
+
 from entity import Entity
 from typing import List, Optional
 from dataclasses import dataclass
@@ -33,10 +45,6 @@ class Slot:
             return None
 
 class Player(Entity):
-    height: float
-    radius: float
-
-    walkSpeed: float
     reach: float
 
     hotbarIdx: int = 0
