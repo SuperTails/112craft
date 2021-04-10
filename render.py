@@ -555,7 +555,7 @@ def drawEntities(app, view, projection):
     glActiveTexture(GL_TEXTURE0)
 
     for entity in app.entities:
-        model = app.entityModels[entity.kind.name]
+        model = app.entityModels[entity.kind.model]
         texture = app.entityTextures[entity.kind.name]
 
         glBindTexture(GL_TEXTURE_2D, texture)

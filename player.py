@@ -56,13 +56,10 @@ class Player(Entity):
     inventory: List[Slot]
 
     def __init__(self, app, creative: bool):
+        super().__init__(app, 'player', 0.0, 0.0, 0.0)
+
         self.kind = app.entityKinds['player']
-        self.pos = [0.0, 0.0, 0.0]
-        self.velocity = [0.0, 0.0, 0.0]
-        self.radius = 0.3
-        self.height = 1.5
         self.onGround = False
-        self.walkSpeed = 0.2
 
         self.bodyAngle = 0.0
         self.headAngle = 0.0
@@ -82,6 +79,10 @@ class Player(Entity):
                 self.inventory.append(Slot('', 0))
         else:
             self.inventory = [Slot('', 0) for _ in range(36)]
+    
+    def tick(self):
+        if self.immunity > 0:
+            self.immunity -= 1
         
     def pickUpItem(self, app, newItem: Slot):
         """Adds an item to the player's inventory."""

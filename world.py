@@ -1164,7 +1164,7 @@ class World:
 
                 if random.random() < 0.1:
                     caveX = pos.x * 16 + random.randrange(0, 16)
-                    caveY = pos.y * CHUNK_HEIGHT + random.randrange(20, 100)
+                    caveY = pos.y * CHUNK_HEIGHT + random.randrange(40, 100)
                     caveZ = pos.z * 16 + random.randrange(0, 16)
 
                     caveStart = BlockPos(caveX, caveY, caveZ)

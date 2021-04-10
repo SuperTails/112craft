@@ -141,6 +141,7 @@ class Bone:
     pivot: Tuple[float, float, float]
     cubes: List[Cube]
     bind_pose_rotation: Tuple[float, float, float]
+    neverRender: bool
 
     def toVertices(self) -> np.ndarray:
         self.innerVertices = []
@@ -238,7 +239,7 @@ class EntityModel:
         self.bones = bones
         self.vaos = []
         for bone in self.bones:
-            if bone.cubes == [] or 'sleeping' in bone.name:
+            if bone.cubes == [] or bone.neverRender or 'sleeping' in bone.name:
                 self.vaos.append((0, 0))
             else:
                 self.vaos.append(bone.toVao())
@@ -264,7 +265,11 @@ def parseBone(j) -> Bone:
         bind_pose_rotation = tuple(j['bind_pose_rotation'])
     else:
         bind_pose_rotation = (0.0, 0.0, 0.0)
-    return Bone(name, pivot, cubes, bind_pose_rotation) #type:ignore
+    if 'neverRender' in j:
+        neverRender = j['neverRender']
+    else:
+        neverRender = False
+    return Bone(name, pivot, cubes, bind_pose_rotation, neverRender) #type:ignore
 
 def parseModel(j) -> EntityModel:
     bones = list(map(parseBone, j['bones']))
@@ -278,7 +283,6 @@ def openModels(path) -> dict[str, EntityModel]:
     
     for (name, model) in j.items():
         if name.startswith('geometry.'):
-            name = name.removeprefix('geometry.')
             result[name] = parseModel(model)
     
     return result
@@ -288,6 +292,7 @@ def openModels(path) -> dict[str, EntityModel]:
 @dataclass
 class EntityKind:
     name: str
+    model: str
     maxHealth: float
     walkSpeed: float
     radius: float
@@ -298,14 +303,25 @@ def registerEntityKinds(app):
     app.entityKinds = {
         'creeper': EntityKind(
             name='creeper',
+            model='geometry.creeper',
             maxHealth=20.0,
             walkSpeed=0.05,
             radius=0.3,
             height=1.7,
             ai=Ai([WanderTask()])
         ),
+        'zombie': EntityKind(
+            name='zombie',
+            model='geometry.humanoid',
+            maxHealth=20.0,
+            walkSpeed=0.05,
+            radius=0.3,
+            height=1.9,
+            ai=Ai([AttackTask(), FollowTask(), WanderTask()])
+        ),
         'fox': EntityKind(
             name='fox',
+            model='geometry.fox',
             maxHealth=20.0,
             walkSpeed=0.1,
             radius=0.35,
@@ -314,11 +330,12 @@ def registerEntityKinds(app):
         ),
         'player': EntityKind(
             name='player',
+            model='geometry.humanoid',
             maxHealth=20.0,
             walkSpeed=0.2,
             radius=0.3,
             height=1.5,
-            ai=Ai([])
+            ai=Ai([NullTask()])
         ),
     }
 
@@ -345,10 +362,7 @@ class Entity:
     def __init__(self, app, kind: str, x: float, y: float, z: float):
         self.pos = [x, y, z]
         self.velocity = [0.0, 0.0, 0.0]
-        self.radius = 0.3
-        self.height = 1.5
         self.onGround = False
-        self.walkSpeed = 0.05
 
         self.bodyAngle = 0.0
         self.headAngle = 0.0
@@ -393,7 +407,7 @@ class Entity:
         return BlockPos(bx, by, bz)
     
     def getRotation(self, app, i):
-        bone = app.entityModels[self.kind.name].bones[i]
+        bone = app.entityModels[self.kind.model].bones[i]
         boneName = bone.name
         boneRot = bone.bind_pose_rotation
 
@@ -401,6 +415,8 @@ class Entity:
             anim = app.entityAnimations['creeper.legs']
         elif self.kind.name == 'fox':
             #anim = app.entityAnimations['fox.sit']
+            anim = None
+        elif self.kind.name == 'zombie':
             anim = None
         else:
             raise Exception(self.kind)
@@ -519,10 +535,42 @@ class Ai:
                     self.taskIdx = lowTask
                     break
 
-class FollowTask:
+class AttackTask:
     def shouldStart(self, entity: Entity, world, entities: List[Entity]):
         for other in entities:
             if other.kind.name == 'player':
+                dx = entity.pos[0] - other.pos[0]
+                dy = entity.pos[1] - other.pos[1]
+                dz = entity.pos[2] - other.pos[2]
+                dist = math.sqrt(dx**2 + dy**2 + dz**2)
+                if dist < 1.0:
+                    return True
+    
+    def tick(self, entity: Entity, world, entities: List[Entity]):
+        for other in entities:
+            if other.kind.name == 'player':
+                dx = entity.pos[0] - other.pos[0]
+                dy = entity.pos[1] - other.pos[1]
+                dz = entity.pos[2] - other.pos[2]
+                dist = math.sqrt(dx**2 + dy**2 + dz**2)
+
+                if dist < 1.0:
+                    knockX = other.pos[0] - entity.pos[0]
+                    knockZ = other.pos[2] - entity.pos[2]
+                    mag = math.sqrt(knockX**2 + knockZ**2)
+                    knockX /= mag
+                    knockZ /= mag
+
+                    other.hit(3.0, (knockX, knockZ))
+
+                    return False
+                else:
+                    return True
+
+class FollowTask:
+    def shouldStart(self, entity: Entity, world, entities: List[Entity]):
+        for other in entities:
+            if other.kind.name == 'player' and not other.creative: #type:ignore
                 dx = entity.pos[0] - other.pos[0]
                 dy = entity.pos[1] - other.pos[1]
                 dz = entity.pos[2] - other.pos[2]
@@ -534,7 +582,7 @@ class FollowTask:
 
     def tick(self, entity: Entity, world, entities: List[Entity]):
         for other in entities:
-            if other.kind.name == 'player':
+            if other.kind.name == 'player' and not other.creative: #type:ignore
                 dx = entity.pos[0] - other.pos[0]
                 dy = entity.pos[1] - other.pos[1]
                 dz = entity.pos[2] - other.pos[2]
@@ -622,7 +670,7 @@ def findPath(start: BlockPos, end: BlockPos, world, maxDist=1) -> Optional[List[
 
     openSet = { start }
 
-    MAX_RANGE = 10
+    MAX_RANGE = 16
     
     while len(openSet) != 0:
         minCost = None

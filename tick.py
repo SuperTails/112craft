@@ -101,15 +101,25 @@ def tick(app):
 
         x *= player.walkSpeed 
         z *= player.walkSpeed
-    
-    player.velocity[0] = x
-    player.velocity[2] = z
 
+    player.tick()
+    
     player.pos = copy.copy(app.cameraPos)
     player.pos[1] -= player.height
-    collide(app, player)
+
+    collideY(app, player)
+    if player.onGround:
+        player.velocity[0] = x
+        player.velocity[2] = z
+    else:
+        player.velocity[0] += x / 10.0
+        player.velocity[2] += z / 10.0
+    collideXZ(app, player)
+
+
     app.cameraPos = copy.copy(player.pos)
     app.cameraPos[1] += player.height
+
 
     entities = app.entities + [player]
 
@@ -118,7 +128,7 @@ def tick(app):
             entity.velocity[1] = 0.40
         
         entity.tick(app.world, entities, player.pos[0], player.pos[2])
-
+    
     endTime = time.time()
     app.tickTimes[app.tickTimeIdx] = (endTime - startTime)
     app.tickTimeIdx += 1
@@ -166,12 +176,14 @@ def doMobSpawning(app):
 
             if not isValidSpawnLocation(app, BlockPos(x, y, z)): continue
 
+            mob = random.choice(['creeper', 'zombie'])
+
             packSize = 4
             for _ in range(packSize):
                 x += random.randint(-2, 2)
                 z += random.randint(-2, 2)
                 if isValidSpawnLocation(app, BlockPos(x, y, z)):
-                    app.entities.append(Entity(app, 'creeper', x, y, z))
+                    app.entities.append(Entity(app, mob, x, y, z))
 
 def isValidSpawnLocation(app, pos: BlockPos):
     floor = BlockPos(pos.x, pos.y - 1, pos.z)
@@ -187,7 +199,7 @@ def isValidSpawnLocation(app, pos: BlockPos):
     
     return isOk
 
-def collide(app, entity: Entity):
+def collideY(app, entity: Entity):
     entity.pos[1] += entity.velocity[1]
 
     if entity.onGround:
@@ -214,7 +226,13 @@ def collide(app, entity: Entity):
             if app.world.coordsOccupied(BlockPos(round(x), hiYCoord, round(z))):
                 yEdge = hiYCoord - 0.5
                 entity.pos[1] = yEdge - entity.height
-   
+
+
+def collide(app, entity: Entity):
+    collideY(app, entity)
+    collideXZ(app, entity)
+
+def collideXZ(app, entity: Entity):
     hitWall = False
 
     minY = roundHalfUp((entity.pos[1]))

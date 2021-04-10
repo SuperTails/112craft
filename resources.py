@@ -66,16 +66,20 @@ def loadEntityModels(app):
     app.entityModels = dict()
     app.entityModels.update(entity.openModels('assets/creeper.geo.json'))
     app.entityModels.update(entity.openModels('assets/fox.geo.json'))
+    app.entityModels.update(entity.openModels('assets/Vanilla_Resource_Pack_1.16.220/models/mobs.json'))
 
 def loadEntityAnimations(app):
     app.entityAnimations = dict()
     app.entityAnimations.update(entity.openAnimations('assets/creeper.animation.json'))
     app.entityAnimations.update(entity.openAnimations('assets/fox.animation.json'))
+    app.entityAnimations.update(entity.openAnimations('assets/Vanilla_Resource_Pack_1.16.220/animations/zombie.animation.json'))
+    app.entityAnimations.update(entity.openAnimations('assets/Vanilla_Resource_Pack_1.16.220/animations/humanoid.animation.json'))
 
 def loadEntityTextures(app):
     app.entityTextures = {}
     app.entityTextures['creeper'] = loadTexture('assets/creeper.png')
     app.entityTextures['fox'] = loadTexture('assets/fox.png')
+    app.entityTextures['zombie'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/zombie/zombie.png')
 
 def imageToTexture(image: Image.Image) -> int:
     texture = glGenTextures(1) #type:ignore
