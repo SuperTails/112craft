@@ -1,3 +1,30 @@
+"""This module is used for representing the game's terrain and its generation.
+
+# Important classes #
+
+Emu - Used during worldgen to generate cave shapes.
+
+Chunk - A small box of terrain that can be individually loaded or unloaded
+
+World - A collection of chunks pieced together to form coherent terrain.
+
+# Worldgen #
+
+Each chunk is generated in stages, which are, in order:
+
+Not started - The chunk is completely empty.
+
+Generated - The chunk is now a barren landscape, (maybe with some caves).
+
+Populated - Trees, ores, and other interesting features have been added.
+
+Optimized - The chunk has been lit and hidden faces have been marked.
+
+Complete - The chunk has a full mesh built and is ready to render.
+
+The "optimize" and "mesh" steps are also run for chunks loaded from disk.
+"""
+
 import numpy as np
 import math
 import heapq
@@ -81,6 +108,15 @@ MAX_CAVE_DISP = 100
 MAX_CAVE_LENGTH = 200
 
 class Emu:
+    """A class used during worldgen to represent a random walk.
+
+    Named after the 'drunken emu' method from the talk linked below.
+    Each step it moves forward and then turns slightly. The path the 'emu'
+    takes carves out a cave. 
+
+    # https://www.gdcvault.com/play/1025191/Math-for-Game-Programmers-Digging
+    """
+
     start: BlockPos 
 
     x: float
@@ -746,101 +782,6 @@ class Chunk:
         if not config.USE_OPENGL_BACKEND:
             return
 
-
-        '''
-        vertices = np.array([
-        # Left face
-        #-0.5,  0.5,  0.5,  1/4, 2/3, # top-right
-        -0.5,  0.5, -0.5,  0/4, 2/3, # top-left
-        -0.5, -0.5, -0.5,  0/4, 1/3, # bottom-left
-        #-0.5, -0.5, -0.5,  0/4, 1/3, # bottom-left
-        -0.5, -0.5,  0.5,  1/4, 1/3, # bottom-right
-        -0.5,  0.5,  0.5,  1/4, 2/3, # top-right
-        # Right face
-        #0.5,  0.5,  0.5,  2/4, 2/3, # top-left
-        0.5, -0.5, -0.5,  3/4, 1/3, # bottom-right
-        0.5,  0.5, -0.5,  3/4, 2/3, # top-right         
-        #0.5, -0.5, -0.5,  3/4, 1/3, # bottom-right
-        0.5,  0.5,  0.5,  2/4, 2/3, # top-left
-        0.5, -0.5,  0.5,  2/4, 1/3, # bottom-left     
-        # Back face
-        #-0.5, -0.5, -0.5,  3/4, 1/3, # Bottom-left
-        0.5,  0.5, -0.5,  4/4, 2/3, # top-right
-        0.5, -0.5, -0.5,  4/4, 1/3, # bottom-right         
-        #0.5,  0.5, -0.5,  4/4, 2/3, # top-right
-        -0.5, -0.5, -0.5,  3/4, 1/3, # bottom-left
-        -0.5,  0.5, -0.5,  3/4, 2/3, # top-left
-        # Front face
-        #-0.5, -0.5,  0.5,  3/4, 1/3, # bottom-left
-        0.5, -0.5,  0.5,  4/4, 1/3, # bottom-right
-        0.5,  0.5,  0.5,  4/4, 2/3, # top-right
-        #0.5,  0.5,  0.5,  4/4, 2/3, # top-right
-        -0.5,  0.5,  0.5,  3/4, 2/3, # top-left
-        -0.5, -0.5,  0.5,  3/4, 1/3, # bottom-left
-        # Bottom face
-        #-0.5, -0.5, -0.5,  3/4, 1/3, # top-right
-        0.5, -0.5, -0.5,  2/4, 1/3, # top-left
-        0.5, -0.5,  0.5,  2/4, 0/3, # bottom-left
-        #0.5, -0.5,  0.5,  2/4, 0/3, # bottom-left
-        -0.5, -0.5,  0.5,  3/4, 0/3, # bottom-right
-        -0.5, -0.5, -0.5,  3/4, 1/3, # top-right
-        # Top face
-        -0.5,  0.5, -0.5,  1/4, 3/3, # top-left
-        0.5,  0.5,  0.5,  2/4, 2/3, # bottom-right
-        0.5,  0.5, -0.5,  2/4, 3/3, # top-right     
-        0.5,  0.5,  0.5,  2/4, 2/3, # bottom-right
-        -0.5,  0.5, -0.5,  1/4, 3/3, # top-left
-        -0.5,  0.5,  0.5,  1/4, 2/3, # bottom-left
-        ], dtype='float32')
-        '''
-
-        '''
-        vertices = np.array([
-        # Left face
-        -0.5,  0.5,  0.5,  1/4, 2/3, # top-right
-        -0.5,  0.5, -0.5,  0/4, 2/3, # top-left
-        -0.5, -0.5, -0.5,  0/4, 1/3, # bottom-left
-        -0.5, -0.5, -0.5,  0/4, 1/3, # bottom-left
-        -0.5, -0.5,  0.5,  1/4, 1/3, # bottom-right
-        -0.5,  0.5,  0.5,  1/4, 2/3, # top-right
-        # Right face
-        0.5,  0.5,  0.5,  2/4, 2/3, # top-left
-        0.5, -0.5, -0.5,  3/4, 1/3, # bottom-right
-        0.5,  0.5, -0.5,  3/4, 2/3, # top-right         
-        0.5, -0.5, -0.5,  3/4, 1/3, # bottom-right
-        0.5,  0.5,  0.5,  2/4, 2/3, # top-left
-        0.5, -0.5,  0.5,  2/4, 1/3, # bottom-left     
-        # Back face
-        -0.5, -0.5, -0.5,  3/4, 1/3, # Bottom-left
-        0.5,  0.5, -0.5,  4/4, 2/3, # top-right
-        0.5, -0.5, -0.5,  4/4, 1/3, # bottom-right         
-        0.5,  0.5, -0.5,  4/4, 2/3, # top-right
-        -0.5, -0.5, -0.5,  3/4, 1/3, # bottom-left
-        -0.5,  0.5, -0.5,  3/4, 2/3, # top-left
-        # Front face
-        -0.5, -0.5,  0.5,  3/4, 1/3, # bottom-left
-        0.5, -0.5,  0.5,  4/4, 1/3, # bottom-right
-        0.5,  0.5,  0.5,  4/4, 2/3, # top-right
-        0.5,  0.5,  0.5,  4/4, 2/3, # top-right
-        -0.5,  0.5,  0.5,  3/4, 2/3, # top-left
-        -0.5, -0.5,  0.5,  3/4, 1/3, # bottom-left
-        # Bottom face
-        -0.5, -0.5, -0.5,  3/4, 1/3, # top-right
-        0.5, -0.5, -0.5,  2/4, 1/3, # top-left
-        0.5, -0.5,  0.5,  2/4, 0/3, # bottom-left
-        0.5, -0.5,  0.5,  2/4, 0/3, # bottom-left
-        -0.5, -0.5,  0.5,  3/4, 0/3, # bottom-right
-        -0.5, -0.5, -0.5,  3/4, 1/3, # top-right
-        # Top face
-        -0.5,  0.5, -0.5,  1/4, 3/3, # top-left
-        0.5,  0.5,  0.5,  2/4, 2/3, # bottom-right
-        0.5,  0.5, -0.5,  2/4, 3/3, # top-right     
-        0.5,  0.5,  0.5,  2/4, 2/3, # bottom-right
-        -0.5,  0.5, -0.5,  1/4, 3/3, # top-left
-        -0.5,  0.5,  0.5,  1/4, 2/3, # bottom-left
-        ], dtype='float32')
-        '''
-
         usedVertices = []
 
         for i in range(meshIdx * 16 * 16 * MESH_HEIGHT, (meshIdx + 1) * 16 * 16 * MESH_HEIGHT):
@@ -886,13 +827,12 @@ class Chunk:
                     lightLevel = self.lightLevels[ckLocal.x, ckLocal.y, ckLocal.z]
                     blockLightLevel = self.blockLightLevels[ckLocal.x, ckLocal.y, ckLocal.z]
                 else:
-                    ckPos = ChunkPos(ckPos.x + self.pos.x, ckPos.y + self.pos.y, ckPos.z + self.pos.z)
-                    if ckPos not in world.chunks:
-                        lightLevel = 7
-                        blockLightLevel = 0
-                    else:
+                    if ckPos in world.chunks:
                         lightLevel = world.chunks[ckPos].lightLevels[ckLocal.x, ckLocal.y, ckLocal.z]
                         blockLightLevel = world.chunks[ckPos].blockLightLevels[ckLocal.x, ckLocal.y, ckLocal.z]
+                    else:
+                        lightLevel = 7
+                        blockLightLevel = 0
 
                 #faceVertices = list(vertices[(faceIdx // 2) * 6 * 5:((faceIdx // 2) + 1) * 6 * 5])
                 for idx2 in range(6):
@@ -1002,7 +942,7 @@ class Chunk:
         for faceIdx in range(0, 12, 2):
             adjPos = adjacentBlockPos(blockPos, faceIdx)
 
-            isVisible = not world.coordsOccupied(self._globalBlockPos(adjPos))
+            isVisible = not world.coordsOccupied(self._globalBlockPos(adjPos), isOpaque)
 
             '''
             isVisible = (
@@ -1020,9 +960,10 @@ class Chunk:
             
         self.instances[idx][1] = uncovered
 
-    def coordsOccupied(self, pos: BlockPos) -> bool:
+    def coordsOccupied(self, pos: BlockPos, predicate=None) -> bool:
         (x, y, z) = pos
-        return self.blocks[x, y, z] != 'air'
+        block = self.blocks[x, y, z]
+        return block != 'air' and (predicate is None or predicate(block))
     
     def setAllBlocks(self, world, instData):
         self.meshDirtyFlags = [True] * len(self.meshDirtyFlags)
@@ -1250,12 +1191,13 @@ class World:
         z %= 16
         return (chunk, BlockPos(x, y, z))
 
-    def coordsOccupied(self, pos: BlockPos) -> bool:
+    def coordsOccupied(self, pos: BlockPos, predicate=None) -> bool:
         if not self.coordsInBounds(pos):
             return False
 
         (chunk, innerPos) = self.getChunk(pos)
-        return chunk.coordsOccupied(innerPos)
+
+        return chunk.coordsOccupied(innerPos, predicate)
 
     def coordsInBounds(self, pos: BlockPos) -> bool:
         (chunkPos, _) = toChunkLocal(pos)
@@ -1292,14 +1234,16 @@ class World:
     def setLightLevel(self, blockPos: BlockPos, level: int):
         (chunk, (x, y, z)) = self.getChunk(blockPos)
         chunk.lightLevels[x, y, z] = level
+        # FIXME:
+        chunk.meshDirtyFlags[y // MESH_HEIGHT] = True
 
     def setBlockLightLevel(self, blockPos: BlockPos, level: int):
         (chunk, (x, y, z)) = self.getChunk(blockPos)
         chunk.blockLightLevels[x, y, z] = level
+        # FIXME:
+        chunk.meshDirtyFlags[y // MESH_HEIGHT] = True
     
     def updateLight(self, blockPos: BlockPos, isSky: bool):
-        self.meshDirty = True
-
         added = self.coordsOccupied(blockPos)
 
         (chunk, localPos) = self.getChunk(blockPos)
@@ -1499,6 +1443,9 @@ class World:
 
 
     # app.instances[idx] = [Instance(app.cube, np.array([[modelX], [modelY], [modelZ]]), texture), False]
+
+def isOpaque(block: BlockId):
+    return block not in ['torch', 'air']
 
 def getLuminance(block: BlockId):
     if block == 'glowstone':
@@ -1701,6 +1648,11 @@ def tickChunks(app, maxTime=0.030):
                 keepGoing = False
 
         if keepGoing and chunk.worldgenStage == WorldgenStage.OPTIMIZED and opt == 8:
+            while keepGoing and chunk.createNextMesh(app.world, (app.textures, app.cube, app.textureIndices)):
+                if time.perf_counter() - startTime > maxTime:
+                    keepGoing = False
+        
+        if keepGoing and chunk.worldgenStage == WorldgenStage.COMPLETE:
             while keepGoing and chunk.createNextMesh(app.world, (app.textures, app.cube, app.textureIndices)):
                 if time.perf_counter() - startTime > maxTime:
                     keepGoing = False
