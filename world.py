@@ -1222,7 +1222,15 @@ class World:
         if z < 0 or zw <= z: return False
         return True
         '''
+    
+    def getTotalLight(self, gameTime: float, blockPos: BlockPos) -> int:
+        sky = self.getLightLevel(blockPos)
+        block = self.getBlockLightLevel(blockPos)
 
+        sky = roundHalfUp(sky * getSkylightFactor(gameTime))
+
+        return max(sky, block)
+    
     def getLightLevel(self, blockPos: BlockPos) -> int:
         (chunk, (x, y, z)) = self.getChunk(blockPos)
         return chunk.lightLevels[x, y, z]

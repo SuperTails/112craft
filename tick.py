@@ -177,10 +177,13 @@ def isValidSpawnLocation(app, pos: BlockPos):
     floor = BlockPos(pos.x, pos.y - 1, pos.z)
     feet = pos
     head = BlockPos(pos.x, pos.y + 1, pos.z)
-    
+
+    light = app.world.getTotalLight(app.time, pos)
+
     isOk = (app.world.coordsOccupied(floor)
         and not app.world.coordsOccupied(feet)
-        and not app.world.coordsOccupied(head))
+        and not app.world.coordsOccupied(head)
+        and light < 3)
     
     return isOk
 

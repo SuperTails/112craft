@@ -4,7 +4,13 @@ Very important are BlockPos, ChunkPos, BlockId, and ItemId.
 """
 
 import decimal
+import math
 from typing import NamedTuple, Tuple, Optional
+
+def getSkylightFactor(gameTime: float) -> float: 
+    dayFrac = ((gameTime % 24000) / 24000.0) - 0.75;
+
+    return math.sin(dayFrac * 2.0 * 3.14159 /2.0)**2;
 
 def roundHalfUp(d):
     # Round to nearest with ties going away from zero.
