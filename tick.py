@@ -176,7 +176,7 @@ def doMobSpawning(app):
 
             if not isValidSpawnLocation(app, BlockPos(x, y, z)): continue
 
-            mob = random.choice(['creeper', 'zombie'])
+            mob = random.choice(['creeper', 'zombie', 'skeleton'])
 
             packSize = 4
             for _ in range(packSize):

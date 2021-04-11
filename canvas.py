@@ -203,7 +203,7 @@ class Canvas:
         glBindVertexArray(self.vao)
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, ctypes.c_void_p(0)) #type:ignore
 
-        glBlendFunc(GL_SRC_ALPHA, GL_ZERO)
+        #glBlendFunc(GL_SRC_ALPHA, GL_ZERO)
 
         self.image = Image.new("RGB", (self.width, self.height), color=ALPHA_COLOR)
         self.draw = typing.cast(ImageDraw.ImageDraw, ImageDraw.Draw(self.image, "RGBA"))

@@ -441,6 +441,8 @@ class GameOverMode(Mode):
     buttons: ButtonManager
 
     def __init__(self, app):
+        setMouseCapture(app, False)
+
         respawnButton = Button(app, 0.5, 0.5, 200, 40, "Respawn")
 
         self.buttons = ButtonManager()
@@ -899,10 +901,10 @@ class InventoryMode(Mode):
         key = event.key.upper()
         if key == 'E':
             if hasattr(self.gui, 'craftInputs'):
-                dim = len(self.gui.craftInputs)
+                dim = len(self.gui.craftInputs) #type:ignore
                 for r in range(dim):
                     for c in range(dim):
-                        self.submode.player.pickUpItem(app, self.gui.craftInputs[r][c])
+                        self.submode.player.pickUpItem(app, self.gui.craftInputs[r][c]) #type:ignore
             self.submode.player.pickUpItem(app, self.heldItem)
             self.heldItem = Slot('', 0)
             app.mode = self.submode
@@ -917,7 +919,7 @@ def appStarted(app):
     #app.mode = WorldLoadMode(app, 'cavetest3', makePlayingMode, seed=random.random())
     #app.mode = CreateWorldMode(app)
 
-    app.entities = [entity.Entity(app, 'creeper', 0.0, 71.0, 1.0), entity.Entity(app, 'fox', 5.0, 72.0, 3.0)]
+    app.entities = [entity.Entity(app, 'skeleton', 0.0, 71.0, 1.0), entity.Entity(app, 'fox', 5.0, 72.0, 3.0)]
 
     app.btnBg = createSizedBackground(app, 200, 40)
 

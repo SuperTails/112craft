@@ -10,6 +10,7 @@ import render
 import config
 import copy
 import entity
+import os
 from sound import Sound
 from shader import ShaderProgram
 from PIL import Image
@@ -64,22 +65,33 @@ class Recipe:
 
 def loadEntityModels(app):
     app.entityModels = dict()
-    app.entityModels.update(entity.openModels('assets/creeper.geo.json'))
-    app.entityModels.update(entity.openModels('assets/fox.geo.json'))
-    app.entityModels.update(entity.openModels('assets/Vanilla_Resource_Pack_1.16.220/models/mobs.json'))
 
+    for path, _, files in os.walk('assets/Vanilla_Resource_Pack_1.16.220/models'):
+        for file in files:
+            app.entityModels.update(entity.openModels(path + '/' + file))
+    
 def loadEntityAnimations(app):
     app.entityAnimations = dict()
-    app.entityAnimations.update(entity.openAnimations('assets/creeper.animation.json'))
-    app.entityAnimations.update(entity.openAnimations('assets/fox.animation.json'))
-    app.entityAnimations.update(entity.openAnimations('assets/Vanilla_Resource_Pack_1.16.220/animations/zombie.animation.json'))
-    app.entityAnimations.update(entity.openAnimations('assets/Vanilla_Resource_Pack_1.16.220/animations/humanoid.animation.json'))
+
+    for path, _, files in os.walk('assets/Vanilla_Resource_Pack_1.16.220/animations'):
+        for file in files:
+            if 'bee' in file:
+                # Who in their right mind puts COMMENTS in a JSON file????
+                continue
+            app.entityAnimations.update(entity.openAnimations(path + '/' + file))
+
+    #app.entityAnimations.update(entity.openAnimations('assets/creeper.animation.json'))
+    #app.entityAnimations.update(entity.openAnimations('assets/fox.animation.json'))
+    #app.entityAnimations.update(entity.openAnimations('assets/Vanilla_Resource_Pack_1.16.220/animations/zombie.animation.json'))
+    #app.entityAnimations.update(entity.openAnimations('assets/Vanilla_Resource_Pack_1.16.220/animations/humanoid.animation.json'))
 
 def loadEntityTextures(app):
     app.entityTextures = {}
     app.entityTextures['creeper'] = loadTexture('assets/creeper.png')
     app.entityTextures['fox'] = loadTexture('assets/fox.png')
     app.entityTextures['zombie'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/zombie/zombie.png')
+    app.entityTextures['skeleton'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/skeleton/skeleton.png')
+
 
 def imageToTexture(image: Image.Image) -> int:
     texture = glGenTextures(1) #type:ignore

@@ -21,6 +21,7 @@ import time
 import random
 import decimal
 import copy
+import molang
 from util import BlockPos, roundHalfUp
 from dataclasses import dataclass
 from OpenGL.GL import * #type:ignore
@@ -164,11 +165,6 @@ class Bone:
 
         vertices = self.toVertices().flatten().astype('float32')
 
-        print(len(vertices))
-        print(vertices.nbytes / len(vertices))
-
-        print(vertices)
-
         vao: int = glGenVertexArrays(1) #type:ignore
         vbo: int = glGenBuffers(1) #type:ignore
 
@@ -224,7 +220,6 @@ def openAnimations(path) -> dict[str, Animation]:
     
     for (name, anim) in j['animations'].items():
         if name.startswith('animation.'):
-            name = name.removeprefix('animation.')
             result[name] = parseAnimation(anim)
     
     return result
@@ -247,11 +242,15 @@ class EntityModel:
 def parseCube(j) -> Cube:
     origin = tuple(j['origin'])
     size = tuple(j['size'])
-    uv = tuple(j['uv'])
+    if 'uv' in j:
+        uv = tuple(j['uv'])
+    else:
+        # I do not understand why some of them just don't include any
+        uv = (0, 0)
     return Cube(origin, size, uv) #type:ignore
     
 def parseBone(j) -> Bone:
-    name = j['name']
+    name = j['name'].lower()
     if 'pivot' in j:
         pivot = tuple(j['pivot'])
     else:
@@ -272,7 +271,10 @@ def parseBone(j) -> Bone:
     return Bone(name, pivot, cubes, bind_pose_rotation, neverRender) #type:ignore
 
 def parseModel(j) -> EntityModel:
-    bones = list(map(parseBone, j['bones']))
+    if 'bones' in j:
+        bones = list(map(parseBone, j['bones']))
+    else:
+        bones = []
     return EntityModel(bones)
 
 def openModels(path) -> dict[str, EntityModel]:
@@ -319,6 +321,15 @@ def registerEntityKinds(app):
             height=1.9,
             ai=Ai([AttackTask(), FollowTask(), WanderTask()])
         ),
+        'skeleton': EntityKind(
+            name='skeleton',
+            model='geometry.skeleton',
+            maxHealth=20.0,
+            walkSpeed=0.05,
+            radius=0.3,
+            height=1.9,
+            ai=Ai([AttackTask(), FollowTask(), WanderTask()])
+        ),
         'fox': EntityKind(
             name='fox',
             model='geometry.fox',
@@ -355,7 +366,11 @@ class Entity:
     bodyAngle: float
     headAngle: float
 
+    lifeTime: int
+
     path: List[BlockPos]
+
+    variables: dict[str, float]
 
     ai: 'Ai'
 
@@ -372,6 +387,13 @@ class Entity:
         self.path = []
 
         self.kind = app.entityKinds[kind]
+
+        self.variables = {}
+
+        if self.kind.name == 'zombie':
+            self.variables['gliding_speed_value'] = 1.0
+
+        self.lifeTime = 0
 
         self.radius = self.kind.radius
         self.height = self.kind.height
@@ -412,14 +434,18 @@ class Entity:
         boneRot = bone.bind_pose_rotation
 
         if self.kind.name == 'creeper':
-            anim = app.entityAnimations['creeper.legs']
+            anim = app.entityAnimations['animation.creeper.legs']
         elif self.kind.name == 'fox':
-            #anim = app.entityAnimations['fox.sit']
-            anim = None
+            anim = app.entityAnimations['animation.quadruped.walk']
         elif self.kind.name == 'zombie':
-            anim = None
+            anim = app.entityAnimations['animation.humanoid.move']
+        elif self.kind.name == 'skeleton':
+            anim = app.entityAnimations['animation.humanoid.bow_and_arrow']
         else:
             raise Exception(self.kind)
+        
+        #if anim is not None:
+        #    print(boneName)
 
         if boneName == 'head':
             rot = [0.0, math.degrees(self.headAngle - self.bodyAngle), 0.0]
@@ -439,21 +465,39 @@ class Entity:
 
         return rot
     
+    def getQuery(self, name):
+        if name == 'target_x_rotation':
+            # TODO:
+            return 0.0
+        elif name == 'target_y_rotation':
+            # TODO:
+            return 0.0
+        elif name == 'modified_move_speed':
+            return math.sqrt(self.velocity[0]**2 + self.velocity[2]**2)
+        elif name == 'life_time':
+            return self.lifeTime
+        elif name == 'anim_time':
+            # TODO:
+            return self.lifeTime
+        else:
+            raise Exception(name)
+    
     def calc(self, ex):
         mag = math.sqrt(self.velocity[0]**2 + self.velocity[1]**2)
         if isinstance(ex, float):
             result = ex
-        elif '-variable.leg_rot' in ex:
-            result = -30.0 * math.sin(time.time() * 3.0) * mag * 15.0
-        elif 'variable.leg_rot' in ex:
-            result = 30.0 * math.sin(time.time() * 3.0) * mag * 15.0
         else:
-            raise Exception("no")
+            result = molang.evalString(ex, self)
+        #elif '-variable.leg_rot' in ex:
+        #    result = -30.0 * math.sin(time.time() * 3.0) * mag * 15.0
+        #elif 'variable.leg_rot' in ex:
+        #    result = 30.0 * math.sin(time.time() * 3.0) * mag * 15.0
         
         return result
 
     def tick(self, world, entities: List['Entity'], playerX, playerZ):
         self.headAngle = math.atan2(playerX - self.pos[0], playerZ - self.pos[2])
+
 
         if math.sqrt(self.velocity[0]**2 + self.velocity[2]**2) > 0.01:
             goalAngle = math.atan2(self.velocity[0], self.velocity[2])
@@ -471,8 +515,15 @@ class Entity:
 
             self.bodyAngle += change
         
+        if self.kind.name == 'zombie':
+            self.variables['tcos0'] = molang.evalString("(Math.cos(query.modified_distance_moved * 38.17) * query.modified_move_speed / variable.gliding_speed_value) * 57.3", self)
+        elif self.kind.name == 'creeper':
+            self.variables['leg_rot'] = molang.evalString("Math.cos(query.modified_distance_moved * 38.17326) * 80.22 * query.modified_move_speed", self)
+        
         if self.immunity > 0:
             self.immunity -= 1
+        
+        self.lifeTime += 1
         
         self.ai.tick(self, world, entities)
 
