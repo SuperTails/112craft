@@ -211,7 +211,7 @@ def collideY(app, entity: Entity):
         [_, yPos, _] = entity.pos
         #yPos -= entity.height
         yPos -= 0.1
-        feetPos = round(yPos)
+        feetPos = roundHalfUp(yPos)
         if world.hasBlockBeneath(app, entity): 
             entity.onGround = True
             if hasattr(entity, 'flying'): entity.flying = False #type:ignore
@@ -221,7 +221,7 @@ def collideY(app, entity: Entity):
 
     for x in [entity.pos[0] - entity.radius * 0.99, entity.pos[0] + entity.radius * 0.99]:
         for z in [entity.pos[2] - entity.radius * 0.99, entity.pos[2] + entity.radius * 0.99]:
-            hiYCoord = round(entity.pos[1] + entity.height)
+            hiYCoord = roundHalfUp(entity.pos[1] + entity.height)
 
             if app.world.coordsOccupied(BlockPos(round(x), hiYCoord, round(z))):
                 yEdge = hiYCoord - 0.5
@@ -230,7 +230,7 @@ def collideY(app, entity: Entity):
 
 def collide(app, entity: Entity):
     collideY(app, entity)
-    collideXZ(app, entity)
+    return collideXZ(app, entity)
 
 def collideXZ(app, entity: Entity):
     hitWall = False

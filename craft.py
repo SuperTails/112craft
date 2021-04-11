@@ -437,6 +437,28 @@ class ChatMode(Mode):
     def timerFired(self, app):
         self.submode.timerFired(app)
 
+class GameOverMode(Mode):
+    buttons: ButtonManager
+
+    def __init__(self, app):
+        respawnButton = Button(app, 0.5, 0.5, 200, 40, "Respawn")
+
+        self.buttons = ButtonManager()
+        self.buttons.addButton("respawn", respawnButton)
+
+    def redrawAll(self, app, window, canvas):
+        render.redrawAll(app, canvas, doDrawHud=False)
+        canvas.create_text(app.width / 2, app.height / 3, text="Game Over!")
+        self.buttons.draw(app, canvas)
+    
+    def mousePressed(self, app, event):
+        self.buttons.onPress(app, event.x, event.y)
+    
+    def mouseReleased(self, app, event):
+        btn = self.buttons.onRelease(app, event.x, event.y)
+        if btn == 'respawn':
+            # FIXME:
+            app.mode = PlayingMode(app, False)
 
 class PlayingMode(Mode):
     lookedAtBlock = None
@@ -474,6 +496,9 @@ class PlayingMode(Mode):
         updateBlockBreaking(app, self)
 
         tick.tick(app)
+
+        if self.player.health <= 0.0:
+            app.mode = GameOverMode(app)
 
     def mousePressed(self, app, event):
         self.mouseHeld = True
