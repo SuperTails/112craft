@@ -207,7 +207,7 @@ def evalExpr(p, entity):
     elif p.startswith('variable.'):
         p = p.removeprefix('variable.')
         if p not in entity.variables:
-            print("UNKNOWN VARIABLE {p}")
+            print(f"UNKNOWN VARIABLE {p}")
             entity.variables[p] = 0.0
         
         return entity.variables[p]

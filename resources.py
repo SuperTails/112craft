@@ -15,14 +15,14 @@ from sound import Sound
 from shader import ShaderProgram
 from PIL import Image
 from typing import List, Optional, Tuple
-from player import Slot
+from player import Stack
 from OpenGL.GL import * #type:ignore
 
 class Recipe:
     inputs: List[List[Optional[world.ItemId]]]
-    outputs: Slot
+    outputs: Stack
 
-    def __init__(self, grid: List[str], outputs: Slot, maps: dict[str, world.ItemId]):
+    def __init__(self, grid: List[str], outputs: Stack, maps: dict[str, world.ItemId]):
         self.inputs = []
         for row in grid:
             newRow = []
@@ -514,7 +514,7 @@ def loadResources(app):
                 '---',
                 '---'
             ],
-            Slot('planks', 4),
+            Stack('planks', 4),
             { 'l': 'log' }
         ),
         Recipe(
@@ -523,7 +523,7 @@ def loadResources(app):
                 'p--',
                 '---'
             ],
-            Slot('stick', 4),
+            Stack('stick', 4),
             { 'p': 'planks' }
         ),
         Recipe(
@@ -532,7 +532,7 @@ def loadResources(app):
                 'pp-',
                 '---'
             ],
-            Slot('crafting_table', 1),
+            Stack('crafting_table', 1),
             { 'p': 'planks' }
         ),
         Recipe(
@@ -541,7 +541,7 @@ def loadResources(app):
                 '-s-',
                 '-s-',
             ],
-            Slot('wooden_pickaxe', 1),
+            Stack('wooden_pickaxe', 1),
             { 'p': 'planks', 's': 'stick' }
         ),
         Recipe(
@@ -550,7 +550,7 @@ def loadResources(app):
                 '-s-',
                 '-s-',
             ],
-            Slot('stone_pickaxe', 1),
+            Stack('stone_pickaxe', 1),
             { 'c': 'cobblestone', 's': 'stick' }
         ),
         Recipe(
@@ -559,7 +559,7 @@ def loadResources(app):
                 'ps-',
                 '-s-',
             ],
-            Slot('wooden_axe', 1),
+            Stack('wooden_axe', 1),
             { 'p': 'planks', 's': 'stick' }
         ),
         Recipe(
@@ -568,7 +568,7 @@ def loadResources(app):
                 's--',
                 's--',
             ],
-            Slot('wooden_shovel', 1),
+            Stack('wooden_shovel', 1),
             { 'p': 'planks', 's': 'stick' }
         ),
         Recipe(
@@ -577,7 +577,7 @@ def loadResources(app):
                 'c-c',
                 'ccc',
             ],
-            Slot('furnace', 1),
+            Stack('furnace', 1),
             { 'c': 'cobblestone' }
         ),
         Recipe(
@@ -586,7 +586,7 @@ def loadResources(app):
                 's--',
                 '---',
             ],
-            Slot('torch', 4),
+            Stack('torch', 4),
             { 'c': 'coal', 's': 'stick' }
         ),
         Recipe(
@@ -595,7 +595,7 @@ def loadResources(app):
                 'p--',
                 's--',
             ],
-            Slot('wooden_sword', 1),
+            Stack('wooden_sword', 1),
             { 'p': 'planks', 's': 'stick' }
         ),
         Recipe(
@@ -604,7 +604,7 @@ def loadResources(app):
                 'p--',
                 's--',
             ],
-            Slot('stone_sword', 1),
+            Stack('stone_sword', 1),
             { 'p': 'cobblestone', 's': 'stick' }
         ),
         Recipe(
@@ -613,7 +613,7 @@ def loadResources(app):
                 'p--',
                 's--',
             ],
-            Slot('iron_sword', 1),
+            Stack('iron_sword', 1),
             { 'p': 'iron_ingot', 's': 'stick' }
         ),
     ]

@@ -51,9 +51,9 @@ import tick
 from util import ChunkPos
 from button import Button, ButtonManager, createSizedBackground
 from world import Chunk, World
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Any
 from enum import Enum
-from player import Player, Slot
+from player import Player, Slot, Stack
 from resources import loadResources, getHardnessAgainst, getBlockDrop, getAttackDamage
 from nbt import nbt
 
@@ -388,7 +388,7 @@ def submitChat(app, text: str):
                 amount = int(parts[2])
             else:
                 amount = 1
-            app.mode.player.pickUpItem(app, Slot(itemId, amount))
+            app.mode.player.pickUpItem(app, Stack(itemId, amount))
         elif parts[0] == 'hide':
             app.doDrawHud = False
         elif parts[0] == 'show':
@@ -529,7 +529,7 @@ class PlayingMode(Mode):
             if slot.isEmpty():
                 dmg = 1.0
             else:
-                dmg = 1.0 + getAttackDamage(app, slot.item)
+                dmg = 1.0 + getAttackDamage(app, slot.stack.item)
 
             entity.hit(dmg, knockback)
 
@@ -549,15 +549,15 @@ class PlayingMode(Mode):
                 furnace = app.world.chunks[ckPos].tileEntities[ckLocal]
                 app.mode = InventoryMode(app, self, name='furnace', extra=furnace)
             else:
-                slot = self.player.inventory[self.player.hotbarIdx]
-                if slot.amount == 0: return
+                stack = self.player.inventory[self.player.hotbarIdx].stack
+                if stack.amount == 0: return
                 
-                if slot.item not in app.textures: return
+                if stack.item not in app.textures: return
 
-                if slot.amount > 0:
-                    slot.amount -= 1
+                if stack.amount > 0:
+                    stack.amount -= 1
 
-                world.addBlock(app, pos2, slot.item)
+                world.addBlock(app, pos2, stack.item)
     
     def mouseReleased(self, app, event):
         self.mouseHeld = False
@@ -611,190 +611,116 @@ class PlayingMode(Mode):
         elif key == 'SPACE' or key == ' ':
             app.space = False
 
-class FurnaceGui:
+class ContainerGui:
+    slots: List[Tuple[int, int, Slot]]
+
+    def __init__(self, slots):
+        self.slots = slots
+    
+    def onClick(self, app, isRight, mx, my):
+        (_, _, w) = render.getSlotCenterAndSize(app, 0)
+
+        for (i, (x, y, slot)) in enumerate(self.slots):
+            x0, x1 = x - w/2, x + w/2
+            y0, y1 = y - w/2, y + w/2
+
+            if x0 <= mx <= x1 and y0 <= my <= y1:
+                app.mode.onSlotClicked(app, isRight, slot)
+                self.postClick(app, i)
+    
+    def postClick(self, app, slotIdx):
+        pass
+        
+    def redrawAll(self, app, canvas):
+        for (x, y, slot) in self.slots:
+            render.drawSlot(app, canvas, x, y, slot)
+
+class FurnaceGui(ContainerGui):
     furnace: world.Furnace
 
-    def __init__(self, furnace: world.Furnace):
+    def __init__(self, app, furnace: world.Furnace):
         self.furnace = furnace
 
-    def inputPos(self, app):
-        (_, _, w) = render.getSlotCenterAndSize(app, 0)
-        return (app.width / 2 - 50, app.height / 4 - 30)
+        slots = [
+            (app.width / 2 - 50, app.height / 4 - 30, self.furnace.inputSlot),
+            (app.width / 2 - 50, app.height / 4 + 30, self.furnace.fuelSlot),
+            (app.width / 2 + 50, app.height / 4, self.furnace.outputSlot),
+        ]
+
+        super().__init__(slots)
+
+def craftingGuiPostClick(gui, app, slotIdx):
+    if slotIdx == len(gui.slots) - 1 and gui.prevOutput != gui.slots[-1][2].stack:
+        # Something was crafted
+        for (_, _, slot) in gui.slots:
+            if slot.stack.amount > 0:
+                slot.stack.amount -= 1
+
+    def toid(s): return None if s.isEmpty() else s.item
+
+    rowLen = round(math.sqrt((len(gui.slots) - 1)))
+
+    c = []
+
+    for rowIdx in range(rowLen):
+        row = []
+        for colIdx in range(rowLen):
+            row.append(toid(gui.slots[rowIdx * rowLen + colIdx][2].stack))
+        c.append(row)
     
-    def fuelPos(self, app):
-        (_, _, w) = render.getSlotCenterAndSize(app, 0)
-        return (app.width / 2 - 50, app.height / 4 + 30)
+    gui.slots[-1][2].stack = Stack('', 0)
+
+    for r in app.recipes:
+        if r.isCraftedBy(c):
+            gui.slots[-1][2].stack = copy.copy(r.outputs)
+            break
     
-    def outputPos(self, app):
+    gui.prevOutput = copy.copy(gui.slots[-1][2].stack)
+
+class InventoryCraftingGui(ContainerGui):
+    prevOutput: Stack
+
+    def __init__(self, app):
+        self.prevOutput = Stack('', 0)
+
         (_, _, w) = render.getSlotCenterAndSize(app, 0)
-        return (app.width / 2 + 50, app.height / 4)
-    
-    def onClick(self, app, isRight, mx, my):
-        (_, _, w) = render.getSlotCenterAndSize(app, 0)
-
-        slot = None
-
-        (x, y) = self.inputPos(app)
-        if x-w/2 <= mx and mx <= x+w/2 and y-w/2 <= my and my <= y+w/2:
-            slot = self.furnace.inputSlot
-
-        (x, y) = self.outputPos(app)
-        if x-w/2 <= mx and mx <= x+w/2 and y-w/2 <= my and my <= y+w/2:
-            slot = self.furnace.outputSlot
-
-        (x, y) = self.fuelPos(app)
-        if x-w/2 <= mx and mx <= x+w/2 and y-w/2 <= my and my <= y+w/2:
-            slot = self.furnace.fuelSlot
-        
-        if slot is not None:
-            if isRight:
-                app.mode.onRightClickIntoNormalSlot(app, slot)
-            else:
-                app.mode.onLeftClickIntoNormalSlot(app, slot)
-    
-    def redrawAll(self, app, canvas):
-        (x, y) = self.inputPos(app)
-        render.drawSlot(app, canvas, x, y, self.furnace.inputSlot)
-
-        (x, y) = self.outputPos(app)
-        render.drawSlot(app, canvas, x, y, self.furnace.outputSlot)
-
-        (x, y) = self.fuelPos(app)
-        render.drawSlot(app, canvas, x, y, self.furnace.fuelSlot)
-        
-class CraftingGui:
-    craftInputs: List[List[Slot]]
-    craftOutput: Slot
-
-    def __init__(self, size: int):
-        self.craftInputs = [[Slot('', 0) for _ in range(size)] for _ in range(size)]
-        self.craftOutput = Slot('', 0)
-
-    def onClick(self, app, isRight, mx, my):
-        clickedSlot = self.clickedCraftInputIdx(app, mx, my)
-        print(f"clicked craft slot {clickedSlot}")
-        if clickedSlot is not None:
-            (rowIdx, colIdx) = clickedSlot
-            if isRight:
-                app.mode.onRightClickIntoNormalSlot(app, self.craftInputs[rowIdx][colIdx])
-            else:
-                app.mode.onLeftClickIntoNormalSlot(app, self.craftInputs[rowIdx][colIdx])
-        
-        if self.clickedCraftOutput(app, mx, my):
-            merged = app.mode.heldItem.tryMergeWith(self.craftOutput)
-            if merged is not None:
-                for r in range(len(self.craftInputs)):
-                    for c in range(len(self.craftInputs)):
-                        if self.craftInputs[r][c].amount > 0:
-                            self.craftInputs[r][c].amount -= 1
-
-                app.mode.heldItem = merged
-                print(f"set held item to {merged}")
-        
-
-        def toid(s): return None if s.isEmpty() else s.item
-
-        c = [[toid(i) for i in row] for row in self.craftInputs]
-
-        self.craftOutput = Slot('', 0)
-
-        for r in app.recipes:
-            if r.isCraftedBy(c):
-                self.craftOutput = copy.copy(r.outputs)
-                break
-        
-        print(f"output is {self.craftOutput}")
-
-    def clickedCraftOutput(self, a, b, c) -> bool:
-        raise Exception("Attempt to check output in abstract class")
-
-    def clickedCraftInputIdx(self, app, mx, my) -> Optional[Tuple[int, int]]:
-        raise Exception("Attempt to check input in abstract class")
-
-
-class InventoryCraftingGui(CraftingGui):
-    def __init__(self):
-        super().__init__(2)
-
-    def redrawAll(self, app, canvas):
-        (_, _, w) = render.getSlotCenterAndSize(app, 0)
-        for (rowIdx, row) in enumerate(self.craftInputs):
-            for (colIdx, col) in enumerate(row):
-                x = colIdx * w + 350
-                y = rowIdx * w + 100
-                render.drawSlot(app, canvas, x, y, col)
-
-        render.drawSlot(app, canvas, 460, 100 + w / 2, self.craftOutput)
-    
-    def clickedCraftInputIdx(self, app, mx, my) -> Optional[Tuple[int, int]]:
-        (_, _, w) = render.getSlotCenterAndSize(app, 0)
+        slots = []
         for rowIdx in range(2):
             for colIdx in range(2):
                 x = colIdx * w + 350
                 y = rowIdx * w + 100
-                x0, y0 = x - w/2, y - w/2
-                x1, y1 = x + w/2, y + w/2
-                if x0 < mx and mx < x1 and y0 < my and my < y1:
-                    return (rowIdx, colIdx)
-        return None
-    
-    def clickedCraftOutput(self, app, mx, my) -> bool:
-        (_, _, w) = render.getSlotCenterAndSize(app, 0)
+                slots.append((x, y, Slot(persistent=False)))
         
-        x = 470
-        y = 100 + w / 2
-        x0, y0 = x - w/2, y - w/2
-        x1, y1 = x + w/2, y + w/2
+        slots.append((460, 100 + w / 2, Slot(canInput=False)))
 
-        return x0 < mx and mx < x1 and y0 < my and my < y1
+        super().__init__(slots)
     
-class CraftingTableGui(CraftingGui):
-    def __init__(self):
-        super().__init__(3)
+    def postClick(self, app, slotIdx):
+        craftingGuiPostClick(self, app, slotIdx)
 
-    def clickedCraftInputIdx(self, app, mx, my) -> Optional[Tuple[int, int]]:
+class CraftingTableGui(ContainerGui):
+    prevOutput: Stack
+
+    def __init__(self, app):
+        self.prevOutput = Stack('', 0)
+
+        slots = []
+        
         (_, _, w) = render.getSlotCenterAndSize(app, 0)
+
         for rowIdx in range(3):
             for colIdx in range(3):
-                (x, y) = self.craftSlotCenter(app, rowIdx, colIdx)
-                x0, y0 = x - w/2, y - w/2
-                x1, y1 = x + w/2, y + w/2
-                if x0 < mx and mx < x1 and y0 < my and my < y1:
-                    return (rowIdx, colIdx)
-        return None
-    
-    def craftOutputCenter(self, app) -> Tuple[int, int]:
-        (_, _, w) = render.getSlotCenterAndSize(app, 0)
+                x = app.width / 2 + (colIdx - 3) * w
+                y = 70 + rowIdx * w
+
+                slots.append((x, y, Slot(persistent=False)))
         
-        return (app.width // 2 + w * 2, 70 + w)
+        slots.append((app.width // 2 + w * 2, 70 + w, Slot(canInput=False)))
+
+        super().__init__(slots)
     
-    def craftSlotCenter(self, app, rowIdx, colIdx) -> Tuple[int, int]:
-        (_, _, w) = render.getSlotCenterAndSize(app, 0)
-
-        x = app.width / 2 + (colIdx - 3) * w
-        y = 70 + rowIdx * w
-
-        return (x, y)
-    
-    def clickedCraftOutput(self, app, mx, my) -> bool:
-        (_, _, w) = render.getSlotCenterAndSize(app, 0)
-        
-        (x, y) = self.craftOutputCenter(app)
-        x0, y0 = x - w/2, y - w/2
-        x1, y1 = x + w/2, y + w/2
-
-        return x0 < mx and mx < x1 and y0 < my and my < y1
-    
-    def redrawAll(self, app, canvas):
-        (_, _, w) = render.getSlotCenterAndSize(app, 0)
-        for (rowIdx, row) in enumerate(self.craftInputs):
-            for (colIdx, col) in enumerate(row):
-                (x, y) = self.craftSlotCenter(app, rowIdx, colIdx)
-                render.drawSlot(app, canvas, x, y, col)
-        
-        (x, y) = self.craftOutputCenter(app)
-
-        render.drawSlot(app, canvas, x, y, self.craftOutput)
+    def postClick(self, app, slotIdx):
+        craftingGuiPostClick(self, app, slotIdx)
 
 class PauseMode(Mode):
     submode: PlayingMode
@@ -807,27 +733,38 @@ class PauseMode(Mode):
     def redrawAll(self, app, window, canvas):
         self.submode.redrawAll(app, window, canvas)
 
+class InventoryGui(ContainerGui):
+    def __init__(self, app, player):
+        slots = []
 
+        for i in range(36):
+            (x, y, _) = render.getSlotCenterAndSize(app, i)
+            slot = player.inventory[i]
+            slots.append((x, y, slot))
+        
+        super().__init__(slots)
 
 class InventoryMode(Mode):
     submode: PlayingMode
-    heldItem: Slot = Slot('', 0)
+    heldItem: Stack
     player: Player
 
     def __init__(self, app, submode: PlayingMode, name: str, extra=None):
         setMouseCapture(app, False)
         self.submode = submode
-        self.heldItem = Slot('', 0)
-        self.craftOutput = Slot('', 0)
+        self.heldItem = Stack('', 0)
+        self.craftOutput = Stack('', 0)
 
         self.player = submode.player
 
+        self.guis: List[Any] = [InventoryGui(app, self.player)]
+
         if name == 'inventory':
-            self.gui = InventoryCraftingGui()
+            self.guis.append(InventoryCraftingGui(app))
         elif name == 'crafting_table':
-            self.gui = CraftingTableGui()
+            self.guis.append(CraftingTableGui(app))
         elif name == 'furnace':
-            self.gui = FurnaceGui(extra)
+            self.guis.append(FurnaceGui(app, extra))
         else:
             raise Exception(f"unknown gui {name}")
         
@@ -839,11 +776,12 @@ class InventoryMode(Mode):
 
         render.drawMainInventory(app, canvas)
 
-        self.gui.redrawAll(app, canvas)
+        for gui in self.guis:
+            gui.redrawAll(app, canvas)
         
         if app.mousePos is not None:
-            render.drawSlot(app, canvas, app.mousePos[0], app.mousePos[1],
-                self.heldItem, drawBackground=False)
+            render.drawStack(app, canvas, app.mousePos[0], app.mousePos[1],
+                self.heldItem)
     
     def mousePressed(self, app, event):
         self.someMousePressed(app, event, False)
@@ -861,7 +799,24 @@ class InventoryMode(Mode):
         
         return None
     
+    def onSlotClicked(self, app, isRight: bool, slot: Slot):
+        if slot.canInput and slot.canOutput:
+            if isRight:
+                self.onRightClickIntoNormalSlot(app, slot)
+            else:
+                self.onLeftClickIntoNormalSlot(app, slot)
+        elif not slot.canInput and slot.canOutput:
+            print(f"before: {self.heldItem}, {slot.stack}")
+            merged = self.heldItem.tryMergeWith(slot.stack)
+            print(f"merged: {merged}")
+            if merged is not None:
+                self.heldItem = merged
+                slot.stack = Stack('', 0)
+        else:
+            raise Exception("TODO")
+    
     def onRightClickIntoNormalSlot(self, app, normalSlot):
+        normalSlot = normalSlot.stack
         if self.heldItem.isEmpty():
             # Picks up half of the slot
             if normalSlot.isInfinite():
@@ -869,9 +824,9 @@ class InventoryMode(Mode):
             else:
                 amountTaken = math.ceil(normalSlot.amount / 2)
                 normalSlot.amount -= amountTaken
-            self.heldItem = Slot(normalSlot.item, amountTaken)
+            self.heldItem = Stack(normalSlot.item, amountTaken)
         else:
-            newStack = normalSlot.tryMergeWith(Slot(self.heldItem.item, 1))
+            newStack = normalSlot.tryMergeWith(Stack(self.heldItem.item, 1))
             if newStack is not None:
                 if not self.heldItem.isInfinite():
                     self.heldItem.amount -= 1
@@ -879,6 +834,7 @@ class InventoryMode(Mode):
                 normalSlot.amount = newStack.amount
     
     def onLeftClickIntoNormalSlot(self, app, normalSlot):
+        normalSlot = normalSlot.stack
         newStack = self.heldItem.tryMergeWith(normalSlot)
         if newStack is None or self.heldItem.isEmpty():
             tempItem = self.heldItem.item
@@ -888,35 +844,26 @@ class InventoryMode(Mode):
             normalSlot.item = tempItem
             normalSlot.amount = tempAmount
         else:
-            self.heldItem = Slot('', 0)
+            self.heldItem = Stack('', 0)
             normalSlot.item = newStack.item
             normalSlot.amount = newStack.amount
 
     def someMousePressed(self, app, event, isRight: bool):
         (_, _, w) = render.getSlotCenterAndSize(app, 0)
 
-        clickedSlot = self.clickedInventorySlotIdx(app, event.x, event.y) 
-        print(f"clicked inv slot {clickedSlot}")
-        if clickedSlot is not None:
-            player = self.submode.player
-            if isRight:
-                self.onRightClickIntoNormalSlot(app, player.inventory[clickedSlot])
-            else:
-                self.onLeftClickIntoNormalSlot(app, player.inventory[clickedSlot])
-
-        
-        self.gui.onClick(app, isRight, event.x, event.y)
+        for gui in self.guis:
+            gui.onClick(app, isRight, event.x, event.y)
  
     def keyPressed(self, app, event):
         key = event.key.upper()
         if key == 'E':
-            if hasattr(self.gui, 'craftInputs'):
-                dim = len(self.gui.craftInputs) #type:ignore
-                for r in range(dim):
-                    for c in range(dim):
-                        self.submode.player.pickUpItem(app, self.gui.craftInputs[r][c]) #type:ignore
+            for gui in self.guis:
+                for (_, _, slot) in gui.slots:
+                    if not slot.persistent:
+                        self.submode.player.pickUpItem(app, slot.stack)
+
             self.submode.player.pickUpItem(app, self.heldItem)
-            self.heldItem = Slot('', 0)
+            self.heldItem = Stack('', 0)
             app.mode = self.submode
             setMouseCapture(app, True)
 
@@ -924,9 +871,9 @@ class InventoryMode(Mode):
 def appStarted(app):
     loadResources(app)
 
-    app.mode = WorldLoadMode(app, 'world', TitleMode)
-    #def makePlayingMode(app): return PlayingMode(app, False)
-    #app.mode = WorldLoadMode(app, 'cavetest3', makePlayingMode, seed=random.random())
+    #app.mode = WorldLoadMode(app, 'world', TitleMode)
+    def makePlayingMode(app): return PlayingMode(app, False)
+    app.mode = WorldLoadMode(app, 'cavetest3', makePlayingMode, seed=random.random())
     #app.mode = CreateWorldMode(app)
 
     #app.entities = [entity.Entity(app, 'skeleton', 0.0, 71.0, 1.0), entity.Entity(app, 'fox', 5.0, 72.0, 3.0)]
@@ -1024,11 +971,11 @@ def updateBlockBreaking(app, mode: PlayingMode):
         
         blockId = app.world.getBlock(pos)
 
-        toolSlot = mode.player.inventory[mode.player.hotbarIdx]
-        if toolSlot.isEmpty():
+        toolStack = mode.player.inventory[mode.player.hotbarIdx].stack
+        if toolStack.isEmpty():
             tool = ''
         else:
-            tool = toolSlot.item
+            tool = toolStack.item
 
         hardness = getHardnessAgainst(app, blockId, tool)
 
@@ -1037,7 +984,7 @@ def updateBlockBreaking(app, mode: PlayingMode):
             world.removeBlock(app, pos)
             app.sounds['destroy_grass'].play()
             if droppedItem is not None:
-                mode.player.pickUpItem(app, Slot(droppedItem, 1))
+                mode.player.pickUpItem(app, Stack(droppedItem, 1))
     else:
         app.breakingBlock = 0.0
 

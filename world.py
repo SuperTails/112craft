@@ -36,7 +36,7 @@ import config
 import anvil
 import os
 import copy
-from player import Slot
+from player import Slot, Stack
 from enum import IntEnum
 from math import cos, sin
 from numpy import ndarray
@@ -306,9 +306,9 @@ class Furnace:
     progress: int
 
     def __init__(self):
-        self.inputSlot = Slot('', 0)
-        self.outputSlot = Slot('', 0)
-        self.fuelSlot = Slot('', 0)
+        self.inputSlot = Slot()
+        self.outputSlot = Slot(canInput=False)
+        self.fuelSlot = Slot(itemFilter='fuel')
 
         self.fuelLeft = 0
         self.progress = 0
@@ -326,14 +326,14 @@ class Furnace:
                 self.progress = 0
 
                 if self.outputSlot.isEmpty():
-                    self.outputSlot.item = app.furnaceRecipes[self.inputSlot.item]
-                    self.outputSlot.amount = 1
+                    self.outputSlot.stack.item = app.furnaceRecipes[self.inputSlot.stack.item]
+                    self.outputSlot.stack.amount = 1
                 else:
-                    self.outputSlot.amount += 1
-                self.inputSlot.amount -= 1
+                    self.outputSlot.stack.amount += 1
+                self.inputSlot.stack.amount -= 1
         
         if self.fuelLeft == 0 and not self.inputSlot.isEmpty() and not self.fuelSlot.isEmpty():
-            self.fuelSlot.amount -= 1
+            self.fuelSlot.stack.amount -= 1
             self.fuelLeft = 1600
 
 class Chunk:

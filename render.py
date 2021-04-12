@@ -23,6 +23,7 @@ from math import sin, cos
 from numpy import ndarray
 from typing import List, Tuple, Optional, Any
 from world import BlockPos, adjacentBlockPos
+from player import Slot, Stack
 from cmu_112_graphics import ImageTk # type: ignore
 from PIL import Image, ImageDraw
 from OpenGL.GL import * #type:ignore
@@ -495,11 +496,11 @@ def renderInstancesGl(app, canvas):
     breakingBlockAmount = 0.0
 
     if app.breakingBlock != 0.0 and hasattr(app.mode, 'player'):
-        toolSlot = app.mode.player.inventory[app.mode.player.hotbarIdx]
-        if toolSlot.isEmpty():
+        toolStack = app.mode.player.inventory[app.mode.player.hotbarIdx].stack
+        if toolStack .isEmpty():
             tool = ''
         else:
-            tool = toolSlot.item
+            tool = toolStack.item
 
         blockId = app.world.getBlock(app.breakingBlockPos)
 
@@ -779,32 +780,34 @@ def drawHotbar(app, canvas):
         y + slotWidth,
         outline='white')
 
-
-def drawSlot(app, canvas, x, y, slot, drawBackground=True):
-    """x and y are the *center* of the slot"""
-
+def drawStack(app, canvas, x, y, stack: Stack):
     slotWidth = app.itemTextures['air'].width + 6
 
-    if drawBackground:
-        canvas.create_rectangle(x - slotWidth / 2, y - slotWidth / 2,
-            x + slotWidth / 2,
-            y + slotWidth / 2,
-            fill='#8b8b8b', outline='#373737')
-
-    if not slot.isEmpty():
-        tex = app.itemTextures[slot.item]
+    if not stack.isEmpty():
+        tex = app.itemTextures[stack.item]
         image = tex
         canvas.create_image(x, y, image=image)
 
         # Slots that are infinite or with a single item just don't have a number displayed
-        if not slot.isInfinite() and slot.amount != 1:
+        if not stack.isInfinite() and stack.amount != 1:
             cornerX = x + 0.3 * slotWidth
             cornerY = y + 0.2 * slotWidth
 
-            qty = slot.amount
+            qty = stack.amount
 
             drawTextOutlined(canvas, cornerX, cornerY, text=str(qty), font='Arial 12 bold')
 
+def drawSlot(app, canvas, x, y, slot: Slot):
+    """x and y are the *center* of the slot"""
+
+    slotWidth = app.itemTextures['air'].width + 6
+
+    canvas.create_rectangle(x - slotWidth / 2, y - slotWidth / 2,
+        x + slotWidth / 2,
+        y + slotWidth / 2,
+        fill='#8b8b8b', outline='#373737')
+
+    drawStack(app, canvas, x, y, slot.stack)
 
 def drawHud(app, canvas, startTime):
     # Indicates the center of the screen
