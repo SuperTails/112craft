@@ -14,6 +14,7 @@ from entity import Entity
 from typing import List, Optional
 from dataclasses import dataclass
 from util import ItemId, BlockPos
+from nbt import nbt
 import copy
 
 @dataclass
@@ -83,7 +84,7 @@ class Player(Entity):
     def tick(self):
         if self.immunity > 0:
             self.immunity -= 1
-        
+    
     def pickUpItem(self, app, newItem: Slot):
         """Adds an item to the player's inventory."""
 
@@ -109,3 +110,4 @@ class Player(Entity):
         
         # TODO: Full inventory??
         1 / 0
+    

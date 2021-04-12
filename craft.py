@@ -55,6 +55,7 @@ from typing import List, Optional, Tuple
 from enum import Enum
 from player import Player, Slot
 from resources import loadResources, getHardnessAgainst, getBlockDrop, getAttackDamage
+from nbt import nbt
 
 # =========================================================================== #
 # ----------------------------- THE APP ------------------------------------- #
@@ -109,6 +110,15 @@ class WorldLoadMode(Mode):
         app.world = World(worldName, seed, importPath=importPath)
 
         app.world.loadChunk((app.textures, app.cube, app.textureIndices), ChunkPos(0, 0, 0))
+
+        try:
+            path = app.world.saveFolderPath() + '/entities.dat'
+
+            nbtfile = nbt.NBTFile(path)
+
+            app.entities = entity.fromNbt(app, nbtfile["Entities"])
+        except FileNotFoundError:
+            app.entities = [entity.Entity(app, 'skeleton', 0.0, 71.0, 1.0), entity.Entity(app, 'fox', 5.0, 72.0, 3.0)]
     
     def timerFired(self, app):
         if self.loadStage < 40:
@@ -919,7 +929,7 @@ def appStarted(app):
     #app.mode = WorldLoadMode(app, 'cavetest3', makePlayingMode, seed=random.random())
     #app.mode = CreateWorldMode(app)
 
-    app.entities = [entity.Entity(app, 'skeleton', 0.0, 71.0, 1.0), entity.Entity(app, 'fox', 5.0, 72.0, 3.0)]
+    #app.entities = [entity.Entity(app, 'skeleton', 0.0, 71.0, 1.0), entity.Entity(app, 'fox', 5.0, 72.0, 3.0)]
 
     app.btnBg = createSizedBackground(app, 200, 40)
 
@@ -988,6 +998,14 @@ def appStopped(app):
     # FIXME:
     if hasattr(app, 'world'):
         app.world.save()
+
+        path = app.world.saveFolderPath() + '/entities.dat'
+
+        nbtfile = nbt.NBTFile()
+        nbtfile.name = "Entities"
+        nbtfile.tags.append(entity.toNbt(app.entities))
+        nbtfile.write_file(path)
+
 
 def updateBlockBreaking(app, mode: PlayingMode):
     if mode.mouseHeld and mode.lookedAtBlock is not None:

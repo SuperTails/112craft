@@ -25,6 +25,7 @@ import molang
 from util import BlockPos, roundHalfUp
 from dataclasses import dataclass
 from OpenGL.GL import * #type:ignore
+from nbt import nbt
 
 CUBE_MESH_VERTICES = np.array([
     # Left face
@@ -375,35 +376,72 @@ class Entity:
 
     ai: 'Ai'
 
-    def __init__(self, app, kind: str, x: float, y: float, z: float):
-        self.pos = [x, y, z]
-        self.velocity = [0.0, 0.0, 0.0]
-        self.onGround = False
+    def __init__(self, app, kind: str = '', x: float = 0.0, y: float = 0.0, z: float = 0.0, nbt: Optional[nbt.TAG_Compound] = None):
+        if nbt is None:
+            self.pos = [x, y, z]
+            self.velocity = [0.0, 0.0, 0.0]
+            self.onGround = False
 
-        self.bodyAngle = 0.0
-        self.headAngle = 0.0
+            self.bodyAngle = 0.0
+            self.headAngle = 0.0
 
-        self.immunity = 0
+            self.immunity = 0
 
-        self.path = []
+            self.path = []
 
-        self.kind = app.entityKinds[kind]
+            self.kind = app.entityKinds[kind]
 
-        self.variables = {}
+            self.variables = {}
 
-        if self.kind.name == 'zombie':
-            self.variables['gliding_speed_value'] = 1.0
-        elif self.kind.name == 'leg_rot':
-            self.variables['leg_rot'] = 0.0
+            if self.kind.name == 'zombie':
+                self.variables['gliding_speed_value'] = 1.0
+            elif self.kind.name == 'leg_rot':
+                self.variables['leg_rot'] = 0.0
 
-        self.lifeTime = 0
-        self.distanceMoved = 0.0
+            self.lifeTime = 0
+            self.distanceMoved = 0.0
 
-        self.radius = self.kind.radius
-        self.height = self.kind.height
-        self.walkSpeed = self.kind.walkSpeed
-        self.health = self.kind.maxHealth
-        self.ai = copy.deepcopy(self.kind.ai)
+            self.radius = self.kind.radius
+            self.height = self.kind.height
+            self.walkSpeed = self.kind.walkSpeed
+            self.health = self.kind.maxHealth
+            self.ai = copy.deepcopy(self.kind.ai)
+        else:
+            self.fromNbt(app, nbt)
+    
+    def fromNbt(self, app, data: nbt.TAG_Compound):
+        kind = data["id"].value.removeprefix("minecraft:")
+
+        self.__init__(app, kind=kind)
+        
+        self.pos = [tag.value for tag in data["Pos"].tags]
+        self.velocity = [tag.value for tag in data["Motion"].tags]
+
+        self.health = data["Health"].value
+        self.onGround = data["OnGround"].value
+    
+    def toNbt(self) -> nbt.TAG_Compound:
+        data = nbt.TAG_Compound()
+
+        motion = nbt.TAG_List(name="Motion", type=nbt.TAG_Double)
+        motion.append(nbt.TAG_Double(self.velocity[0]))
+        motion.append(nbt.TAG_Double(self.velocity[1]))
+        motion.append(nbt.TAG_Double(self.velocity[2]))
+        data.tags.append(motion)
+
+        pos = nbt.TAG_List(name="Pos", type=nbt.TAG_Double)
+        pos.append(nbt.TAG_Double(self.pos[0]))
+        pos.append(nbt.TAG_Double(self.pos[1]))
+        pos.append(nbt.TAG_Double(self.pos[2]))
+        data.tags.append(pos)
+        
+        data.tags.append(nbt.TAG_String(name="id", value=f"minecraft:{self.kind.name}"))
+
+        data.tags.append(nbt.TAG_Float(name="Health", value=self.health))
+
+        data.tags.append(nbt.TAG_Byte(name="OnGround", value=self.onGround))
+
+        return data
     
     def hit(self, damage: float, knockback: Tuple[float, float]):
         if self.immunity == 0:
@@ -568,6 +606,17 @@ class Entity:
             if path is not None:
                 self.path = path
                 print(self.path)
+        
+def fromNbt(app, data: nbt.TAG_List) -> List[Entity]:
+    return [Entity(app, nbt=tag) for tag in data.tags]
+
+def toNbt(entities: List[Entity]) -> nbt.TAG_List:
+    result = nbt.TAG_List(type=nbt.TAG_Compound, name="Entities")
+
+    for entity in entities:
+        result.append(entity.toNbt())
+    
+    return result
 
 class Ai:
     taskIdx: int

@@ -44,7 +44,6 @@ from typing import NamedTuple, List, Any, Tuple, Optional
 from util import *
 from OpenGL.GL import * #type:ignore
 
-
 # Places a tree with its bottommost log at the given position in the world.
 # If `doUpdates` is True, this recalculates the lighting and block visibility.
 # Normally that's a good thing, but during worldgen it's redundant.
@@ -1120,6 +1119,9 @@ class World:
     def getBlock(self, blockPos: BlockPos) -> str:
         (chunkPos, localPos) = toChunkLocal(blockPos)
         return self.chunks[chunkPos].blocks[localPos.x, localPos.y, localPos.z]
+    
+    def saveFolderPath(self) -> str:
+        return f'saves/{self.name}'
     
     def chunkFileName(self, pos: ChunkPos) -> str:
         return f'saves/{self.name}/c_{pos.x}_{pos.y}_{pos.z}.npz'
