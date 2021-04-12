@@ -21,6 +21,7 @@ def couldBeFloat(s: str) -> bool:
     return True
 
 def lex(expr: str) -> List[Token]:
+    expr = expr.lower()
     result = []
     current = None
     for c in expr:

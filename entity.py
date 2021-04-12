@@ -367,6 +367,7 @@ class Entity:
     headAngle: float
 
     lifeTime: int
+    distanceMoved: float
 
     path: List[BlockPos]
 
@@ -392,8 +393,11 @@ class Entity:
 
         if self.kind.name == 'zombie':
             self.variables['gliding_speed_value'] = 1.0
+        elif self.kind.name == 'leg_rot':
+            self.variables['leg_rot'] = 0.0
 
         self.lifeTime = 0
+        self.distanceMoved = 0.0
 
         self.radius = self.kind.radius
         self.height = self.kind.height
@@ -474,6 +478,8 @@ class Entity:
             return 0.0
         elif name == 'modified_move_speed':
             return math.sqrt(self.velocity[0]**2 + self.velocity[2]**2)
+        elif name == 'modified_distance_moved':
+            return self.distanceMoved
         elif name == 'life_time':
             return self.lifeTime
         elif name == 'anim_time':
@@ -498,7 +504,6 @@ class Entity:
     def tick(self, world, entities: List['Entity'], playerX, playerZ):
         self.headAngle = math.atan2(playerX - self.pos[0], playerZ - self.pos[2])
 
-
         if math.sqrt(self.velocity[0]**2 + self.velocity[2]**2) > 0.01:
             goalAngle = math.atan2(self.velocity[0], self.velocity[2])
 
@@ -514,6 +519,8 @@ class Entity:
                 change = diff
 
             self.bodyAngle += change
+        
+        self.distanceMoved += math.sqrt(self.velocity[0]**2 + self.velocity[2]**2)
         
         if self.kind.name == 'zombie':
             self.variables['tcos0'] = molang.evalString("(Math.cos(query.modified_distance_moved * 38.17) * query.modified_move_speed / variable.gliding_speed_value) * 57.3", self)

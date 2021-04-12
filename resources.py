@@ -80,18 +80,12 @@ def loadEntityAnimations(app):
                 continue
             app.entityAnimations.update(entity.openAnimations(path + '/' + file))
 
-    #app.entityAnimations.update(entity.openAnimations('assets/creeper.animation.json'))
-    #app.entityAnimations.update(entity.openAnimations('assets/fox.animation.json'))
-    #app.entityAnimations.update(entity.openAnimations('assets/Vanilla_Resource_Pack_1.16.220/animations/zombie.animation.json'))
-    #app.entityAnimations.update(entity.openAnimations('assets/Vanilla_Resource_Pack_1.16.220/animations/humanoid.animation.json'))
-
 def loadEntityTextures(app):
     app.entityTextures = {}
     app.entityTextures['creeper'] = loadTexture('assets/creeper.png')
     app.entityTextures['fox'] = loadTexture('assets/fox.png')
     app.entityTextures['zombie'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/zombie/zombie.png')
     app.entityTextures['skeleton'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/skeleton/skeleton.png')
-
 
 def imageToTexture(image: Image.Image) -> int:
     texture = glGenTextures(1) #type:ignore
@@ -439,6 +433,8 @@ def loadResources(app):
         'grass': Sound('assets/grass.ogg'),
         'destroy_grass': Sound('assets/destroy_grass.ogg')
     }
+    
+    #Sound('assets/Vanilla_Resource_Pack_1.16.220/sounds/dig/grass1.fsb')
 
     app.furnaceRecipes = {
         'iron_ore': 'iron_ingot'
