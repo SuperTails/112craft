@@ -10,7 +10,7 @@ not that much too this module.
 """
 
 from entity import Entity
-from typing import List, Optional
+from typing import List, Optional, Tuple, Literal, overload
 from dataclasses import dataclass
 from util import ItemId, BlockPos
 from nbt import nbt
@@ -43,6 +43,42 @@ class Stack:
             return Stack(self.item, self.amount + other.amount)
         else:
             return None
+    
+    def toNbt(self, slotIdx = None) -> Optional[nbt.TAG_Compound]:
+        if self.isEmpty():
+            return None
+        else:
+            result = nbt.TAG_Compound()
+            result.tags.append(nbt.TAG_String(f'minecraft:{self.item}', 'id'))
+            result.tags.append(nbt.TAG_Byte(self.amount, 'Count'))
+            if slotIdx is not None:
+                result.tags.append(nbt.TAG_Byte(slotIdx, 'Slot'))
+            return result
+    
+    @overload
+    @classmethod
+    def fromNbt(cls, tag: nbt.TAG_Compound) -> 'Stack':
+        raise Exception()
+    
+    @overload
+    @classmethod
+    def fromNbt(cls, tag: nbt.TAG_Compound, getSlot: Literal[True]) -> Tuple['Stack', bool]:
+        raise Exception()
+
+    @classmethod
+    def fromNbt(cls, tag: nbt.TAG_Compound, getSlot: bool = False):
+        item = tag['id'].value.removeprefix('minecraft:')
+        amount = tag['Count'].value
+
+        stack = cls(item, amount)
+
+        if getSlot:
+            slotIdx = tag['Slot'].value
+            return (stack, slotIdx)
+        else:
+            return stack
+
+
 
 @dataclass
 class Slot:

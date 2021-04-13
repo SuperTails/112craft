@@ -36,11 +36,12 @@ import config
 import anvil
 import os
 import copy
+from nbt import nbt
 from player import Slot, Stack
 from enum import IntEnum
 from math import cos, sin
 from numpy import ndarray
-from typing import NamedTuple, List, Any, Tuple, Optional
+from typing import NamedTuple, List, Any, Tuple, Optional, Union
 from util import *
 from OpenGL.GL import * #type:ignore
 
@@ -298,21 +299,70 @@ CUBE_MESH_VERTICES = np.array([
     ], dtype='float32')
 
 class Furnace:
+    pos: BlockPos
+
     inputSlot: Slot
-    outputSlot: Slot
     fuelSlot: Slot
+    outputSlot: Slot
 
     fuelLeft: int
     progress: int
 
-    def __init__(self):
+    def __init__(self, pos: BlockPos):
+        self.pos = pos
+
         self.inputSlot = Slot()
-        self.outputSlot = Slot(canInput=False)
         self.fuelSlot = Slot(itemFilter='fuel')
+        self.outputSlot = Slot(canInput=False)
 
         self.fuelLeft = 0
         self.progress = 0
     
+    def toNbt(self) -> nbt.TAG_Compound:
+        tag = nbt.TAG_Compound()
+
+        tag.tags.append(nbt.TAG_Int(self.pos.x, 'x'))
+        tag.tags.append(nbt.TAG_Int(self.pos.y, 'y'))
+        tag.tags.append(nbt.TAG_Int(self.pos.z, 'z'))
+
+        tag.tags.append(nbt.TAG_String('furnace', 'id'))
+
+        tag.tags.append(nbt.TAG_Short(self.fuelLeft, 'BurnTime'))
+        tag.tags.append(nbt.TAG_Short(self.progress, 'CookTime'))
+        tag.tags.append(nbt.TAG_Short(200, 'CookTimeTotal'))
+        tag.tags.append(nbt.TAG_Byte(0, 'keepPacked'))
+
+        items = nbt.TAG_List(nbt.TAG_Compound, name='Items')
+        for (idx, slot) in enumerate((self.inputSlot, self.fuelSlot, self.outputSlot)):
+            if not slot.stack.isEmpty():
+                items.append(slot.stack.toNbt(idx))
+        tag.tags.append(items)
+
+        return tag
+    
+    @classmethod
+    def fromNbt(cls, tag: nbt.TAG_Compound):
+        assert(tag['id'].value == 'furnace')
+
+        x, y, z = tag['x'].value, tag['y'].value, tag['z'].value
+
+        furnace = cls(BlockPos(x, y, z))
+        furnace.fuelLeft = tag['BurnTime'].value
+        furnace.progress = tag['CookTime'].value
+
+        for stackTag in tag['Items']:
+            (stack, slotIdx) = Stack.fromNbt(stackTag, getSlot=True)
+            if slotIdx == 0:
+                furnace.inputSlot.stack = stack
+            elif slotIdx == 1:
+                furnace.fuelSlot.stack = stack
+            elif slotIdx == 2:
+                furnace.outputSlot.stack = stack
+            else:
+                raise Exception(f"Invalid furnace slot {slotIdx}")
+        
+        return furnace
+
     def tick(self, app):
         if self.fuelLeft > 0:
             self.fuelLeft -= 1
@@ -335,6 +385,13 @@ class Furnace:
         if self.fuelLeft == 0 and not self.inputSlot.isEmpty() and not self.fuelSlot.isEmpty():
             self.fuelSlot.stack.amount -= 1
             self.fuelLeft = 1600
+
+def blockEntityFromNbt(tag: nbt.TAG_Compound) -> Union[Furnace]:
+    kind = tag['id'].value
+    if kind == 'furnace':
+        return Furnace.fromNbt(tag)
+    else:
+        raise Exception(f"Unknown block entity kind {kind}")
 
 class Chunk:
     pos: ChunkPos
@@ -380,23 +437,22 @@ class Chunk:
             entity.tick(app)
     
     def save(self, path):
-        np.savez(path, blocks=self.blocks, lightLevels=self.lightLevels, blockLightLevels=self.blockLightLevels)
+        file = nbt.NBTFile()
+        file.name = 'data'
 
-        '''
-        allBlocks = []
-        allLights = []
-        for yIdx in range(0, CHUNK_HEIGHT):
-            for xIdx in range(0, 16):
-                for zIdx in range(0, 16):
-                    allBlocks.append(self.blocks[xIdx, yIdx, zIdx])
-                    allLights.append(str(self.lightLevels[xIdx, yIdx, zIdx]))
+        l = nbt.TAG_List(type=nbt.TAG_Compound, name='TileEntities')
+        for te in self.tileEntities.values():
+            l.append(te.toNbt())
+        file.tags.append(l)
     
-        with open(path, "w") as f:
-            f.write(','.join(allBlocks))
-            f.write('\n')
-            f.write(','.join(allLights))
-        '''
-    
+        file.write_file(path+'.nbt')
+
+        np.savez(path,
+            blocks=self.blocks,
+            lightLevels=self.lightLevels,
+            blockLightLevels=self.blockLightLevels,
+        )
+
     @timed()
     def loadFromAnvilChunk(self, world, instData, chunk):
         for (i, block) in enumerate(chunk.stream_chunk()):
@@ -482,29 +538,18 @@ class Chunk:
         self.worldgenStage = WorldgenStage.POPULATED
     
     def load(self, world, instData, path):
-        '''
-        with open(path, "r") as f:
-            [blockList, lightList] = f.readlines()
-            blockList = blockList.strip().split(',')
-            lightList = lightList.strip().split(',')
-
-            for (i, (b, l)) in enumerate(zip(blockList, lightList)):
-                z = i % 16
-                x = (i // 16) % 16
-                y = (i // (16 * 16))
-
-                self.setBlock(world, instData, BlockPos(x, y, z), b, doUpdateLight=False, doUpdateBuried=False)
-                self.lightLevels[x, y, z] = int(l)
-        '''
-
         # TODO: See if I can serialize strings some other way
         with np.load(path, allow_pickle=True) as npz:
             self.blocks = npz['blocks']
             self.lightLevels = npz['lightLevels']
             self.blockLightLevels = npz['blockLightLevels']
+            self.setAllBlocks(world, instData)
         
-        self.setAllBlocks(world, instData)
-        
+        file = nbt.NBTFile(path+'.nbt')
+        for te in file['TileEntities']:
+            te = blockEntityFromNbt(te)
+            self.tileEntities[te.pos] = te
+
         self.worldgenStage = WorldgenStage.POPULATED
 
     @timed()
@@ -981,7 +1026,7 @@ class Chunk:
                 [modelX, modelY, modelZ] = blockToWorld(self._globalBlockPos(blockPos))
                 self.instances[idx] = [render.Instance(cube, np.array([[modelX, modelY, modelZ]]), texture), True]
                 if block == 'furnace':
-                    self.tileEntities[blockPos] = Furnace()
+                    self.tileEntities[blockPos] = Furnace(blockPos)
 
     def setBlock(self, world, instData, blockPos: BlockPos, id: BlockId, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False):
         meshIdx = blockPos.y // MESH_HEIGHT
@@ -1006,7 +1051,7 @@ class Chunk:
             self.tileEntities.pop(blockPos)
         
         if id == 'furnace':
-            self.tileEntities[blockPos] = Furnace()
+            self.tileEntities[blockPos] = Furnace(blockPos)
         
         '''
         for faceIdx in range(0, 12, 2):
@@ -1109,6 +1154,8 @@ class World:
 
         except FileNotFoundError:
             self.saveMetaFile()
+        
+        print(f"Opened world with seed {self.seed}")
 
     def saveMetaFile(self):
         with open(f"saves/{self.name}/meta.txt", "w") as f:
