@@ -37,7 +37,7 @@ import anvil
 import os
 import copy
 from nbt import nbt
-from player import Slot, Stack
+from inventory import Slot, Stack
 from enum import IntEnum
 from math import cos, sin
 from numpy import ndarray

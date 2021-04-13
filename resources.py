@@ -68,7 +68,7 @@ def loadEntityModels(app):
 
     for path, _, files in os.walk('assets/Vanilla_Resource_Pack_1.16.220/models'):
         for file in files:
-            app.entityModels.update(entity.openModels(path + '/' + file))
+            app.entityModels.update(entity.openModels(path + '/' + file, app))
     
 def loadEntityAnimations(app):
     app.entityAnimations = dict()
@@ -206,96 +206,11 @@ def loadTkTextures(app):
         np.array([[1.0], [1.0], [1.0]]) / 2.0
     ]
 
-    '''
-    grassTexture = [
-        '#FF0000', '#FF0000',
-        '#A52A2A', '#A52A2A',
-        '#A52A2A', '#A52A2A',
-        '#A52A2A', '#A52A2A',
-        '#A52A2A', '#A52A2A',
-        '#00FF00', '#00EE00']
-    
-    dirtTexture = [
-        '#FF0000', '#FF0000',
-        '#A52A2A', '#A52A2A',
-        '#A52A2A', '#A52A2A',
-        '#A52A2A', '#A52A2A',
-        '#A52A2A', '#A52A2A',
-        '#a52A2A', '#A52A2A']
-    
-    stoneTexture = [
-        '#AAAAAA', '#AAAABB',
-        '#AAAACC', '#AABBBB',
-        '#AACCCC', '#88AAAA',
-        '#AA88AA', '#888888',
-        '#AA88CC', '#778888',
-        '#BBCCAA', '#BBBBBB'
-    ]
-
-    leavesTexture = [
-        '#206000', '#256505',
-        '#257000', '#256505',
-        '#206010', '#206505',
-        '#206505', '#256005',
-        '#306005', '#256500',
-        '#206500', '#306505',
-    ]
-
-    logTexture = [
-        '#705020', '#655020',
-        '#705520', '#655025',
-        '#705025', '#705020',
-        '#755020', '#705A2A',
-        '#755520', '#7A4A20',
-        '#705525', '#70502A',
-    ]
-
-    bedrockTexture = [
-        '#0A0A10', '#0E0A10',
-        '#0A1010', '#0A0A10',
-        '#0A0A18', '#0E1010',
-        '#100A10', '#080A10',
-        '#0A0810', '#0A0A18',
-        '#0A0A1E', '#100A10',
-    ]
-
-    planksTexture = [
-        '#BE9A60', '#B4915D',
-        '#AC8C53', '#9C814B',
-        '#937240', '#7B6036',
-        '#7B6036', '#654E2B', 
-        '#9C814B', '#BE9A60',
-        '#B4915D', '#AC8C53'
-    ]
-
-    craftingTableTexture = [
-        '#A36F45', '#443C34',
-        '#715836', '#727274',
-        '#482E18', '#888173',
-        '#534423', '#B7B5B2',
-        '#AB673C', '#71381B',
-        '#B4915D', '#AC8C53'
-    ]
-    '''
-
     app.tkTextures = {}
 
     for (blockId, (path, tess)) in app.texturePaths.items():
         tex = blockImageToTkTexture(loadBlockImage(path, tess))
         app.tkTextures[blockId] = tex
-
-    '''
-    app.tkTextures = {
-        'grass': grassTexture,
-        'dirt': dirtTexture,
-        'stone': stoneTexture,
-        'leaves': leavesTexture,
-        'log': logTexture,
-        'bedrock': bedrockTexture,
-        'planks': planksTexture,
-        'crafting_table': craftingTableTexture,
-    }
-    '''
 
     # Vertices in CCW order
     faces: List[render.Face] = [
@@ -366,8 +281,6 @@ def blockImageToTkTexture(img: Image.Image):
 
             tex.append(color)
 
-    print(tex)
-    
     return tex
 
 def loadBlockImage(path, tesselate=False):
@@ -557,12 +470,13 @@ def loadResources(app):
         loadGlTextures(app)
         app.textures = app.glTextures
         app.textureAtlas = loadTextureAtlas(app)
-        loadEntityModels(app)
         loadEntityTextures(app)
         loadEntityAnimations(app)
     else:
         app.textures = app.tkTextures
         app.textureIndices = None
+    
+    loadEntityModels(app)
     
     entity.registerEntityKinds(app)
 

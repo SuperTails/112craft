@@ -18,12 +18,14 @@ from tkinter.constants import X
 import world
 import config
 import numpy as np
+import copy
+from model import *
 from resources import getHardnessAgainst
 from math import sin, cos
 from numpy import ndarray
 from typing import List, Tuple, Optional, Any
 from world import BlockPos, adjacentBlockPos
-from player import Slot, Stack
+from inventory import Slot, Stack
 from cmu_112_graphics import ImageTk # type: ignore
 from PIL import Image, ImageDraw
 from OpenGL.GL import * #type:ignore
@@ -36,198 +38,9 @@ from OpenGL.GL import * #type:ignore
 #   2. It sounds clever and unique
 #   3. You can warm your hands by the heat of your CPU 
 
-
-# =========================================================================== #
-# ------------------------- IMPORTANT TYPES --------------------------------- #
-# =========================================================================== #
-
-
-Color = str
-
-# Always holds indices into the model's list of vertices
-Face = Tuple[int, int, int]
-
-class Model:
-    vertices: List[ndarray]
-    faces: List[Face]
-
-    def __init__(self, vertices: List[ndarray], faces: List[Face]):
-        self.vertices = vertices
-        self.faces = faces
-
-'''
-class CubeInstance:
-    trans: ndarray
-
-    texture: int
-
-    def __init__(self, model: Model, trans: ndarray, texture: int):
-        self.trans = trans
-        self.texture = texture
-    
-        self._worldSpaceVertices = [toHomogenous(v) for v in self.worldSpaceVerticesUncached()]
-        self.visibleFaces = [True] * len(model.faces)
-
-    def worldSpaceVertices(self) -> List[ndarray]:
-        return self._worldSpaceVertices
-    
-    def worldSpaceVerticesUncached(self) -> List[ndarray]:
-        return [vertex + self.trans for vertex in self.model.vertices]
-'''
-    
-class Instance:
-    """An actual occurrence of a Model in the world.
-
-    An Instance is essentially a Model that has been given a texture
-    and a position in the world, so it can actually be displayed.
-    """
-
-    model: Model
-
-    # The model's translation (i.e. position)
-    trans: ndarray
-
-    texture: List[Color]
-
-    # A cache of what faces are visible, to speed up rendering.
-    # This is only used for block models.
-    visibleFaces: List[bool]
-
-    _worldSpaceVertices: List[ndarray]
-
-    def __init__(self, model: Model, trans: ndarray, texture: List[Color]):
-        self.model = model
-        self.trans = trans
-        self.texture = texture
-
-        if not config.USE_OPENGL_BACKEND:
-            self._worldSpaceVertices = [toHomogenous(v) for v in self.worldSpaceVerticesUncached()]
-        self.visibleFaces = [True] * len(model.faces)
-
-    def worldSpaceVertices(self) -> List[ndarray]:
-        return self._worldSpaceVertices
-    
-    def worldSpaceVerticesUncached(self) -> List[ndarray]:
-        return [vertex + self.trans for vertex in self.model.vertices]
-
-
 # =========================================================================== #
 # ---------------------- COORDINATE CONVERSIONS ----------------------------- #
 # =========================================================================== #
-
-def toHomogenous(cartesian: ndarray) -> ndarray:
-    #assert(cartesian.shape[1] == 1)
-
-    #return np.vstack((cartesian, np.array([[1]])))
-
-    # This one line change makes the world load *twice as fast*
-    return np.array([[cartesian[0, 0]], [cartesian[1, 0]], [cartesian[2, 0]], [1.0]])
-
-def toCartesian(c: ndarray) -> ndarray:
-    f = c[2][0]
-
-    return np.array([ c[0][0] / f, c[1][0] / f ])
-
-def toCartesianList(c: ndarray):
-    f = c[2][0]
-
-    return ( c[0][0] / f, c[1][0] / f )
-
-def worldToCanvasMat(camPos, yaw, pitch, vpDist, vpWidth, vpHeight,
-    canvWidth, canvHeight):
-    vpToCanv = viewToCanvasMat(vpWidth, vpHeight, canvWidth, canvHeight)
-    return vpToCanv @ cameraToViewMat(vpDist) @ worldToCameraMat(camPos, yaw, pitch)
-
-def csToCanvasMat(vpDist, vpWidth, vpHeight, canvWidth, canvHeight):
-    vpToCanv = viewToCanvasMat(vpWidth, vpHeight, canvWidth, canvHeight)
-    return vpToCanv @ cameraToViewMat(vpDist)
-
-def worldToCameraMat(camPos, yaw, pitch):
-    """Calculates a matrix that converts from world space to camera space"""
-
-    # Original technique from
-    # https://gamedev.stackexchange.com/questions/168542/camera-view-matrix-from-position-yaw-pitch-worldup
-    # (My axes are oriented differently, so the matrix is different)
-
-    # I think I made a mistake in the calculations but this fixes it lol
-    yaw = -yaw
-
-    # Here is the camera matrix:
-    #
-    # x = camPos[0]
-    # y = camPos[1]
-    # z = camPos[2]
-    #
-    # cam = [
-    #     [cos(yaw),  -sin(pitch)*sin(yaw), cos(pitch)*sin(yaw), x],
-    #     [0.0,       cos(pitch),           sin(pitch),          y],
-    #     [-sin(yaw), -sin(pitch)*cos(yaw), cos(pitch)*cos(yaw), z],
-    #     [0.0,       0.0,                  0.0,                 1.0]
-    #]
-    #
-    # cam = np.linalg.inv(cam)
-
-    y = yaw
-    p = pitch
-
-    a = camPos[0]
-    b = camPos[1]
-    c = camPos[2]
-
-    # This is the manually-calculated inverse of the matrix shown above
-    cam = np.array([
-        [        cos(y),    0.0,        -sin(y),                         c*sin(y)-a*cos(y)],
-        [-sin(p)*sin(y), cos(p), -sin(p)*cos(y),  c*sin(p)*cos(y)+a*sin(p)*sin(y)-b*cos(p)],
-        [ cos(p)*sin(y), sin(p),  cos(p)*cos(y), -b*sin(p)-a*sin(y)*cos(p)-c*cos(y)*cos(p)],
-        [           0.0,    0.0,            0.0,                                       1.0]
-    ], dtype='float32')
-
-    return cam
-
-def glViewMat(camPos, yaw, pitch):
-    return worldToCameraMat(camPos, yaw, pitch).transpose()
-
-def viewToCanvasMat(vpWidth, vpHeight, canvWidth, canvHeight):
-    """Calculates a matrix that converts from the view plane to the canvas"""
-
-    w = canvWidth / vpWidth
-    h = -canvHeight / vpHeight
-
-    x = canvWidth * 0.5
-    y = canvHeight * 0.5
-
-    return np.array([
-        [w, 0.0, x],
-        [0.0, h, y],
-        [0.0, 0.0, 1.0]])
-
-def cameraToViewMat(vpDist):
-    """Calculates a matrix that converts from camera space to the view plane"""
-
-    vpd = vpDist
-
-    return np.array([
-        [vpd, 0.0, 0.0, 0.0],
-        [0.0, vpd, 0.0, 0.0],
-        [0.0, 0.0, 1.0, 0.0]
-    ])
-
-def worldToCanvas(app, point):
-    point = toHomogenous(point)
-    mat = worldToCanvasMat(app.cameraPos, app.cameraYaw, app.cameraPitch,
-        app.vpDist, app.vpWidth, app.vpHeight, app.width, app.height)
-
-    point = mat @ point
-
-    point = toCartesian(point)
-
-    return point
-
-
-# =========================================================================== #
-# ---------------------- COORDINATE CONVERSIONS ----------------------------- #
-# =========================================================================== #
-
 
 def faceNormal(v0, v1, v2):
     """Returns the normal vector for the face represented by v0, v1, v2"""
@@ -412,6 +225,7 @@ def cullInstance(app, toCamMat: ndarray, inst: Instance, blockPos: Optional[Bloc
             color = '#{:02X}{:02X}{:02X}'.format(int(r), int(g), int(b))
         else:
             # Backface culling (surprisingly expensive)
+            '''
             backFace = isBackFace(
                 vertices[face[0]], 
                 vertices[face[1]],
@@ -419,6 +233,7 @@ def cullInstance(app, toCamMat: ndarray, inst: Instance, blockPos: Optional[Bloc
             )
             if backFace:
                 continue
+            '''
 
         for clippedFace in clip(app, vertices, face):
             faces.append([vertices, clippedFace, color])
@@ -456,6 +271,60 @@ def blockPosIsVisible(app, pos: BlockPos) -> bool:
 
 def renderInstancesTk(app, canvas):
     faces = drawToFaces(app)
+
+    toCamMat = worldToCameraMat(app.cameraPos, app.cameraYaw, app.cameraPitch)
+
+    for entity in app.entities:
+        model = app.entityModels[entity.kind.model]
+
+        for mesh in model.models:
+            offset = np.array([[entity.pos[0]], [entity.pos[1]], [entity.pos[2]]])
+
+            texture = [
+                '#000000', '#111111',
+                '#222222', '#333333',
+                '#444444', '#555555',
+                '#666666', '#777777',
+                '#888888', '#999999',
+                '#AAAAAA', '#BBBBBB',
+            ]
+
+            inst = Instance(mesh, offset, texture)
+        
+            faces += cullInstance(app, toCamMat, inst, None)
+
+        #texture = app.entityTextures[entity.kind.name]
+
+        '''
+        modelMat = np.array([
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            entity.pos[0], entity.pos[1], entity.pos[2], 1.0
+        ], dtype='float32')
+        '''
+
+        '''
+        for (vao, num) in model.vaos:
+            if vao == 0: 
+                i += 1
+                continue
+
+            (x, y, z) = entity.getRotation(app, i)
+
+            glUniform1f(app.entityProgram.getUniformLocation("rotX"), x)
+            glUniform1f(app.entityProgram.getUniformLocation("rotY"), y)
+            glUniform1f(app.entityProgram.getUniformLocation("rotZ"), z)
+
+            immunity = 1.0 if entity.immunity > 0 else 0.0
+            glUniform1f(app.entityProgram.getUniformLocation("immunity"), immunity)
+
+            glBindVertexArray(vao)
+            glDrawArrays(GL_TRIANGLES, 0, num * 5)
+
+            i += 1
+        '''
+
 
     def zCoord(d): return -(d[0][d[1][0]][2] + d[0][d[1][1]][2] + d[0][d[1][2]][2])
     

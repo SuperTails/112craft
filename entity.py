@@ -22,6 +22,9 @@ import random
 import decimal
 import copy
 import molang
+import model 
+import functools
+import config
 from util import BlockPos, roundHalfUp
 from dataclasses import dataclass
 from OpenGL.GL import * #type:ignore
@@ -78,7 +81,16 @@ class Cube:
     size: Tuple[int, int, int]
     uv: Tuple[int, int]
 
-    def toVertices(self) -> np.ndarray:
+    def toModelTk(self, app) -> model.Model:
+        factor = np.array([[self.size[0]], [self.size[1]], [self.size[2]]])
+        offset = np.array([[self.origin[0]], [self.origin[1]], [self.origin[2]]])
+
+        def trans(v):
+            return (((v + 0.5) * factor) + offset) / 16
+
+        return app.cube.transformed(trans)
+
+    def toVerticesGl(self) -> np.ndarray:
         vertices = CUBE_MESH_VERTICES.reshape((-1, 5))
 
         factor = np.array([self.size[0], self.size[1], self.size[2], 1.0, 1.0])
@@ -145,10 +157,15 @@ class Bone:
     bind_pose_rotation: Tuple[float, float, float]
     neverRender: bool
 
-    def toVertices(self) -> np.ndarray:
+    def toModelTk(self, app) -> model.Model:
+        models = [c.toModelTk(app) for c in self.cubes]
+
+        return functools.reduce(model.Model.fuse, models, model.Model([], []))
+
+    def toVerticesGl(self) -> np.ndarray:
         self.innerVertices = []
         for cube in self.cubes:
-            vertices = cube.toVertices()
+            vertices = cube.toVerticesGl()
 
             pv = (self.pivot[0], self.pivot[1], self.pivot[2])
 
@@ -164,7 +181,7 @@ class Bone:
         #
         #    self.meshVaos[meshIdx] = 0
 
-        vertices = self.toVertices().flatten().astype('float32')
+        vertices = self.toVerticesGl().flatten().astype('float32')
 
         vao: int = glGenVertexArrays(1) #type:ignore
         vbo: int = glGenBuffers(1) #type:ignore
@@ -229,16 +246,27 @@ def openAnimations(path) -> dict[str, Animation]:
 @dataclass
 class EntityModel:
     bones: List[Bone]
+
     vaos: List[Tuple[int, int]]
 
-    def __init__(self, bones):
+    models: List[model.Model]
+
+    def __init__(self, bones, app):
         self.bones = bones
         self.vaos = []
+        self.models = []
         for bone in self.bones:
             if bone.cubes == [] or bone.neverRender or 'sleeping' in bone.name:
-                self.vaos.append((0, 0))
+                if config.USE_OPENGL_BACKEND:
+                    self.vaos.append((0, 0))
+                else:
+                    self.models.append(model.Model([], []))
             else:
-                self.vaos.append(bone.toVao())
+                if config.USE_OPENGL_BACKEND:
+                    self.vaos.append(bone.toVao())
+                else:
+                    self.models.append(bone.toModelTk(app))
+        print(len(self.models))
 
 def parseCube(j) -> Cube:
     origin = tuple(j['origin'])
@@ -271,14 +299,14 @@ def parseBone(j) -> Bone:
         neverRender = False
     return Bone(name, pivot, cubes, bind_pose_rotation, neverRender) #type:ignore
 
-def parseModel(j) -> EntityModel:
+def parseModel(j, app) -> EntityModel:
     if 'bones' in j:
         bones = list(map(parseBone, j['bones']))
     else:
         bones = []
-    return EntityModel(bones)
+    return EntityModel(bones, app)
 
-def openModels(path) -> dict[str, EntityModel]:
+def openModels(path, app) -> dict[str, EntityModel]:
     with open(path) as f:
         j = json.load(f)
     
@@ -286,7 +314,7 @@ def openModels(path) -> dict[str, EntityModel]:
     
     for (name, model) in j.items():
         if name.startswith('geometry.'):
-            result[name] = parseModel(model)
+            result[name] = parseModel(model, app)
     
     return result
 
