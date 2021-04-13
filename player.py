@@ -28,14 +28,8 @@ class Player(Entity):
 
     inventory: List[Slot]
 
-    def __init__(self, app, creative: bool):
-        super().__init__(app, 'player', 0.0, 0.0, 0.0)
-
-        self.kind = app.entityKinds['player']
-        self.onGround = False
-
-        self.bodyAngle = 0.0
-        self.headAngle = 0.0
+    def __init__(self, app, creative: bool = False, tag: Optional[nbt.TAG_Compound] = None):
+        super().__init__(app, 'player', 0.0, 0.0, 0.0, nbt=tag)
 
         self.reach = 4.0
 
@@ -53,6 +47,43 @@ class Player(Entity):
                 self.inventory.append(Slot(stack=Stack('', 0)))
         else:
             self.inventory = [Slot() for _ in range(36)]
+        
+        if tag is not None:
+            for stackTag in tag["Inventory"]:
+                (stack, slotIdx) = Stack.fromNbt(stackTag, getSlot=True)
+                self.inventory[slotIdx].stack = stack
+            
+            gameMode = tag['playerGameType'].value
+            if gameMode == 0:
+                self.creative = False
+            elif gameMode == 1:
+                self.creative = True
+            else:
+                raise Exception(f'Invalid game mode {gameMode}')
+
+            self.flying = tag['abilities']['flying'].value != 0
+        
+    def toNbt(self) -> nbt.TAG_Compound:
+        tag = super().toNbt()
+
+        inventory = nbt.TAG_List(type=nbt.TAG_Compound, name='Inventory')
+        for (slotIdx, item) in enumerate(self.inventory):
+            stackTag = item.stack.toNbt(slotIdx)
+            if stackTag is not None:
+                inventory.append(stackTag)
+
+        tag.tags.append(inventory)
+
+        gameMode = 1 if self.creative else 0
+        tag.tags.append(nbt.TAG_Int(gameMode, 'playerGameType'))
+
+        abilities = nbt.TAG_Compound()
+        abilities.name = 'abilities'
+        abilities.tags.append(nbt.TAG_Byte(int(self.flying), 'flying'))
+
+        tag.tags.append(abilities)
+
+        return tag
     
     def tick(self):
         if self.immunity > 0:

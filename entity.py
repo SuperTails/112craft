@@ -266,7 +266,6 @@ class EntityModel:
                     self.vaos.append(bone.toVao())
                 else:
                     self.models.append(bone.toModelTk(app))
-        print(len(self.models))
 
 def parseCube(j) -> Cube:
     origin = tuple(j['origin'])
@@ -440,7 +439,7 @@ class Entity:
     def fromNbt(self, app, data: nbt.TAG_Compound):
         kind = data["id"].value.removeprefix("minecraft:")
 
-        self.__init__(app, kind=kind)
+        Entity.__init__(self, app, kind=kind)
         
         self.pos = [tag.value for tag in data["Pos"].tags]
         self.velocity = [tag.value for tag in data["Motion"].tags]
@@ -635,8 +634,8 @@ class Entity:
                 self.path = path
                 print(self.path)
         
-def fromNbt(app, data: nbt.TAG_List) -> List[Entity]:
-    return [Entity(app, nbt=tag) for tag in data.tags]
+#def fromNbt(app, data: nbt.TAG_List) -> List[Entity]:
+#    return [Entity(app, nbt=tag) for tag in data.tags]
 
 def toNbt(entities: List[Entity]) -> nbt.TAG_List:
     result = nbt.TAG_List(type=nbt.TAG_Compound, name="Entities")

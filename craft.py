@@ -116,8 +116,12 @@ class WorldLoadMode(Mode):
 
             nbtfile = nbt.NBTFile(path)
 
-            app.entities = entity.fromNbt(app, nbtfile["Entities"])
+            self.player = Player(app, tag=nbtfile["Entities"][0])
+
+            app.entities = [entity.Entity(app, nbt=tag) for tag in nbtfile["Entities"][1:]]
         except FileNotFoundError:
+            self.player = Player(app)
+            self.player.pos[1] = 75.0
             app.entities = [entity.Entity(app, 'skeleton', 0.0, 71.0, 1.0), entity.Entity(app, 'fox', 5.0, 72.0, 3.0)]
     
     def timerFired(self, app):
@@ -126,7 +130,7 @@ class WorldLoadMode(Mode):
         elif self.loadStage < 60:
             world.tickChunks(app, maxTime=5.0)
         else:
-            app.mode = self.nextMode(app)
+            app.mode = self.nextMode(app, self.player)
             
         self.loadStage += 1
     
@@ -192,7 +196,7 @@ class WorldListMode(Mode):
                 app.mode = CreateWorldMode(app)
             elif btn == 'play' and self.selectedWorld is not None:
                 # FIXME: Gamemodes, seed
-                def makePlayingMode(app): return PlayingMode(app, False)
+                def makePlayingMode(app, player): return PlayingMode(app, player)
                 app.mode = WorldLoadMode(app, self.worlds[self.selectedWorld], makePlayingMode)
 
 
@@ -297,7 +301,7 @@ class CreateWorldMode(Mode):
             if (btn == 'playSurvival' or btn == 'playCreative') and self.worldName != '':
                 # FIXME: CHECK FOR DUPLICATE WORLD NAMES
                 isCreative = btn == 'playCreative'
-                makePlayingMode = lambda app: PlayingMode(app, isCreative)
+                makePlayingMode = lambda app: PlayingMode(app, Player(app, isCreative))
 
                 if self.worldSource == 'imported':
                     importPath = self.importPath
@@ -472,7 +476,7 @@ class GameOverMode(Mode):
         btn = self.buttons.onRelease(app, event.x, event.y)
         if btn == 'respawn':
             # FIXME:
-            app.mode = PlayingMode(app, False)
+            app.mode = PlayingMode(app, Player(app, False))
 
 class PlayingMode(Mode):
     lookedAtBlock = None
@@ -480,11 +484,11 @@ class PlayingMode(Mode):
 
     player: Player
 
-    def __init__(self, app, creative: bool):
+    def __init__(self, app, player: Player):
         app.timerDelay = 30
         setMouseCapture(app, True)
 
-        self.player = Player(app, creative)
+        self.player = player
 
     def redrawAll(self, app, window, canvas):
         render.redrawAll(app, canvas, doDrawHud=app.doDrawHud)
@@ -874,8 +878,8 @@ def appStarted(app):
     loadResources(app)
 
     #app.mode = WorldLoadMode(app, 'world', TitleMode)
-    def makePlayingMode(app): return PlayingMode(app, False)
-    app.mode = WorldLoadMode(app, 'cavetest3', makePlayingMode, seed=random.randint(0, 2**31))
+    def makePlayingMode(app, player): return PlayingMode(app, player)
+    app.mode = WorldLoadMode(app, 'cavetest4', makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     #app.entities = [entity.Entity(app, 'skeleton', 0.0, 71.0, 1.0), entity.Entity(app, 'fox', 5.0, 72.0, 3.0)]
@@ -952,7 +956,7 @@ def appStopped(app):
 
         nbtfile = nbt.NBTFile()
         nbtfile.name = "Entities"
-        nbtfile.tags.append(entity.toNbt(app.entities))
+        nbtfile.tags.append(entity.toNbt([app.mode.player] + app.entities))
         nbtfile.write_file(path)
 
 

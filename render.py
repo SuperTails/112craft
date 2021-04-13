@@ -716,9 +716,10 @@ def drawHud(app, canvas, startTime):
         drawTextOutlined(canvas, 10, 90, text=f"Feet: {player.pos[0]:.2f}, {player.pos[1]:.2f}, {player.pos[2]:.2f}", anchor='nw')
 
         feetPos = (app.cameraPos[0], app.cameraPos[1] - app.mode.player.height + 0.1, app.cameraPos[2])
-        lightLevel = app.world.getLightLevel(world.nearestBlockPos(feetPos[0], feetPos[1], feetPos[2]))
-        blockLightLevel = app.world.getBlockLightLevel(world.nearestBlockPos(feetPos[0], feetPos[1], feetPos[2]))
-        drawTextOutlined(canvas, 10, 190, text=f'Sky {lightLevel}, Block {blockLightLevel}', anchor='nw')
+        if feetPos[1] < world.CHUNK_HEIGHT - 1:
+            lightLevel = app.world.getLightLevel(world.nearestBlockPos(feetPos[0], feetPos[1], feetPos[2]))
+            blockLightLevel = app.world.getBlockLightLevel(world.nearestBlockPos(feetPos[0], feetPos[1], feetPos[2]))
+            drawTextOutlined(canvas, 10, 190, text=f'Sky {lightLevel}, Block {blockLightLevel}', anchor='nw')
 
 def redrawAll(app, canvas, doDrawHud=True):
     startTime = time.time()

@@ -104,8 +104,8 @@ def tick(app):
 
     player.tick()
     
-    player.pos = copy.copy(app.cameraPos)
-    player.pos[1] -= player.height
+    #player.pos = copy.copy(app.cameraPos)
+    #player.pos[1] -= player.height
 
     collideY(app, player)
     if player.onGround:
