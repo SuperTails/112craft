@@ -110,6 +110,148 @@ def loadTexture(path: str, tesselate=False) -> int:
     im = im.transpose(Image.FLIP_TOP_BOTTOM)
     return imageToTexture(im)
 
+def loadSkyboxVao():
+    # https://learnopengl.com/code_viewer_gh.php?code=src/4.advanced_opengl/6.1.cubemaps_skybox/cubemaps_skybox.cpp
+    vertices = np.array([
+        -1.0,  1.0, -1.0,
+        -1.0, -1.0, -1.0,
+         1.0, -1.0, -1.0,
+         1.0, -1.0, -1.0,
+         1.0,  1.0, -1.0,
+        -1.0,  1.0, -1.0,
+
+        -1.0, -1.0,  1.0,
+        -1.0, -1.0, -1.0,
+        -1.0,  1.0, -1.0,
+        -1.0,  1.0, -1.0,
+        -1.0,  1.0,  1.0,
+        -1.0, -1.0,  1.0,
+
+         1.0, -1.0, -1.0,
+         1.0, -1.0,  1.0,
+         1.0,  1.0,  1.0,
+         1.0,  1.0,  1.0,
+         1.0,  1.0, -1.0,
+         1.0, -1.0, -1.0,
+
+        -1.0, -1.0,  1.0,
+        -1.0,  1.0,  1.0,
+         1.0,  1.0,  1.0,
+         1.0,  1.0,  1.0,
+         1.0, -1.0,  1.0,
+        -1.0, -1.0,  1.0,
+
+        -1.0,  1.0, -1.0,
+         1.0,  1.0, -1.0,
+         1.0,  1.0,  1.0,
+         1.0,  1.0,  1.0,
+        -1.0,  1.0,  1.0,
+        -1.0,  1.0, -1.0,
+
+        -1.0, -1.0, -1.0,
+        -1.0, -1.0,  1.0,
+         1.0, -1.0, -1.0,
+         1.0, -1.0, -1.0,
+        -1.0, -1.0,  1.0,
+         1.0, -1.0,  1.0,
+    ], dtype='float32')
+
+    vao: int = glGenVertexArrays(1) #type:ignore
+    vbo: int = glGenBuffers(1) #type:ignore
+
+    glBindVertexArray(vao)
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo)
+    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * 4, ctypes.c_void_p(0))
+    glEnableVertexAttribArray(0)
+
+    return vao
+
+def loadSkyVao():
+    vertices = np.array([
+    # Back face
+    -0.5, -0.5, -0.5,  0, 0, # Bottom-left
+     0.5,  0.5, -0.5,  0, 0, # top-right
+     0.5, -0.5, -0.5,  0, 0, # bottom-right         
+     0.5,  0.5, -0.5,  0, 0, # top-right
+    -0.5, -0.5, -0.5,  0, 0, # bottom-left
+    -0.5,  0.5, -0.5,  0, 0, # top-left
+    # Front face
+    -0.5, -0.5,  0.5,  0, 0, # bottom-left
+     0.5, -0.5,  0.5,  0, 0, # bottom-right
+     0.5,  0.5,  0.5,  0, 0, # top-right
+     0.5,  0.5,  0.5,  0, 0, # top-right
+    -0.5,  0.5,  0.5,  0, 0, # top-left
+    -0.5, -0.5,  0.5,  0, 0, # bottom-left
+    # Left face
+    -0.5,  0.5,  0.5,  1, 1/4, # top-right
+    -0.5,  0.5, -0.5,  0, 1/4, # top-left
+    -0.5, -0.5, -0.5,  0, 0/4, # bottom-left
+    -0.5, -0.5, -0.5,  0, 0/4, # bottom-left
+    -0.5, -0.5,  0.5,  1, 0/4, # bottom-right
+    -0.5,  0.5,  0.5,  1, 1/4, # top-right
+    # Right face
+     0.5,  0.5,  0.5,  0, 2/4, # top-left
+     0.5, -0.5, -0.5,  1, 3/4, # bottom-right
+     0.5,  0.5, -0.5,  1, 2/4, # top-right         
+     0.5, -0.5, -0.5,  1, 3/4, # bottom-right
+     0.5,  0.5,  0.5,  0, 2/4, # top-left
+     0.5, -0.5,  0.5,  0, 3/4, # bottom-left     
+    # Bottom face
+    -0.5, -0.5, -0.5,  1, 3/4, # top-right
+     0.5, -0.5, -0.5,  0, 3/4, # top-left
+     0.5, -0.5,  0.5,  0, 4/4, # bottom-left
+     0.5, -0.5,  0.5,  0, 4/4, # bottom-left
+    -0.5, -0.5,  0.5,  1, 4/4, # bottom-right
+    -0.5, -0.5, -0.5,  1, 3/4, # top-right
+    # Top face
+    -0.5,  0.5, -0.5,  1, 1/4, # top-left
+     0.5,  0.5,  0.5,  0, 2/4, # bottom-right
+     0.5,  0.5, -0.5,  1, 2/4, # top-right     
+     0.5,  0.5,  0.5,  0, 2/4, # bottom-right
+    -0.5,  0.5, -0.5,  1, 1/4, # top-left
+    -0.5,  0.5,  0.5,  0, 1/4, # bottom-left
+    ], dtype='float32')
+
+    vao: int = glGenVertexArrays(1) #type:ignore
+    vbo: int = glGenBuffers(1) #type:ignore
+
+    glBindVertexArray(vao)
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo)
+    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * 4, ctypes.c_void_p(0))
+    glEnableVertexAttribArray(0)
+
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * 4, ctypes.c_void_p(3 * 4))
+    glEnableVertexAttribArray(1)
+
+    #glBindBuffer(GL_ARRAY_BUFFER, buffer)
+
+    #glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 1 * (4 * 4), ctypes.c_void_p(0 * (4 * 4)))
+    #glEnableVertexAttribArray(2)
+    #glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 4 * (4 * 4), ctypes.c_void_p(1 * (4 * 4)))
+    #glEnableVertexAttribArray(2)
+    #glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 4 * (4 * 4), ctypes.c_void_p(2 * (4 * 4)))
+    #glEnableVertexAttribArray(2)
+    #glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, 4 * (4 * 4), ctypes.c_void_p(3 * (4 * 4)))
+    #glEnableVertexAttribArray(2)
+
+    #glVertexAttribDivisor(2, 1)
+    #glVertexAttribDivisor(3, 1)
+    #glVertexAttribDivisor(4, 1)
+    #glVertexAttribDivisor(5, 1)
+
+    #glBindBuffer(GL_ARRAY_BUFFER, 0)
+
+    glBindVertexArray(0)
+
+    return vao
+ 
+
 def loadCubeVao():
     vertices = np.array([
     # Back face
@@ -148,12 +290,12 @@ def loadCubeVao():
     -0.5, -0.5,  0.5,  3/4, 0/3, # bottom-right
     -0.5, -0.5, -0.5,  3/4, 1/3, # top-right
     # Top face
-    -0.5,  0.5, -0.5,  1/4, 3/3, # top-left
-     0.5,  0.5,  0.5,  2/4, 2/3, # bottom-right
-     0.5,  0.5, -0.5,  2/4, 3/3, # top-right     
-     0.5,  0.5,  0.5,  2/4, 2/3, # bottom-right
-    -0.5,  0.5, -0.5,  1/4, 3/3, # top-left
-    -0.5,  0.5,  0.5,  1/4, 2/3, # bottom-left
+    -0.5,  0.5, -0.5,  2/4, 2/3, # top-left
+     0.5,  0.5,  0.5,  1/4, 3/3, # bottom-right
+     0.5,  0.5, -0.5,  2/4, 2/3, # top-right     
+     0.5,  0.5,  0.5,  1/4, 3/3, # bottom-right
+    -0.5,  0.5, -0.5,  2/4, 2/3, # top-left
+    -0.5,  0.5,  0.5,  1/4, 3/3, # bottom-left
     ], dtype='float32')
 
     vao: int = glGenVertexArrays(1) #type:ignore
@@ -169,13 +311,13 @@ def loadCubeVao():
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * 4, ctypes.c_void_p(0))
     glEnableVertexAttribArray(0)
 
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * 4, ctypes.c_void_p(3 * 4))
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * 4, ctypes.c_void_p(3 * 4))
     glEnableVertexAttribArray(1)
 
-    glBindBuffer(GL_ARRAY_BUFFER, buffer)
+    #glBindBuffer(GL_ARRAY_BUFFER, buffer)
 
-    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 1 * (4 * 4), ctypes.c_void_p(0 * (4 * 4)))
-    glEnableVertexAttribArray(2)
+    #glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 1 * (4 * 4), ctypes.c_void_p(0 * (4 * 4)))
+    #glEnableVertexAttribArray(2)
     #glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 4 * (4 * 4), ctypes.c_void_p(1 * (4 * 4)))
     #glEnableVertexAttribArray(2)
     #glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 4 * (4 * 4), ctypes.c_void_p(2 * (4 * 4)))
@@ -183,12 +325,12 @@ def loadCubeVao():
     #glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, 4 * (4 * 4), ctypes.c_void_p(3 * (4 * 4)))
     #glEnableVertexAttribArray(2)
 
-    glVertexAttribDivisor(2, 1)
+    #glVertexAttribDivisor(2, 1)
     #glVertexAttribDivisor(3, 1)
     #glVertexAttribDivisor(4, 1)
     #glVertexAttribDivisor(5, 1)
 
-    glBindBuffer(GL_ARRAY_BUFFER, 0)
+    #glBindBuffer(GL_ARRAY_BUFFER, 0)
 
     glBindVertexArray(0)
 
@@ -349,6 +491,7 @@ def loadTextureAtlas(app):
 
 def loadGlTextures(app):
     app.cubeVao, app.cubeBuffer = loadCubeVao()
+    app.skyboxVao = loadSkyVao()
 
     app.glTextures = dict()
 
@@ -366,6 +509,8 @@ def loadGlTextures(app):
     app.guiProgram = ShaderProgram('shaders/guiShader.vert', 'shaders/guiShader.frag')
 
     app.entityProgram = ShaderProgram('shaders/entityShader.vert', 'shaders/entityShader.frag')
+
+    app.skyProgram = ShaderProgram('shaders/skyShader.vert', 'shaders/skyShader.frag')
 
 #def createTk
 
@@ -472,6 +617,42 @@ def loadResources(app):
         app.textureAtlas = loadTextureAtlas(app)
         loadEntityTextures(app)
         loadEntityAnimations(app)
+
+        sunPath = 'assets/Vanilla_Resource_Pack_1.16.220/textures/environment/sun.png' 
+        moonPath = 'assets/Vanilla_Resource_Pack_1.16.220/textures/environment/moon_phases.png'
+
+        moonTex = Image.open(moonPath)
+
+        tex = Image.open(sunPath)
+        moonTex = moonTex.crop((0, 0, tex.width, tex.height))
+
+        tex = tex.convert(mode='RGBA')
+        newTex = Image.new("RGBA", (tex.width, tex.height * 4))
+        newTex.paste(tex, (0, 1 * tex.height))
+        newTex.paste(moonTex, (0, 3 * tex.height))
+
+        app.sunTex = imageToTexture(newTex.transpose(Image.FLIP_TOP_BOTTOM))
+
+        #app.sunTex = loadTexture('assets/furnace.png')
+
+        #app.sunTex = loadTexture(sunPath, True)
+
+        im = loadBlockImage(sunPath, False)
+        im = im.transpose(Image.FLIP_TOP_BOTTOM)
+
+        app.sunCubeTex = glGenTextures(1) #type:ignore
+        glBindTexture(GL_TEXTURE_CUBE_MAP, app.sunCubeTex)
+
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_REPEAT)
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_REPEAT)
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+
+        arr = np.asarray(im, dtype=np.uint8)
+
+        for i in range(6):
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGBA, im.width, im.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, arr) #type:ignore
+
     else:
         app.textures = app.tkTextures
         app.textureIndices = None

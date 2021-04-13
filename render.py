@@ -346,7 +346,7 @@ def renderInstancesGl(app, canvas):
         [0.0, 0.0, -(zf * zn) / (zf - zn), 0.0],
     ], dtype='float32')
 
-    glBindVertexArray(app.cubeVao)
+    #glBindVertexArray(app.cubeVao)
 
     chunkVaos = []
 
@@ -412,6 +412,27 @@ def renderInstancesGl(app, canvas):
         glDrawArrays(GL_TRIANGLES, 0, amt * 7)
     
     drawEntities(app, view, projection)
+
+    # https://learnopengl.com/Advanced-OpenGL/Cubemaps
+    glDisable(GL_CULL_FACE)
+    glDepthFunc(GL_LEQUAL)
+    app.skyProgram.useProgram()
+    view[3, 0:3] = 0.0
+    glUniformMatrix4fv(app.skyProgram.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
+    glUniformMatrix4fv(app.skyProgram.getUniformLocation("projection"), 1, GL_FALSE, projection) #type:ignore
+    glUniform1i(app.skyProgram.getUniformLocation("gameTime"), app.time)
+    glUniform1i(app.skyProgram.getUniformLocation("sunTex"), 0)
+
+    glActiveTexture(GL_TEXTURE0)
+    glBindTexture(GL_TEXTURE_2D, app.sunTex)
+
+    glBindVertexArray(app.skyboxVao)
+    glDrawArrays(GL_TRIANGLES, 0, 36)
+    glBindVertexArray(0)
+
+    glEnable(GL_CULL_FACE)
+    glDepthFunc(GL_LESS)
+
 
 def drawEntities(app, view, projection):
     app.entityProgram.useProgram()
