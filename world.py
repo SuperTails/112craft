@@ -101,7 +101,7 @@ class WorldgenStage(IntEnum):
 
 seen = set()
 
-CHUNK_HEIGHT = 256
+CHUNK_HEIGHT = 16
 MESH_HEIGHT = 16
 
 MAX_CAVE_DISP = 100
@@ -814,10 +814,11 @@ class Chunk:
         self.worldgenStage = WorldgenStage.COMPLETE
     
     def createOneMesh(self, i: int, world: 'World', instData):
-        if not self.meshDirtyFlags[i]:
-            return
-        
-        self.createOneMeshUncached(i, world, instData)
+        if self.meshDirtyFlags[i]:
+            self.createOneMeshUncached(i, world, instData)
+
+        if not any(self.meshDirtyFlags):
+            self.worldgenStage = WorldgenStage.COMPLETE
     
     @timed(count=1)
     def createOneMeshUncached(self, meshIdx: int, world: 'World', instData):
@@ -1024,7 +1025,7 @@ class Chunk:
             else:
                 texture = textures[block]
                 [modelX, modelY, modelZ] = blockToWorld(self._globalBlockPos(blockPos))
-                self.instances[idx] = [render.Instance(cube, np.array([[modelX, modelY, modelZ]]), texture), True]
+                self.instances[idx] = [render.Instance(cube, np.array([[modelX], [modelY], [modelZ]]), texture), True]
                 if block == 'furnace':
                     self.tileEntities[blockPos] = Furnace(blockPos)
 

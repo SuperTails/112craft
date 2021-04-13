@@ -206,6 +206,7 @@ def loadTkTextures(app):
         np.array([[1.0], [1.0], [1.0]]) / 2.0
     ]
 
+    '''
     grassTexture = [
         '#FF0000', '#FF0000',
         '#A52A2A', '#A52A2A',
@@ -275,7 +276,15 @@ def loadTkTextures(app):
         '#AB673C', '#71381B',
         '#B4915D', '#AC8C53'
     ]
+    '''
 
+    app.tkTextures = {}
+
+    for (blockId, (path, tess)) in app.texturePaths.items():
+        tex = blockImageToTkTexture(loadBlockImage(path, tess))
+        app.tkTextures[blockId] = tex
+
+    '''
     app.tkTextures = {
         'grass': grassTexture,
         'dirt': dirtTexture,
@@ -286,6 +295,7 @@ def loadTkTextures(app):
         'planks': planksTexture,
         'crafting_table': craftingTableTexture,
     }
+    '''
 
     # Vertices in CCW order
     faces: List[render.Face] = [
@@ -311,6 +321,55 @@ def loadTkTextures(app):
 
     app.cube = render.Model(vertices, faces)
 
+def blockImageToTkTexture(img: Image.Image):
+    OFFSETS = (
+        # Left
+        (0, 16),
+        # Right
+        (32, 16),
+        # Near
+        (16, 16),
+        # Far
+        (48, 16),
+        # Bottom
+        (32, 16),
+        # Top
+        (16, 0),
+    )
+
+    tex = []
+
+    for (cornerX, cornerY) in OFFSETS:
+        for faceSide in (False, True):
+            avgR = 0
+            avgG = 0
+            avgB = 0
+
+            amount = 0
+            for cy in range(16):
+                xRange = (0, 16 - cy) if faceSide else (cy, 16)
+                for cx in range(xRange[0], xRange[1]):
+                    x = cornerX + cx
+                    y = cornerY + cy
+
+                    pixel = img.getpixel((x, y))[0:3] #type:ignore
+                    avgR += pixel[0]
+                    avgG += pixel[1]
+                    avgB += pixel[2]
+                    amount += 1
+            
+            avgR //= amount
+            avgG //= amount
+            avgB //= amount
+
+            color = f'#{avgR:02X}{avgG:02X}{avgB:02X}'
+
+            tex.append(color)
+
+    print(tex)
+    
+    return tex
+
 def loadBlockImage(path, tesselate=False):
     tex = Image.open(path)
     tex = tex.convert(mode='RGBA')
@@ -326,7 +385,6 @@ def loadBlockImage(path, tesselate=False):
 def loadTextureAtlas(app):
     app.textureIdx = dict()
     app.textureIndices = dict()
-
 
     totalAmt = 0
     for (_, (_, tess)) in app.texturePaths.items():
@@ -502,10 +560,11 @@ def loadResources(app):
         loadEntityModels(app)
         loadEntityTextures(app)
         loadEntityAnimations(app)
-        entity.registerEntityKinds(app)
     else:
         app.textures = app.tkTextures
         app.textureIndices = None
+    
+    entity.registerEntityKinds(app)
 
     app.recipes = [
         Recipe(

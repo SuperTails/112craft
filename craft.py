@@ -434,15 +434,17 @@ class ChatMode(Mode):
         elif key == 'BACKSPACE':
             if self.text != '':
                 self.text = self.text[:-1]
+        elif key == 'SPACE':
+            self.text += ' '
         elif len(key) == 1:
             self.text += key.lower()
         
     def redrawAll(self, app, window, canvas):
+        self.submode.redrawAll(app, window, canvas)
+
         canvas.create_rectangle(0, app.height * 2 / 3 - 10, app.width, app.height * 2 / 3 + 10, fill='#333333')
 
         canvas.create_text(0, app.height * 2 / 3, text=self.text, anchor='w')
-
-        self.submode.redrawAll(app, window, canvas)
     
     def timerFired(self, app):
         self.submode.timerFired(app)
