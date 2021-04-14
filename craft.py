@@ -109,8 +109,6 @@ class WorldLoadMode(Mode):
         #app.world = World(worldName, seed, anvilpath='C:/Users/Carson/AppData/Roaming/.minecraft/saves/TheTempleofNotch/region/')
         app.world = World(worldName, seed, importPath=importPath)
 
-        app.world.loadChunk((app.textures, app.cube, app.textureIndices), ChunkPos(0, 0, 0))
-
         try:
             path = app.world.saveFolderPath() + '/entities.dat'
 
@@ -123,10 +121,17 @@ class WorldLoadMode(Mode):
             self.player = Player(app)
             self.player.pos[1] = 75.0
             app.entities = [entity.Entity(app, 'skeleton', 0.0, 71.0, 1.0), entity.Entity(app, 'fox', 5.0, 72.0, 3.0)]
+        
+        cx = math.floor(self.player.pos[0] / 16)
+        cy = math.floor(self.player.pos[1] / world.CHUNK_HEIGHT)
+        cz = math.floor(self.player.pos[2] / 16)
+
+        app.world.loadChunk((app.textures, app.cube, app.textureIndices), ChunkPos(cx, cy, cz))
+
     
     def timerFired(self, app):
         if self.loadStage < 40:
-            world.loadUnloadChunks(app, [0.0, 0.0, 0.0])
+            world.loadUnloadChunks(app, self.player.pos)
         elif self.loadStage < 60:
             world.tickChunks(app, maxTime=5.0)
         else:

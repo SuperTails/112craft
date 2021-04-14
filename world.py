@@ -101,7 +101,7 @@ class WorldgenStage(IntEnum):
 
 seen = set()
 
-CHUNK_HEIGHT = 16
+CHUNK_HEIGHT = 256
 MESH_HEIGHT = 16
 
 MAX_CAVE_DISP = 100
