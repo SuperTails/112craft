@@ -549,11 +549,11 @@ def loadBlockUVFromSides(app, **sides) -> Image.Image:
         'right': (2*w, 1*h),
         'near': (1*w, 1*h),
         'far': (3*w, 1*h),
-        'bottom': (2*w, 2*h),
+        'bottom': (2*w, 0*h),
         'top': (1*w, 0*h),
     }
 
-    result = Image.new("RGBA", (w * 4, h * 3))
+    result = Image.new("RGBA", (w * 4, h * 2))
 
     for (texName, faceNames) in facesUsed.items():
         tex = app.rePack.getBlockTex(texName)
