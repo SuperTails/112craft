@@ -114,6 +114,8 @@ def rayAlignedPlaneIntersect2(rayDir, plane0, plane1):
     else:
         raise Exception("Plane is not axis-aligned")
 
+Color = str
+
 class ChunkPos(NamedTuple):
     x: int
     y: int

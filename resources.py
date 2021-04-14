@@ -11,9 +11,11 @@ import config
 import copy
 import entity
 import os
+from util import Color
 from sound import Sound
 from shader import ShaderProgram
 from PIL import Image
+import typing
 from typing import List, Optional, Tuple
 from player import Stack
 from OpenGL.GL import * #type:ignore
@@ -87,7 +89,10 @@ def loadEntityTextures(app):
     app.entityTextures['zombie'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/zombie/zombie.png')
     app.entityTextures['skeleton'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/skeleton/skeleton.png')
 
-def imageToTexture(image: Image.Image) -> int:
+def imageToTexture(image: Image.Image, flip=True) -> int:
+    if flip:
+        image = image.transpose(Image.FLIP_TOP_BOTTOM)
+
     texture = glGenTextures(1) #type:ignore
     glBindTexture(GL_TEXTURE_2D, texture)
 
@@ -105,9 +110,8 @@ def imageToTexture(image: Image.Image) -> int:
 
     return texture
 
-def loadTexture(path: str, tesselate=False) -> int:
-    im = loadBlockImage(path, tesselate)
-    im = im.transpose(Image.FLIP_TOP_BOTTOM)
+def loadTexture(path) -> int:
+    im = Image.open(path).convert(mode='RGBA')
     return imageToTexture(im)
 
 def loadSkyboxVao():
@@ -350,8 +354,8 @@ def loadTkTextures(app):
 
     app.tkTextures = {}
 
-    for (blockId, (path, tess)) in app.texturePaths.items():
-        tex = blockImageToTkTexture(loadBlockImage(path, tess))
+    for (blockId, sides) in app.texturePaths.items():
+        tex = blockImageToTkTexture(loadBlockUVFromSides(app, **sides))
         app.tkTextures[blockId] = tex
 
     # Vertices in CCW order
@@ -378,6 +382,30 @@ def loadTkTextures(app):
 
     app.cube = render.Model(vertices, faces)
 
+def getFaceColor(img: Image.Image, cornerX: int, cornerY: int, faceSide: bool) -> Color:
+    avgR = 0
+    avgG = 0
+    avgB = 0
+
+    amount = 0
+    for cy in range(16):
+        xRange = (0, 16 - cy) if faceSide else (cy, 16)
+        for cx in range(xRange[0], xRange[1]):
+            x = cornerX + cx
+            y = cornerY + cy
+
+            pixel = img.getpixel((x, y))[0:3] #type:ignore
+            avgR += pixel[0]
+            avgG += pixel[1]
+            avgB += pixel[2]
+            amount += 1
+    
+    avgR //= amount
+    avgG //= amount
+    avgB //= amount
+
+    return f'#{avgR:02X}{avgG:02X}{avgB:02X}'
+
 def blockImageToTkTexture(img: Image.Image):
     OFFSETS = (
         # Left
@@ -398,32 +426,141 @@ def blockImageToTkTexture(img: Image.Image):
 
     for (cornerX, cornerY) in OFFSETS:
         for faceSide in (False, True):
-            avgR = 0
-            avgG = 0
-            avgB = 0
-
-            amount = 0
-            for cy in range(16):
-                xRange = (0, 16 - cy) if faceSide else (cy, 16)
-                for cx in range(xRange[0], xRange[1]):
-                    x = cornerX + cx
-                    y = cornerY + cy
-
-                    pixel = img.getpixel((x, y))[0:3] #type:ignore
-                    avgR += pixel[0]
-                    avgG += pixel[1]
-                    avgB += pixel[2]
-                    amount += 1
-            
-            avgR //= amount
-            avgG //= amount
-            avgB //= amount
-
-            color = f'#{avgR:02X}{avgG:02X}{avgB:02X}'
-
-            tex.append(color)
+            tex.append(getFaceColor(img, cornerX, cornerY, faceSide))
 
     return tex
+
+def tint(im: Image.Image, color: Color) -> Image.Image:
+    rTint = int(color[1:3], 16)
+    gTint = int(color[3:5], 16)
+    bTint = int(color[5:7], 16)
+
+    def makeTint(c):
+        def tint(p):
+            return int(p * c / 0xFF)
+        return tint
+    
+    r = im.getchannel('R').point(makeTint(rTint))
+    g = im.getchannel('G').point(makeTint(gTint))
+    b = im.getchannel('B').point(makeTint(bTint))
+    a = im.getchannel('A')
+
+    im = Image.merge('RGBA', (r, g, b, a))
+
+    return im
+
+class ResourcePack:
+    root: str
+    imageCache: dict[str, Image.Image]
+
+    def __init__(self, root: str):
+        self.root = root[:-1] if root.endswith('/') else root
+
+        self.imageCache = {}
+    
+    def getImg(self, path: str) -> Image.Image:
+        try:
+            return self.imageCache[path]
+        except KeyError:
+            im = Image.open(self.root + '/' + path)
+            if 'grass_top' in path or 'leaves' in path:
+                im = tint(im, '#79C05A')
+
+            self.imageCache[path] = im
+            return self.imageCache[path]
+    
+    def getBlockTex(self, name: str) -> Image.Image:
+        return self.getImg(f'textures/blocks/{name}.png')
+
+FACE_NAMES = ['left', 'right', 'near', 'far', 'bottom', 'top']
+
+def getFaceTextureList(**sides) -> List[str]:
+    """
+    Returns a list where each element is the texture that face will contain.
+    """
+
+    MAPPINGS = (
+        ('all', ['left', 'right', 'near', 'far', 'bottom', 'top']),
+        ('side', ['left', 'right', 'near', 'far']),
+        ('south', ['near']),
+        ('north', ['far']),
+        ('west', ['left']),
+        ('east', ['right']),
+        ('up', ['top']),
+        ('down', ['bottom']),
+    )
+
+    usages = [None] * 6
+
+    for (side, faceNames) in MAPPINGS:
+        if side in sides:
+            texName = sides[side]
+            sides.pop(side)
+
+            for faceName in faceNames:
+                usages[FACE_NAMES.index(faceName)] = texName
+
+    if len(sides) != 0:
+        raise Exception(f"Unknown sides {sides}")
+    
+    if not all(usages):
+        raise Exception(f"Not all faces covered by {sides}")
+    
+    return typing.cast(List[str], usages)
+
+def getFacesUsedForTexture(**sides) -> dict[str, set[str]]:
+    """
+    Returns a dict mapping texture names to the faces they are used on.
+    This combines duplicates and removes sides overwritten by later textures.
+    """
+    
+    usages = getFaceTextureList(**sides)
+
+    result = {}
+
+    for (faceName, usage) in zip(FACE_NAMES, usages):
+        if usage not in result:
+            result[usage] = set()
+        
+        result[usage].add(faceName)
+    
+    return result
+
+def loadBlockUVFromSides(app, **sides) -> Image.Image:
+    """
+    Valid sides:
+    * `all` - all sides of the block
+    * `side` - All vertical sides of the block
+    * `east` - ???
+    * `west` - ???
+    * `north` - ???
+    * `south` - The front face
+    * `up` - The top face
+    * `down` - The bottom face
+    """
+
+    w = 16
+    h = 16
+
+    facesUsed = getFacesUsedForTexture(**sides)
+
+    CORNERS = {
+        'left': (0*w, 1*h),
+        'right': (2*w, 1*h),
+        'near': (1*w, 1*h),
+        'far': (3*w, 1*h),
+        'bottom': (2*w, 2*h),
+        'top': (1*w, 0*h),
+    }
+
+    result = Image.new("RGBA", (w * 4, h * 3))
+
+    for (texName, faceNames) in facesUsed.items():
+        tex = app.rePack.getBlockTex(texName)
+        for faceName in faceNames:
+            result.paste(tex, CORNERS[faceName])
+    
+    return result
 
 def loadBlockImage(path, tesselate=False):
     tex = Image.open(path)
@@ -441,49 +578,27 @@ def loadTextureAtlas(app):
     app.textureIdx = dict()
     app.textureIndices = dict()
 
-    totalAmt = 0
-    for (_, (_, tess)) in app.texturePaths.items():
-        if tess:
-            totalAmt += 1
-        else:
-            totalAmt += 2
+    totalUnique = 0
 
-    width = 16 * totalAmt
+    for (_, sides) in app.texturePaths.items():
+        totalUnique += len(getFacesUsedForTexture(**sides))
+
+    width = 16 * totalUnique
 
     atlas = Image.new("RGBA", (width, 16))
 
     idx = 0
 
-    for (name, (path, tess)) in app.texturePaths.items():
-        app.textureIndices[name] = [0] * 6
+    for (name, sides) in app.texturePaths.items():
+        indices = getFaceTextureList(**sides)
+        texNames = list(getFacesUsedForTexture(**sides).keys())
 
-        im = Image.open(path)
+        app.textureIndices[name] = [idx + texNames.index(name) for name in indices]
 
-        if tess:
+        for name in texNames:
+            im = app.rePack.getBlockTex(name)
             atlas.paste(im, (idx * 16, 0))
-            app.textureIndices[name] = [idx] * 6
             idx += 1
-        else:
-            top = im.copy()
-            top = top.crop((16, 0, 32, 16))
-
-            atlas.paste(top, (idx * 16, 0))
-            # FIXME:
-            app.textureIndices[name][4] = idx
-            app.textureIndices[name][5] = idx
-            idx += 1
-            
-            side = im.copy()
-            side = side.crop((0, 16, 16, 32))
-
-            atlas.paste(side, (idx * 16, 0))
-            app.textureIndices[name][0] = idx
-            app.textureIndices[name][1] = idx
-            app.textureIndices[name][2] = idx
-            app.textureIndices[name][3] = idx
-            idx += 1
-    
-    atlas = atlas.transpose(Image.FLIP_TOP_BOTTOM)
     
     app.atlasWidth = width
         
@@ -495,12 +610,12 @@ def loadGlTextures(app):
 
     app.glTextures = dict()
 
-    for (name, (path, tess)) in app.texturePaths.items():
-        app.glTextures[name] = loadTexture(path, tesselate=tess)
+    for (name, sides) in app.texturePaths.items():
+        app.glTextures[name] = imageToTexture(loadBlockUVFromSides(app, **sides))
 
     app.breakTextures = []
     for i in range(10):
-        app.breakTextures.append(loadTexture(f'assets/destroy_stage_{i}.png', tesselate=False))
+        app.breakTextures.append(loadTexture(f'assets/destroy_stage_{i}.png'))
 
     app.blockProgram = ShaderProgram('shaders/blockShader.vert', 'shaders/blockShader.frag')
 
@@ -529,7 +644,6 @@ def registerBlock(
 
     # TODO: INTEGRATE WITH `loadTkTextures`
 
-    app.texturePaths[blockId] = texturePath
     app.commonItemTextures[blockId] = itemTexturePath
 
     # TODO: Everything else
@@ -545,6 +659,8 @@ def getAttackDamage(app, item: str):
         return 0.0
 
 def loadResources(app):
+    app.rePack = ResourcePack('assets/Vanilla_Resource_Pack_1.16.220')
+
     app.sounds = {
         'grass': Sound('assets/grass.ogg'),
         'destroy_grass': Sound('assets/destroy_grass.ogg')
@@ -556,24 +672,37 @@ def loadResources(app):
         'iron_ore': 'iron_ingot'
     }
 
-    app.texturePaths = {}
     app.hardnesses = {}
 
     app.texturePaths = {
-        'grass': ('assets/grass.png', False),
-        'dirt': ('assets/dirt.png', True),
-        'stone': ('assets/stone.png', True),
-        'coal_ore': ('assets/coal_ore.png', True),
-        'iron_ore': ('assets/iron_ore.png', True),
-        'cobblestone': ('assets/cobblestone.png', True),
-        'leaves': ('assets/leaves.png', False),
-        'log': ('assets/log.png', False),
-        'bedrock': ('assets/bedrock.png', True),
-        'planks': ('assets/oak_planks.png', True),
-        'crafting_table': ('assets/crafting_table.png', False),
-        'furnace': ('assets/furnace.png', False),
-        'glowstone': ('assets/Vanilla_Resource_Pack_1.16.220/textures/blocks/glowstone.png', True),
-        'torch':     ('assets/Vanilla_Resource_Pack_1.16.220/textures/blocks/torch_on.png', True),
+        'grass': { 'down': 'dirt', 'up': 'grass_top', 'side': 'grass_side_carried' },
+        'dirt': { 'all': 'dirt' },
+        'stone': { 'all': 'stone' },
+        'coal_ore': { 'all': 'coal_ore' },
+        'iron_ore': { 'all': 'iron_ore' },
+        'cobblestone': { 'all': 'cobblestone' },
+        'leaves': { 'all': 'leaves_oak_opaque' },
+        'log': { 'side': 'log_oak', 'up': 'log_oak_top', 'down': 'log_oak_top' },
+        'bedrock': { 'all': 'bedrock' },
+        'planks': { 'all': 'planks_oak' },
+        'crafting_table': {
+            "down": 'planks_oak',
+            "east": 'crafting_table_side',
+            "north": 'crafting_table_front',
+            "south": 'crafting_table_front',
+            "up": 'crafting_table_top',
+            "west": 'crafting_table_side',
+        },
+        'furnace': {
+            'down' : 'furnace_top',
+            'east' : 'furnace_side',
+            'north' : 'furnace_side',
+            'south' : 'furnace_front_off',
+            'up' : 'furnace_top',
+            'west' : 'furnace_side',
+        },
+        'glowstone': { 'all': 'glowstone' },
+        'torch':     { 'all': 'torch_on' },
     }
 
     app.hardnesses = {
@@ -631,7 +760,7 @@ def loadResources(app):
         newTex.paste(tex, (0, 1 * tex.height))
         newTex.paste(moonTex, (0, 3 * tex.height))
 
-        app.sunTex = imageToTexture(newTex.transpose(Image.FLIP_TOP_BOTTOM))
+        app.sunTex = imageToTexture(newTex)
 
         #app.sunTex = loadTexture('assets/furnace.png')
 
@@ -795,8 +924,8 @@ def loadResources(app):
             continue
 
         if config.USE_OPENGL_BACKEND:
-            (path, tess) = app.texturePaths[name]
-            newGlTex = render.drawItemFromBlock2(25, loadBlockImage(path, tesselate=tess))
+            sides = app.texturePaths[name]
+            newGlTex = render.drawItemFromBlock2(25, loadBlockUVFromSides(app, **sides))
             app.glItemTextures[name] = newGlTex
         else:
             newTkTex = render.drawItemFromBlock(25, app.tkTextures[name])

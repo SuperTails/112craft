@@ -4,8 +4,7 @@ from math import sin, cos
 from numpy import ndarray
 import numpy as np
 from typing import List, Tuple
-
-Color = str
+from util import Color
 
 # Always holds indices into the model's list of vertices
 Face = Tuple[int, int, int]
