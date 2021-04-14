@@ -224,8 +224,10 @@ def collideY(app, entity: Entity):
             hiYCoord = roundHalfUp(entity.pos[1] + entity.height)
 
             if app.world.coordsOccupied(BlockPos(round(x), hiYCoord, round(z))):
-                yEdge = hiYCoord - 0.5
+                yEdge = hiYCoord - 0.55
                 entity.pos[1] = yEdge - entity.height
+                if entity.velocity[1] > 0.0:
+                    entity.velocity[1] = 0.0
 
 
 def collide(app, entity: Entity):
