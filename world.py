@@ -1761,6 +1761,25 @@ def adjacentBlockPos(blockPos: BlockPos, faceIdx: int) -> BlockPos:
 
     return BlockPos(x, y, z)
 
+def getLookVector(app) -> Tuple[float, float, float]:
+    lookX = cos(app.cameraPitch)*sin(-app.cameraYaw)
+    lookY = sin(app.cameraPitch)
+    lookZ = cos(app.cameraPitch)*cos(-app.cameraYaw)
+
+    if lookX == 0.0:
+        lookX = 1e-6
+    if lookY == 0.0:
+        lookY = 1e-6
+    if lookZ == 0.0:
+        lookZ = 1e-6
+
+    mag = math.sqrt(lookX**2 + lookY**2 + lookZ**2)
+    lookX /= mag
+    lookY /= mag
+    lookZ /= mag
+
+    return (lookX, lookY, lookZ)
+
 def lookedAtBlock(app) -> Optional[Tuple[BlockPos, str]]:
     lookX = cos(app.cameraPitch)*sin(-app.cameraYaw)
     lookY = sin(app.cameraPitch)

@@ -426,6 +426,11 @@ def submitChat(app, text: str):
             ent = entity.Entity(app, parts[1],
                 player.pos[0]+0.5, player.pos[1]+0.5, player.pos[2]+0.5)
             app.entities.append(ent)
+        elif parts[0] == 'tp':
+            player = app.mode.player
+            player.pos[0] = float(parts[1])
+            player.pos[1] = float(parts[2])
+            player.pos[2] = float(parts[3])
 
     else:
         print(f"CHAT: {text}")
@@ -595,6 +600,22 @@ class PlayingMode(Mode):
         elif key == 'E':
             app.mode = InventoryMode(app, self, name='inventory')
             app.w = app.s = app.a = app.d = False
+        elif key == 'Q':
+            stack = self.player.inventory[self.player.hotbarIdx].stack
+            if not stack.isEmpty():
+                ent = entity.Entity(app, 'item', self.player.pos[0], self.player.pos[1] + self.player.height - 0.5, self.player.pos[2])
+                ent.extra.stack = Stack(stack.item, 1)
+
+                look = world.getLookVector(app)
+                ent.velocity[0] = look[0] * 0.5
+                ent.velocity[1] = look[1] * 0.3 + 0.2
+                ent.velocity[2] = look[2] * 0.5
+
+                if not stack.isInfinite():
+                    stack.amount -= 1
+                
+                app.entities.append(ent)
+
         elif key == 'SPACE' or key == ' ':
             app.space = True
             if self.player.onGround:

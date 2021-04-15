@@ -228,15 +228,16 @@ def collideY(app, entity: Entity):
             #app.cameraPos[1] = (feetPos + 0.5) + entity.height
             entity.pos[1] = feetPos + 0.5
 
-    for x in [entity.pos[0] - entity.radius * 0.99, entity.pos[0] + entity.radius * 0.99]:
-        for z in [entity.pos[2] - entity.radius * 0.99, entity.pos[2] + entity.radius * 0.99]:
-            hiYCoord = roundHalfUp(entity.pos[1] + entity.height)
+    if not entity.onGround:
+        for x in [entity.pos[0] - entity.radius * 0.99, entity.pos[0] + entity.radius * 0.99]:
+            for z in [entity.pos[2] - entity.radius * 0.99, entity.pos[2] + entity.radius * 0.99]:
+                hiYCoord = roundHalfUp(entity.pos[1] + entity.height)
 
-            if app.world.coordsOccupied(BlockPos(round(x), hiYCoord, round(z))):
-                yEdge = hiYCoord - 0.55
-                entity.pos[1] = yEdge - entity.height
-                if entity.velocity[1] > 0.0:
-                    entity.velocity[1] = 0.0
+                if app.world.coordsOccupied(BlockPos(round(x), hiYCoord, round(z))):
+                    yEdge = hiYCoord - 0.55
+                    entity.pos[1] = yEdge - entity.height
+                    if entity.velocity[1] > 0.0:
+                        entity.velocity[1] = 0.0
 
 
 def collide(app, entity: Entity):
