@@ -24,5 +24,10 @@ class Sound:
         else:
             raise Exception(f"Unsupported file type {path}")
     
-    def play(self):
-        sa.play_buffer(self.data, 1, 2, self.samplerate)
+    def play(self, halfPitch=False, volume=1.0):
+        rate = self.samplerate // 2 if halfPitch else self.samplerate
+        if volume != 1.0:
+            data = (self.data * volume).astype(numpy.int16)
+        else:
+            data = self.data
+        sa.play_buffer(data, 1, 2, rate)

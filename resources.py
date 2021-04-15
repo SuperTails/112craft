@@ -664,6 +664,8 @@ def getAttackDamage(app, item: str):
         return 0.0
     
 def getVersionJson():
+    # From https://minecraft.fandom.com/wiki/Minecraft_Wiki
+
     URL = 'https://launchermeta.mojang.com/v1/packages/436877ffaef948954053e1a78a366b8b7c204a91/1.16.5.json'
 
     if not os.path.exists('assets/1.16.5.json'):
@@ -751,9 +753,12 @@ def loadSounds(app):
         'dirt': 'gravel',
         'cobblestone': 'stone',
         'stone': 'stone',
-        'furnace': 'stone',
+        'furnace': 's tone',
+        'coal_ore': 'stone',
+        'iron_ore': 'stone',
         'log': 'wood',
         'planks': 'wood',
+        'torch': 'wood',
         'crafting_table': 'wood',
     }
 

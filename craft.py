@@ -44,6 +44,7 @@ import copy
 import glfw
 import config
 import random
+import time
 import cmu_112_graphics
 import tkinter
 import entity
@@ -936,6 +937,7 @@ def appStarted(app):
     # ----------------
     app.breakingBlock = 0.0
     app.breakingBlockPos = world.BlockPos(0, 0, 0)
+    app.lastDigSound = time.time()
 
     app.gravity = 0.10
 
@@ -1006,10 +1008,15 @@ def updateBlockBreaking(app, mode: PlayingMode):
             else:
                 app.breakingBlockPos = pos
                 app.breakingBlock = 0.0
+            
 
         #app.sounds['grass'].play()
         
         blockId = app.world.getBlock(pos)
+
+        if time.time() - app.lastDigSound > 0.2:
+            resources.getStepSound(app, blockId).play(halfPitch=True, volume=0.3)
+            app.lastDigSound = time.time()
 
         toolStack = mode.player.inventory[mode.player.hotbarIdx].stack
         if toolStack.isEmpty():
@@ -1020,9 +1027,9 @@ def updateBlockBreaking(app, mode: PlayingMode):
         hardness = getHardnessAgainst(app, blockId, tool)
 
         if app.breakingBlock >= hardness:
-            droppedItem = getBlockDrop(app, app.world.getBlock(pos), tool)
+            droppedItem = getBlockDrop(app, blockId, tool)
 
-            resources.getDigSound(app, app.world.getBlock(pos)).play()
+            resources.getDigSound(app, blockId).play()
 
             world.removeBlock(app, pos)
 
