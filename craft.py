@@ -493,7 +493,10 @@ class GameOverMode(Mode):
         btn = self.buttons.onRelease(app, event.x, event.y)
         if btn == 'respawn':
             # FIXME:
-            app.mode = PlayingMode(app, Player(app, False))
+            player = Player(app, False)
+            player.pos = [0.0, 75.0, 0.0]
+            app.cameraPos = [0.0, 75.0, 0.0]
+            app.mode = PlayingMode(app, player)
 
 class PlayingMode(Mode):
     lookedAtBlock = None

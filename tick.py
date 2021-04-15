@@ -6,7 +6,7 @@ new entities are spawned, other entities are removed, collisions occur, etc.
 
 from entity import Entity
 from player import Player
-from util import BlockPos, roundHalfUp, rayAABBIntersect
+from util import BlockPos, roundHalfUp, rayAABBIntersect, ChunkPos
 import world
 import time
 import math
@@ -90,41 +90,51 @@ def tick(app):
 
     player: Player = app.mode.player
 
-    if x != 0.0 or z != 0.0:
-        mag = math.sqrt(x*x + z*z)
-        x /= mag
-        z /= mag
+    playerChunkPos = world.toChunkLocal(player.getBlockPos())[0]
+    playerChunkPos = ChunkPos(playerChunkPos.x, 0, playerChunkPos.z)
 
-        newX = math.cos(app.cameraYaw) * x - math.sin(app.cameraYaw) * z
-        newZ = math.sin(app.cameraYaw) * x + math.cos(app.cameraYaw) * z
+    if playerChunkPos in app.world.chunks and app.world.chunks[playerChunkPos].isTicking:
+        if x != 0.0 or z != 0.0:
+            mag = math.sqrt(x*x + z*z)
+            x /= mag
+            z /= mag
 
-        x, z = newX, newZ
+            newX = math.cos(app.cameraYaw) * x - math.sin(app.cameraYaw) * z
+            newZ = math.sin(app.cameraYaw) * x + math.cos(app.cameraYaw) * z
 
-        x *= player.walkSpeed 
-        z *= player.walkSpeed
+            x, z = newX, newZ
 
-    player.tick()
-    
-    #player.pos = copy.copy(app.cameraPos)
-    #player.pos[1] -= player.height
+            x *= player.walkSpeed 
+            z *= player.walkSpeed
 
-    collideY(app, player)
-    if player.onGround:
-        player.velocity[0] = x
-        player.velocity[2] = z
-    else:
-        player.velocity[0] += x / 10.0
-        player.velocity[2] += z / 10.0
-    collideXZ(app, player)
+        player.tick()
+        
+        #player.pos = copy.copy(app.cameraPos)
+        #player.pos[1] -= player.height
+
+        collideY(app, player)
+        if player.onGround:
+            player.velocity[0] = x
+            player.velocity[2] = z
+        else:
+            player.velocity[0] += x / 10.0
+            player.velocity[2] += z / 10.0
+        collideXZ(app, player)
 
 
-    app.cameraPos = copy.copy(player.pos)
-    app.cameraPos[1] += player.height
+        app.cameraPos = copy.copy(player.pos)
+        app.cameraPos[1] += player.height
 
 
     entities = app.entities + [player]
 
     for entity in app.entities:
+        entChunkPos = world.toChunkLocal(entity.getBlockPos())[0]
+        entChunkPos = ChunkPos(entChunkPos.x, 0, entChunkPos.z)
+
+        if entChunkPos not in app.world.chunks or not app.world.chunks[entChunkPos].isTicking:
+            continue
+
         if collide(app, entity) and entity.onGround:
             entity.velocity[1] = 0.40
         
@@ -137,6 +147,12 @@ def tick(app):
             if math.sqrt(dx + dy + dz) < 2.0 and entity.extra.pickupDelay == 0:
                 player.pickUpItem(app, entity.extra.stack)
                 entity.health = 0.0
+            
+        if entity.pos[1] < -64.0:
+            entity.hit(app, 10.0, (0.0, 0.0))
+    
+    if player.pos[1] < -64.0:
+        player.hit(app, 10.0, (0.0, 0.0))
     
     endTime = time.time()
     app.tickTimes[app.tickTimeIdx] = (endTime - startTime)

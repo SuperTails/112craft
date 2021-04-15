@@ -36,6 +36,7 @@ import config
 import anvil
 import os
 import copy
+import itertools
 from nbt import nbt
 from inventory import Slot, Stack
 from enum import IntEnum
@@ -1651,7 +1652,7 @@ def loadUnloadChunks(app, centerPos):
 
     #queuedForLoad = []
 
-    for loadChunkPos in adjacentChunks(chunkPos, chunkLoadDistance):
+    for loadChunkPos in itertools.chain(adjacentChunks(chunkPos, chunkLoadDistance), (chunkPos, )):
         if loadChunkPos not in app.world.chunks:
             (ux, _, uz) = loadChunkPos
             dist = max(abs(ux - x), abs(uz - z))
@@ -1662,17 +1663,6 @@ def loadUnloadChunks(app, centerPos):
                 #queuedForLoad.append((app.world, (app.textures, app.cube), loadChunkPos))
                 loadedChunks += 1
                 app.world.loadChunk((app.textures, app.cube, app.textureIndices), loadChunkPos)
-    
-    import multiprocessing as mp
-
-    #print(f"have {len(app.world.chunks)} loaded...")
-
-    #chunks = myPool.map(mapMultiFunc, queuedForLoad)
-    #for (pos, chunk) in chunks:
-    #    app.world.chunks[pos] = chunk
-    
-    #print(f"now have {len(app.world.chunks)} loaded")
-    
 
 def countLoadedAdjacentChunks(app, chunkPos: ChunkPos, dist: int) -> Tuple[int, int, int, int, int]:
     totalCount = 0
