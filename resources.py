@@ -717,27 +717,31 @@ def getDigSound(app, blockId: BlockId):
     kind = getSoundKind(app, blockId)
     return random.choice(app.digSounds[kind])
 
-def loadSoundArray(app, index, category: str) -> dict[str, List[Sound]]:
+def loadSoundArray(app, index, path: str) -> List[Sound]:
+    sounds = []
+
+    i = 1
+    try:
+        while i < 10:
+            downloadSound(index, path.format(i))
+
+            sounds.append(Sound('assets/sounds/' + path.format(i)))
+
+            i += 1
+    except KeyError:
+        if i == 1:
+            raise Exception(f"Likely invalid sound type {path}")
+
+    return sounds
+
+def loadSoundArray2(app, index, category: str) -> dict[str, List[Sound]]:
     result = {}
 
     for blockKind in ['grass', 'gravel', 'stone', 'wood']:
-        sounds = []
-
-        i = 1
-        try:
-            while i < 10:
-                downloadSound(index, f'minecraft/sounds/{category}/{blockKind}{i}.ogg')
-
-                sounds.append(Sound(f'assets/sounds/minecraft/sounds/{category}/{blockKind}{i}.ogg'))
-
-                i += 1
-        except KeyError:
-            if i == 1:
-                raise Exception(f"Likely invalid sound type {category}/{blockKind}")
-        
-        result[blockKind] = sounds
+        result[blockKind] = loadSoundArray(app, index, f'minecraft/sounds/{category}/{blockKind}{{}}.ogg')
     
     return result
+
 
 def loadSounds(app):
     index = getAssetIndex()
@@ -745,8 +749,16 @@ def loadSounds(app):
     app.stepSounds = {}
     app.digSounds = {}
 
-    app.stepSounds = loadSoundArray(app, index, 'step')
-    app.digSounds = loadSoundArray(app, index, 'dig')
+    app.stepSounds = loadSoundArray2(app, index, 'step')
+    app.digSounds = loadSoundArray2(app, index, 'dig')
+
+    app.hurtSounds = {}
+    
+    app.hurtSounds['player'] = loadSoundArray(app, index, 'minecraft/sounds/damage/hit{}.ogg')
+    app.hurtSounds['zombie'] = loadSoundArray(app, index, 'minecraft/sounds/mob/zombie/hurt{}.ogg')
+    app.hurtSounds['creeper'] = loadSoundArray(app, index, 'minecraft/sounds/mob/creeper/say{}.ogg')
+    app.hurtSounds['skeleton'] = loadSoundArray(app, index, 'minecraft/sounds/mob/skeleton/hurt{}.ogg')
+    app.hurtSounds['fox'] = loadSoundArray(app, index, 'minecraft/sounds/mob/fox/hurt{}.ogg')
 
     app.soundKinds = {
         'grass': 'grass',

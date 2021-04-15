@@ -128,7 +128,7 @@ def tick(app):
         if collide(app, entity) and entity.onGround:
             entity.velocity[1] = 0.40
         
-        entity.tick(app.world, entities, player.pos[0], player.pos[2])
+        entity.tick(app, app.world, entities, player.pos[0], player.pos[2])
 
         if entity.kind.name == 'item':
             dx = (player.pos[0] - entity.pos[0])**2

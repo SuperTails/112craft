@@ -25,6 +25,7 @@ import molang
 import model 
 import functools
 import config
+from sound import Sound
 from inventory import Stack
 from util import BlockPos, roundHalfUp, ItemId
 from dataclasses import dataclass
@@ -320,6 +321,15 @@ def openModels(path, app) -> dict[str, EntityModel]:
 
 #print(models['fox'].bones[3].cubes[0].toVertices())
 
+def getHurtSound(app, entity) -> Sound:
+    if entity.kind.name in app.hurtSounds:
+        name = entity.kind.name
+    else:
+        print(f"Using fallback hurt sound for entity {entity.kind.name}")
+        name = 'player'
+    
+    return random.choice(app.hurtSounds[name])
+
 class ItemData:
     stack: Stack
     age: int
@@ -539,8 +549,10 @@ class Entity:
 
         return data
     
-    def hit(self, damage: float, knockback: Tuple[float, float]):
+    def hit(self, app, damage: float, knockback: Tuple[float, float]):
         if self.immunity == 0:
+            getHurtSound(app, self).play()
+
             self.health -= damage
 
             self.velocity[0] += knockback[0] * 0.25
@@ -639,7 +651,7 @@ class Entity:
         
         return result
 
-    def tick(self, world, entities: List['Entity'], playerX, playerZ):
+    def tick(self, app, world, entities: List['Entity'], playerX, playerZ):
         self.headAngle = math.atan2(playerX - self.pos[0], playerZ - self.pos[2])
 
         if math.sqrt(self.velocity[0]**2 + self.velocity[2]**2) > 0.01:
@@ -670,7 +682,7 @@ class Entity:
         
         self.lifeTime += 1
         
-        self.ai.tick(self, world, entities)
+        self.ai.tick(app, self, world, entities)
 
         if len(self.path) > 0:
             x = self.path[0][0] - self.pos[0]
@@ -729,14 +741,14 @@ class Ai:
         self.tasks = tasks
         self.taskIdx = 0
     
-    def tick(self, entity: Entity, world, entities: List[Entity]):
+    def tick(self, app, entity: Entity, world, entities: List[Entity]):
         for highTask in range(self.taskIdx):
             if self.tasks[highTask].shouldStart(entity, world, entities):
                 print(f"Switching to task {highTask} ({self.tasks[highTask]})")
                 self.taskIdx = highTask
                 break
 
-        isDone = self.tasks[self.taskIdx].tick(entity, world, entities)
+        isDone = self.tasks[self.taskIdx].tick(app, entity, world, entities)
 
         if isDone:
             print(f"Stopping task {self.taskIdx} ({self.tasks[self.taskIdx]})")
@@ -756,7 +768,7 @@ class AttackTask:
                 if dist < 1.0:
                     return True
     
-    def tick(self, entity: Entity, world, entities: List[Entity]):
+    def tick(self, app, entity: Entity, world, entities: List[Entity]):
         for other in entities:
             if other.kind.name == 'player':
                 dx = entity.pos[0] - other.pos[0]
@@ -771,7 +783,7 @@ class AttackTask:
                     knockX /= mag
                     knockZ /= mag
 
-                    other.hit(3.0, (knockX, knockZ))
+                    other.hit(app, 3.0, (knockX, knockZ))
 
                     return False
                 else:
@@ -790,7 +802,7 @@ class FollowTask:
                     return True
         return False
 
-    def tick(self, entity: Entity, world, entities: List[Entity]):
+    def tick(self, app, entity: Entity, world, entities: List[Entity]):
         for other in entities:
             if other.kind.name == 'player' and not other.creative: #type:ignore
                 dx = entity.pos[0] - other.pos[0]
@@ -815,14 +827,14 @@ class NullTask:
     def shouldStart(self, entity: Entity, world, entities):
         return True
 
-    def tick(self, entity: Entity, world, entities):
+    def tick(self, app, entity: Entity, world, entities):
         return False
 
 class WanderTask:
     def shouldStart(self, entity, world, entities):
         return True
 
-    def tick(self, entity: Entity, world, entities):
+    def tick(self, app, entity: Entity, world, entities):
         wanderFreq = 0.01
         wanderDist = 3
         pos = entity.getBlockPos()

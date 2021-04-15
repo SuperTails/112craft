@@ -554,7 +554,7 @@ class PlayingMode(Mode):
             else:
                 dmg = 1.0 + getAttackDamage(app, slot.stack.item)
 
-            entity.hit(dmg, knockback)
+            entity.hit(app, dmg, knockback)
 
     def rightMousePressed(self, app, event):
         block = world.lookedAtBlock(app)
