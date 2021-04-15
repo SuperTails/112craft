@@ -578,19 +578,19 @@ class Entity:
         bz = roundHalfUp(self.pos[2])
         return BlockPos(bx, by, bz)
     
-    def getRotation(self, app, i):
-        bone = app.entityModels[self.kind.model].bones[i]
+    def getRotation(self, entityModels, entityAnimations, i):
+        bone = entityModels[self.kind.model].bones[i]
         boneName = bone.name
         boneRot = bone.bind_pose_rotation
 
         if self.kind.name == 'creeper':
-            anim = app.entityAnimations['animation.creeper.legs']
+            anim = entityAnimations['animation.creeper.legs']
         elif self.kind.name == 'fox':
-            anim = app.entityAnimations['animation.quadruped.walk']
+            anim = entityAnimations['animation.quadruped.walk']
         elif self.kind.name == 'zombie':
-            anim = app.entityAnimations['animation.humanoid.move']
+            anim = entityAnimations['animation.humanoid.move']
         elif self.kind.name == 'skeleton':
-            anim = app.entityAnimations['animation.humanoid.bow_and_arrow']
+            anim = entityAnimations['animation.humanoid.bow_and_arrow']
         elif self.kind.name == 'item':
             anim = None
         else:

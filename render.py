@@ -19,6 +19,7 @@ import world
 import config
 import numpy as np
 import copy
+from client import ClientState, CLIENT_DATA
 from model import *
 from resources import getHardnessAgainst
 from math import sin, cos
@@ -67,24 +68,24 @@ def isBackFace(v0, v1, v2) -> bool:
 
     return -np.dot(v0, normal) >= 0
 
-def blockFaceLight(app, blockPos: BlockPos, faceIdx: int) -> int:
+def blockFaceLight(client: ClientState, blockPos: BlockPos, faceIdx: int) -> int:
     """Returns the light level of the given face of the block"""
 
     pos = adjacentBlockPos(blockPos, faceIdx)
-    if app.world.coordsInBounds(pos):
-        (chunk, (x, y, z)) = app.world.getChunk(pos)
+    if client.world.coordsInBounds(pos):
+        (chunk, (x, y, z)) = client.world.getChunk(pos)
         return chunk.lightLevels[x, y, z]
     else:
         return 7
 
-def isBackBlockFace(app, blockPos: BlockPos, faceIdx: int) -> bool:
+def isBackBlockFace(client: ClientState, blockPos: BlockPos, faceIdx: int) -> bool:
     """Returns True if the given face of the block is facing away from the camera"""
 
     faceIdx //= 2
     (x, y, z) = world.blockToWorld(blockPos)
-    xDiff = app.cameraPos[0] - x
-    yDiff = app.cameraPos[1] - y
-    zDiff = app.cameraPos[2] - z
+    xDiff = client.cameraPos[0] - x
+    yDiff = client.cameraPos[1] - y
+    zDiff = client.cameraPos[2] - z
     # Left, right, near, far, bottom, top
     if faceIdx == 0:
         # Left
@@ -107,8 +108,8 @@ def isBackBlockFace(app, blockPos: BlockPos, faceIdx: int) -> bool:
     
 # FIXME: This does NOT preserve the CCW vertex ordering!
 # And also adds stuff to `vertices`
-def clip(app, vertices: List[Any], face: Face) -> List[Face]:
-    def outOfView(idx): return vertices[idx][2] < app.vpDist
+def clip(client: ClientState, vertices: List[Any], face: Face) -> List[Face]:
+    def outOfView(idx): return vertices[idx][2] < client.vpDist
 
     numVisible = (not outOfView(face[0])) + (
         (not outOfView(face[1])) + (not outOfView(face[2])))
@@ -125,38 +126,38 @@ def clip(app, vertices: List[Any], face: Face) -> List[Face]:
     [[x2], [y2], [z2], _] = vertices[v2]
 
     if numVisible == 2:
-        xd = (x2 - x0) * (app.vpDist - z0) / (z2 - z0) + x0
-        yd = (y2 - y0) * (app.vpDist - z0) / (z2 - z0) + y0
+        xd = (x2 - x0) * (client.vpDist - z0) / (z2 - z0) + x0
+        yd = (y2 - y0) * (client.vpDist - z0) / (z2 - z0) + y0
 
-        xc = (x2 - x1) * (app.vpDist - z1) / (z2 - z1) + x1
-        yc = (y2 - y1) * (app.vpDist - z1) / (z2 - z1) + y1
+        xc = (x2 - x1) * (client.vpDist - z1) / (z2 - z1) + x1
+        yc = (y2 - y1) * (client.vpDist - z1) / (z2 - z1) + y1
 
         dIdx = len(vertices)
-        vertices.append(np.array([[xd], [yd], [app.vpDist], [1.0]]))
+        vertices.append(np.array([[xd], [yd], [client.vpDist], [1.0]]))
         cIdx = len(vertices)
-        vertices.append(np.array([[xc], [yc], [app.vpDist], [1.0]]))
+        vertices.append(np.array([[xc], [yc], [client.vpDist], [1.0]]))
 
         face0: Face = (v0, v1, dIdx)
         face1: Face = (v0, v1, cIdx)
 
         return [face0, face1]
     else:
-        xa = (x1 - x0) * (app.vpDist - z0) / (z1 - z0) + x0
-        ya = (y1 - y0) * (app.vpDist - z0) / (z1 - z0) + y0
+        xa = (x1 - x0) * (client.vpDist - z0) / (z1 - z0) + x0
+        ya = (y1 - y0) * (client.vpDist - z0) / (z1 - z0) + y0
 
-        xb = (x2 - x0) * (app.vpDist - z0) / (z2 - z0) + x0
-        yb = (y2 - y0) * (app.vpDist - z0) / (z2 - z0) + y0
+        xb = (x2 - x0) * (client.vpDist - z0) / (z2 - z0) + x0
+        yb = (y2 - y0) * (client.vpDist - z0) / (z2 - z0) + y0
 
         aIdx = len(vertices)
-        vertices.append(np.array([[xa], [ya], [app.vpDist], [1.0]]))
+        vertices.append(np.array([[xa], [ya], [client.vpDist], [1.0]]))
         bIdx = len(vertices)
-        vertices.append(np.array([[xb], [yb], [app.vpDist], [1.0]]))
+        vertices.append(np.array([[xb], [yb], [client.vpDist], [1.0]]))
 
         clippedFace: Face = (v0, aIdx, bIdx)
 
         return [clippedFace]
 
-def cullInstance(app, toCamMat: ndarray, inst: Instance, blockPos: Optional[BlockPos]) -> List[Tuple[Any, Face, Color]]:
+def cullInstance(client: ClientState, toCamMat: ndarray, inst: Instance, blockPos: Optional[BlockPos]) -> List[Tuple[Any, Face, Color]]:
     """
     This converts the instance's vertices to points in camera space, and then:
 
@@ -188,11 +189,11 @@ def cullInstance(app, toCamMat: ndarray, inst: Instance, blockPos: Optional[Bloc
             if not inst.visibleFaces[faceIdx]:
                 continue
             
-            if isBackBlockFace(app, blockPos, faceIdx):
+            if isBackBlockFace(client, blockPos, faceIdx):
                 skipNext = True
                 continue
 
-            light = blockFaceLight(app, blockPos, faceIdx)
+            light = blockFaceLight(client, blockPos, faceIdx)
             r = int(color[1:3], base=16)
             g = int(color[3:5], base=16)
             b = int(color[5:7], base=16)
@@ -202,18 +203,21 @@ def cullInstance(app, toCamMat: ndarray, inst: Instance, blockPos: Optional[Bloc
             g *= brightness
             b *= brightness
 
-            if blockPos == app.breakingBlockPos and app.breakingBlock != 0.0:
+            if blockPos == client.breakingBlockPos and client.breakingBlock != 0.0:
                 avg = (r + g + b) / 3.0
 
-                toolSlot = app.mode.player.inventory[app.mode.player.hotbarIdx]
+                player = client.getPlayer()
+                assert(player is not None)
+
+                toolSlot = player.inventory[player.hotbarIdx]
                 if toolSlot.isEmpty():
                     tool = ''
                 else:
-                    tool = toolSlot.item
+                    tool = toolSlot.stack.item
 
-                hardness = getHardnessAgainst(app, app.world.getBlock(blockPos), tool)
+                hardness = getHardnessAgainst(app, client.world.getBlock(blockPos), tool)
 
-                desaturation = app.breakingBlock / hardness
+                desaturation = client.breakingBlock / hardness
                 r += (avg - r) * desaturation
                 g += (avg - g) * desaturation
                 b += (avg - b) * desaturation
@@ -235,7 +239,7 @@ def cullInstance(app, toCamMat: ndarray, inst: Instance, blockPos: Optional[Bloc
                 continue
             '''
 
-        for clippedFace in clip(app, vertices, face):
+        for clippedFace in clip(client, vertices, face):
             faces.append([vertices, clippedFace, color])
 
     return faces
@@ -247,15 +251,15 @@ def blockPosIsVisible2(camX, camY, camZ, lookX, lookY, lookZ, pos: BlockPos) -> 
 
     return dot >= 0.0
 
-def blockPosIsVisible(app, pos: BlockPos) -> bool:
-    pitch = app.cameraPitch
-    yaw = app.cameraYaw 
+def blockPosIsVisible(client: ClientState, pos: BlockPos) -> bool:
+    pitch = client.cameraPitch
+    yaw = client.cameraYaw 
 
     lookX = cos(pitch)*sin(-yaw)
     lookY = sin(pitch)
     lookZ = cos(pitch)*cos(-yaw)
 
-    [camX, camY, camZ] = app.cameraPos
+    [camX, camY, camZ] = client.cameraPos
 
     # This is only a conservative estimate, so we move the camera "back"
     # to make sure we don't miss blocks behind us
@@ -269,13 +273,13 @@ def blockPosIsVisible(app, pos: BlockPos) -> bool:
 
     return dot >= 0
 
-def renderInstancesTk(app, canvas):
-    faces = drawToFaces(app)
+def renderInstancesTk(client: ClientState, canvas):
+    faces = drawToFaces(client)
 
-    toCamMat = worldToCameraMat(app.cameraPos, app.cameraYaw, app.cameraPitch)
+    toCamMat = worldToCameraMat(client.cameraPos, client.cameraYaw, client.cameraPitch)
 
-    for entity in app.entities:
-        model = app.entityModels[entity.kind.model]
+    for entity in client.entities:
+        model = CLIENT_DATA.entityModels[entity.kind.model]
 
         for mesh in model.models:
             offset = np.array([[entity.pos[0]], [entity.pos[1]], [entity.pos[2]]])
@@ -291,7 +295,7 @@ def renderInstancesTk(app, canvas):
 
             inst = Instance(mesh, offset, texture)
         
-            faces += cullInstance(app, toCamMat, inst, None)
+            faces += cullInstance(client, toCamMat, inst, None)
 
         #texture = app.entityTextures[entity.kind.name]
 
@@ -330,17 +334,17 @@ def renderInstancesTk(app, canvas):
     
     faces.sort(key=zCoord)
 
-    drawToCanvas(app, canvas, faces)
+    drawToCanvas(client, canvas, faces)
 
-def renderInstancesGl(app, canvas):
-    view = glViewMat(app.cameraPos, app.cameraYaw, app.cameraPitch)
+def renderInstancesGl(client: ClientState, canvas):
+    view = glViewMat(client.cameraPos, client.cameraYaw, client.cameraPitch)
 
     th = math.tan(0.5 * math.radians(70.0));
     zf = 100.0;
     zn = 0.1;
 
     projection = np.array([
-        [(app.height / app.width) / th, 0.0, 0.0, 0.0],
+        [(client.height / client.width) / th, 0.0, 0.0, 0.0],
         [0.0, 1.0 / th, 0.0, 0.0],
         [0.0, 0.0, zf / (zf - zn), 1.0],
         [0.0, 0.0, -(zf * zn) / (zf - zn), 0.0],
@@ -350,7 +354,7 @@ def renderInstancesGl(app, canvas):
 
     chunkVaos = []
 
-    for (pos, chunk) in app.world.chunks.items():
+    for (pos, chunk) in client.world.chunks.items():
         if not chunk.isVisible: continue 
 
         [cx, cy, cz] = chunk.pos
@@ -364,40 +368,41 @@ def renderInstancesGl(app, canvas):
     
     breakingBlockAmount = 0.0
 
-    if app.breakingBlock != 0.0 and hasattr(app.mode, 'player'):
-        toolStack = app.mode.player.inventory[app.mode.player.hotbarIdx].stack
-        if toolStack .isEmpty():
+    player = client.getPlayer()
+    if client.breakingBlock != 0.0 and player is not None:
+        toolStack = player.inventory[player.hotbarIdx].stack
+        if toolStack.isEmpty():
             tool = ''
         else:
             tool = toolStack.item
 
-        blockId = app.world.getBlock(app.breakingBlockPos)
+        blockId = client.world.getBlock(client.breakingBlockPos)
 
         if blockId != 'air':
             hardness = getHardnessAgainst(app, blockId, tool)
 
-            breakingBlockAmount = app.breakingBlock / hardness
+            breakingBlockAmount = client.breakingBlock / hardness
 
     b = math.floor(breakingBlockAmount * 10.0)
 
-    app.chunkProgram.useProgram()
-    glUniformMatrix4fv(app.chunkProgram.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
-    glUniformMatrix4fv(app.chunkProgram.getUniformLocation("projection"), 1, GL_FALSE, projection) #type:ignore
-    glUniform1f(app.chunkProgram.getUniformLocation("atlasWidth"), app.atlasWidth)
-    glUniform1i(app.chunkProgram.getUniformLocation("gameTime"), app.time)
+    CLIENT_DATA.chunkProgram.useProgram()
+    glUniformMatrix4fv(CLIENT_DATA.chunkProgram.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
+    glUniformMatrix4fv(CLIENT_DATA.chunkProgram.getUniformLocation("projection"), 1, GL_FALSE, projection) #type:ignore
+    glUniform1f(CLIENT_DATA.chunkProgram.getUniformLocation("atlasWidth"), CLIENT_DATA.atlasWidth)
+    glUniform1i(CLIENT_DATA.chunkProgram.getUniformLocation("gameTime"), client.time)
 
-    glUniform1i(app.chunkProgram.getUniformLocation("blockTexture"), 0)
-    glUniform1i(app.blockProgram.getUniformLocation("breakTexture"), 1)
+    glUniform1i(CLIENT_DATA.chunkProgram.getUniformLocation("blockTexture"), 0)
+    glUniform1i(CLIENT_DATA.chunkProgram.getUniformLocation("breakTexture"), 1)
 
     glActiveTexture(GL_TEXTURE0)
-    glBindTexture(GL_TEXTURE_2D, app.textureAtlas)
+    glBindTexture(GL_TEXTURE_2D, CLIENT_DATA.textureAtlas)
 
     glActiveTexture(GL_TEXTURE1)
-    glBindTexture(GL_TEXTURE_2D, app.breakTextures[b])
+    glBindTexture(GL_TEXTURE_2D, CLIENT_DATA.breakTextures[b])
 
-    (cp, lp) = world.toChunkLocal(app.breakingBlockPos)
+    (cp, lp) = world.toChunkLocal(client.breakingBlockPos)
     breakBlockIdx = lp.x * 16 * 16 + (lp.y % world.MESH_HEIGHT) * 16 + lp.z
-    breakBlockLoc = app.chunkProgram.getUniformLocation("breakBlockIdx")
+    breakBlockLoc = CLIENT_DATA.chunkProgram.getUniformLocation("breakBlockIdx")
 
     #print("drawing a chunk vao")
     for amt, chunkVao, pos, i in chunkVaos:
@@ -411,52 +416,51 @@ def renderInstancesGl(app, canvas):
 
         glDrawArrays(GL_TRIANGLES, 0, amt * 7)
     
-    drawEntities(app, view, projection)
+    drawEntities(client, view, projection)
 
     # https://learnopengl.com/Advanced-OpenGL/Cubemaps
     glDisable(GL_CULL_FACE)
     glDepthFunc(GL_LEQUAL)
-    app.skyProgram.useProgram()
+    CLIENT_DATA.skyProgram.useProgram()
     view[3, 0:3] = 0.0
-    glUniformMatrix4fv(app.skyProgram.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
-    glUniformMatrix4fv(app.skyProgram.getUniformLocation("projection"), 1, GL_FALSE, projection) #type:ignore
-    glUniform1i(app.skyProgram.getUniformLocation("gameTime"), app.time)
-    glUniform1i(app.skyProgram.getUniformLocation("sunTex"), 0)
+    glUniformMatrix4fv(CLIENT_DATA.skyProgram.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
+    glUniformMatrix4fv(CLIENT_DATA.skyProgram.getUniformLocation("projection"), 1, GL_FALSE, projection) #type:ignore
+    glUniform1i(CLIENT_DATA.skyProgram.getUniformLocation("gameTime"), client.time)
+    glUniform1i(CLIENT_DATA.skyProgram.getUniformLocation("sunTex"), 0)
 
     glActiveTexture(GL_TEXTURE0)
-    glBindTexture(GL_TEXTURE_2D, app.sunTex)
+    glBindTexture(GL_TEXTURE_2D, CLIENT_DATA.sunTex)
 
-    glBindVertexArray(app.skyboxVao)
+    glBindVertexArray(CLIENT_DATA.skyboxVao)
     glDrawArrays(GL_TRIANGLES, 0, 36)
     glBindVertexArray(0)
 
     glEnable(GL_CULL_FACE)
     glDepthFunc(GL_LESS)
 
+def drawEntities(client: ClientState, view, projection):
+    CLIENT_DATA.entityProgram.useProgram()
+    glUniform1i(CLIENT_DATA.entityProgram.getUniformLocation("skin"), 0)
+    glUniformMatrix4fv(CLIENT_DATA.entityProgram.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
+    glUniformMatrix4fv(CLIENT_DATA.entityProgram.getUniformLocation("projection"), 1, GL_FALSE, projection) #type:ignore
 
-def drawEntities(app, view, projection):
-    app.entityProgram.useProgram()
-    glUniform1i(app.blockProgram.getUniformLocation("skin"), 0)
-    glUniformMatrix4fv(app.entityProgram.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
-    glUniformMatrix4fv(app.entityProgram.getUniformLocation("projection"), 1, GL_FALSE, projection) #type:ignore
-
-    modelPos = app.entityProgram.getUniformLocation("model")
-    rotPos = app.entityProgram.getUniformLocation("rot")
+    modelPos = CLIENT_DATA.entityProgram.getUniformLocation("model")
+    rotPos = CLIENT_DATA.entityProgram.getUniformLocation("rot")
 
     glActiveTexture(GL_TEXTURE0)
 
-    for entity in app.entities:
-        model = app.entityModels[entity.kind.model]
+    for entity in client.entities:
+        model = CLIENT_DATA.entityModels[entity.kind.model]
 
         if entity.kind.name == 'item':
             item = entity.extra.stack.item
-            if item in app.glTextures:
-                texture = app.glTextures[entity.extra.stack.item]
+            if item in CLIENT_DATA.glTextures:
+                texture = CLIENT_DATA.glTextures[entity.extra.stack.item]
             else:
                 # FIXME: Items without a block form
-                texture = app.glTextures['stone']
+                texture = CLIENT_DATA.glTextures['stone']
         else:
-            texture = app.entityTextures[entity.kind.name]
+            texture = CLIENT_DATA.entityTextures[entity.kind.name]
 
         glBindTexture(GL_TEXTURE_2D, texture)
 
@@ -479,39 +483,26 @@ def drawEntities(app, view, projection):
                 i += 1
                 continue
 
-            (x, y, z) = entity.getRotation(app, i)
+            (x, y, z) = entity.getRotation(CLIENT_DATA.entityModels, CLIENT_DATA.entityAnimations, i)
 
-            glUniform1f(app.entityProgram.getUniformLocation("rotX"), x)
-            glUniform1f(app.entityProgram.getUniformLocation("rotY"), y)
-            glUniform1f(app.entityProgram.getUniformLocation("rotZ"), z)
+            glUniform1f(CLIENT_DATA.entityProgram.getUniformLocation("rotX"), x)
+            glUniform1f(CLIENT_DATA.entityProgram.getUniformLocation("rotY"), y)
+            glUniform1f(CLIENT_DATA.entityProgram.getUniformLocation("rotZ"), z)
 
             immunity = 1.0 if entity.immunity > 0 else 0.0
-            glUniform1f(app.entityProgram.getUniformLocation("immunity"), immunity)
+            glUniform1f(CLIENT_DATA.entityProgram.getUniformLocation("immunity"), immunity)
 
             glBindVertexArray(vao)
             glDrawArrays(GL_TRIANGLES, 0, num * 5)
 
             i += 1
 
-
-
-
-def doTheDraw(app, modelUniformLoc, amt):
-    #bId = chunk.blocks[i // 256, (i // 16) % 16, i % 16]
-    
-    #glDrawArrays(GL_TRIANGLES, 0, 36)
-    glDrawArraysInstanced(GL_TRIANGLES, 0, 36, amt)
-
-
-# Straight down: 40ms
-# Forward: 35ms
-
-def makeFrustrumCullCheck(app, pitch, yaw):
+def makeFrustrumCullCheck(client: ClientState, pitch, yaw):
     lookX = cos(pitch)*sin(-yaw)
     lookY = sin(pitch)
     lookZ = cos(pitch)*cos(-yaw)
 
-    [camX, camY, camZ] = app.cameraPos
+    [camX, camY, camZ] = client.cameraPos
 
     camX -= lookX
     camY -= lookY
@@ -522,22 +513,22 @@ def makeFrustrumCullCheck(app, pitch, yaw):
     
     return wrapper
 
-def drawToFaces(app):
+def drawToFaces(client: ClientState):
     # These perform view frustrum culling. The functions are precalculated at
     # the beginning of the loop because that causes *insanely* good speedups.
-    check1 = makeFrustrumCullCheck(app, app.cameraPitch, app.cameraYaw)
-    check2 = makeFrustrumCullCheck(app, app.cameraPitch, app.cameraYaw + (app.horizFov / 2))
-    check3 = makeFrustrumCullCheck(app, app.cameraPitch, app.cameraYaw - (app.horizFov / 2))
-    check4 = makeFrustrumCullCheck(app, app.cameraPitch - (app.vertFov / 2), app.cameraYaw)
-    check5 = makeFrustrumCullCheck(app, app.cameraPitch + (app.vertFov / 2), app.cameraYaw)
+    check1 = makeFrustrumCullCheck(client, client.cameraPitch, client.cameraYaw)
+    check2 = makeFrustrumCullCheck(client, client.cameraPitch, client.cameraYaw + (client.horizFov / 2))
+    check3 = makeFrustrumCullCheck(client, client.cameraPitch, client.cameraYaw - (client.horizFov / 2))
+    check4 = makeFrustrumCullCheck(client, client.cameraPitch - (client.vertFov / 2), client.cameraYaw)
+    check5 = makeFrustrumCullCheck(client, client.cameraPitch + (client.vertFov / 2), client.cameraYaw)
 
-    [camX, camY, camZ] = app.cameraPos
+    [camX, camY, camZ] = client.cameraPos
 
-    renderDist = math.sqrt(app.renderDistanceSq) + 1
+    renderDist = math.sqrt(client.renderDistanceSq) + 1
 
-    toCamMat = worldToCameraMat(app.cameraPos, app.cameraYaw, app.cameraPitch)
+    toCamMat = worldToCameraMat(client.cameraPos, client.cameraYaw, client.cameraPitch)
     faces = []
-    for chunk in app.world.chunks.values():
+    for chunk in client.world.chunks.values():
         if not chunk.isVisible: continue 
 
         [cx, cy, cz] = chunk.pos
@@ -574,15 +565,15 @@ def drawToFaces(app):
                     wx -= camX
                     wy -= camY
                     wz -= camZ
-                    if wx**2 + wz**2 <= app.renderDistanceSq:
-                        faces += cullInstance(app, toCamMat, inst, blockPos)
+                    if wx**2 + wz**2 <= client.renderDistanceSq:
+                        faces += cullInstance(client, toCamMat, inst, blockPos)
     return faces
 
-def drawToCanvas(app, canvas, faces):
-    wv = app.csToCanvasMat[0, 0]
-    hv = app.csToCanvasMat[1, 1]
-    x = app.csToCanvasMat[0, 2]
-    y = app.csToCanvasMat[1, 2]
+def drawToCanvas(client: ClientState, canvas, faces):
+    wv = client.csToCanvasMat[0, 0]
+    hv = client.csToCanvasMat[1, 1]
+    x = client.csToCanvasMat[0, 2]
+    y = client.csToCanvasMat[1, 2]
 
     def csToCanvas(v):
         a = v[0, 0]
@@ -626,68 +617,64 @@ def drawTextOutlined(canvas, x, y, **kwargs):
     canvas.create_text(x + 2, y + 2, fill='#444', **kwargs)
     canvas.create_text(x, y, fill='white', **kwargs)
 
-def getSlotCenterAndSize(app, slotIdx) -> Tuple[int, int, int]:
-    slotWidth = app.itemTextures['air'].width + 7
+def getSlotCenterAndSize(client: ClientState, slotIdx) -> Tuple[int, int, int]:
+    slotWidth = CLIENT_DATA.itemTextures['air'].width + 7
     if slotIdx < 9:
         margin = 10
-        x = (slotIdx - 4) * slotWidth + app.width / 2
-        y = app.height - margin - slotWidth / 2
+        x = (slotIdx - 4) * slotWidth + client.width / 2
+        y = client.height - margin - slotWidth / 2
         return (x, y, slotWidth)
     else:
         rowNum = (36 // 9) - 1
         rowIdx = (slotIdx // 9) - 1
-        x = ((slotIdx % 9) - 4) * slotWidth + app.width / 2
-        y = app.height / 2 - (rowIdx - (rowNum - 1) / 2) * slotWidth 
+        x = ((slotIdx % 9) - 4) * slotWidth + client.width / 2
+        y = client.height / 2 - (rowIdx - (rowNum - 1) / 2) * slotWidth 
         return (x, y, slotWidth)
 
 
-def drawMainInventory(app, canvas):
+def drawMainInventory(client: ClientState, canvas):
     # FIXME: 
-    if hasattr(app.mode, 'player'):
-        player = app.mode.player
-    else:
-        player = app.mode.submode.player
+    player = client.getPlayer()
+    assert(player is not None)
 
-    slotWidth = app.itemTextures['air'].width + 7
+    slotWidth = CLIENT_DATA.itemTextures['air'].width + 7
 
     for i in range(9, 36):
         slot = player.inventory[i]
 
-        (x, y, _) = getSlotCenterAndSize(app, i)
+        (x, y, _) = getSlotCenterAndSize(client, i)
 
-        drawSlot(app, canvas, x, y, slot)
+        drawSlot(client, canvas, x, y, slot)
 
 
-def drawHotbar(app, canvas):
+def drawHotbar(client: ClientState, canvas):
     # FIXME: 
-    if hasattr(app.mode, 'player'):
-        player = app.mode.player
-    else:
-        player = app.mode.submode.player
+    player = client.getPlayer()
+    assert(player is not None)
 
-    slotWidth = app.itemTextures['air'].width + 7
+    slotWidth = CLIENT_DATA.itemTextures['air'].width + 7
 
     margin = 10
 
     for (i, slot) in enumerate(player.inventory[:9]):
-        x = (i - 4) * slotWidth + app.width / 2
+        x = (i - 4) * slotWidth + client.width / 2
 
-        y = app.height - margin - slotWidth / 2
+        y = client.height - margin - slotWidth / 2
 
-        drawSlot(app, canvas, x, y, slot)
+        drawSlot(client, canvas, x, y, slot)
     
-    x = (player.hotbarIdx - 4) * slotWidth + app.width / 2
-    y = app.height - margin - slotWidth
+    x = (player.hotbarIdx - 4) * slotWidth + client.width / 2
+    y = client.height - margin - slotWidth
     canvas.create_rectangle(x - slotWidth / 2, y,
         x + slotWidth / 2,
         y + slotWidth,
         outline='white')
 
-def drawStack(app, canvas, x, y, stack: Stack):
-    slotWidth = app.itemTextures['air'].width + 6
+def drawStack(client: ClientState, canvas, x, y, stack: Stack):
+    slotWidth = CLIENT_DATA.itemTextures['air'].width + 6
 
     if not stack.isEmpty():
-        tex = app.itemTextures[stack.item]
+        tex = CLIENT_DATA.itemTextures[stack.item]
         image = tex
         canvas.create_image(x, y, image=image)
 
@@ -700,26 +687,26 @@ def drawStack(app, canvas, x, y, stack: Stack):
 
             drawTextOutlined(canvas, cornerX, cornerY, text=str(qty), font='Arial 12 bold')
 
-def drawSlot(app, canvas, x, y, slot: Slot):
+def drawSlot(client: ClientState, canvas, x, y, slot: Slot):
     """x and y are the *center* of the slot"""
 
-    slotWidth = app.itemTextures['air'].width + 6
+    slotWidth = CLIENT_DATA.itemTextures['air'].width + 6
 
     canvas.create_rectangle(x - slotWidth / 2, y - slotWidth / 2,
         x + slotWidth / 2,
         y + slotWidth / 2,
         fill='#8b8b8b', outline='#373737')
 
-    drawStack(app, canvas, x, y, slot.stack)
+    drawStack(client, canvas, x, y, slot.stack)
 
-def drawHud(app, canvas, startTime):
+def drawHud(client: ClientState, canvas, startTime):
     # Indicates the center of the screen
-    canvas.create_oval(app.width / 2 - 1, app.height / 2 - 1, 
-        app.width / 2 + 1, app.height / 2 + 1)
+    canvas.create_oval(client.width / 2 - 1, client.height / 2 - 1, 
+        client.width / 2 + 1, client.height / 2 + 1)
 
-    drawHotbar(app, canvas)
+    drawHotbar(client, canvas)
 
-    tickTime = sum(app.tickTimes) / len(app.tickTimes) * 1000.0
+    tickTime = sum(client.tickTimes) / len(client.tickTimes) * 1000.0
 
     drawTextOutlined(canvas, 10, 30, text=f'Tick Time: {tickTime:.2f}ms', anchor='nw')
     
@@ -734,40 +721,40 @@ def drawHud(app, canvas, startTime):
 
     drawTextOutlined(canvas, 10, 10, text=f'Frame Time: {frameTime:.2f}ms', anchor='nw')
 
-    drawTextOutlined(canvas, 10, 50, text=f"Eyes: {app.cameraPos[0]:.2f}, {app.cameraPos[1]:.2f}, {app.cameraPos[2]:.2f}", anchor='nw')
+    drawTextOutlined(canvas, 10, 50, text=f"Eyes: {client.cameraPos[0]:.2f}, {client.cameraPos[1]:.2f}, {client.cameraPos[2]:.2f}", anchor='nw')
     
-    chunkX = math.floor(app.cameraPos[0] / 16)
-    chunkY = math.floor(app.cameraPos[1] / world.CHUNK_HEIGHT)
-    chunkZ = math.floor(app.cameraPos[2] / 16)
+    chunkX = math.floor(client.cameraPos[0] / 16)
+    chunkY = math.floor(client.cameraPos[1] / world.CHUNK_HEIGHT)
+    chunkZ = math.floor(client.cameraPos[2] / 16)
 
     drawTextOutlined(canvas, 10, 140, text=f'Chunk coords: {chunkX}, {chunkY}, {chunkZ}', anchor='nw')
 
     # FIXME:
-    if hasattr(app.mode, 'player'):
-        player = app.mode.player
+    player = client.getPlayer()
+    if player is not None:
         drawTextOutlined(canvas, 10, 90, text=f"Feet: {player.pos[0]:.2f}, {player.pos[1]:.2f}, {player.pos[2]:.2f}", anchor='nw')
 
-        feetPos = (app.cameraPos[0], app.cameraPos[1] - app.mode.player.height + 0.1, app.cameraPos[2])
+        feetPos = (client.cameraPos[0], client.cameraPos[1] - player.height + 0.1, client.cameraPos[2])
         feetBlockPos = world.nearestBlockPos(feetPos[0], feetPos[1], feetPos[2])
         (ckPos, _) = world.toChunkLocal(feetBlockPos)
-        if ckPos in app.world.chunks:
-            lightLevel = app.world.getLightLevel(feetBlockPos)
-            blockLightLevel = app.world.getBlockLightLevel(world.nearestBlockPos(feetPos[0], feetPos[1], feetPos[2]))
+        if ckPos in client.world.chunks:
+            lightLevel = client.world.getLightLevel(feetBlockPos)
+            blockLightLevel = client.world.getBlockLightLevel(world.nearestBlockPos(feetPos[0], feetPos[1], feetPos[2]))
             drawTextOutlined(canvas, 10, 190, text=f'Sky {lightLevel}, Block {blockLightLevel}', anchor='nw')
 
-def redrawAll(app, canvas, doDrawHud=True):
+def redrawAll(client: ClientState, canvas, doDrawHud=True):
     startTime = time.time()
     
     # The sky
     # TODO:
     if not config.USE_OPENGL_BACKEND:
-        canvas.create_rectangle(0.0, 0.0, app.width, app.height, fill='#0080FF')
+        canvas.create_rectangle(0.0, 0.0, client.width, client.height, fill='#0080FF')
 
     # The world
     if config.USE_OPENGL_BACKEND:
-        renderInstancesGl(app, canvas)
+        renderInstancesGl(client, canvas)
     else:
-        renderInstancesTk(app, canvas)
+        renderInstancesTk(client, canvas)
 
     #origin = worldToCanvas(app, np.array([[0.0], [0.0], [0.0]]))
     #xAxis = worldToCanvas(app, np.array([[1.0], [0.0], [0.0]]))
@@ -782,7 +769,7 @@ def redrawAll(app, canvas, doDrawHud=True):
     #canvas.create_line(origin[0], origin[1], yAxis[0], yAxis[1], fill='green')
     #canvas.create_line(origin[0], origin[1], zAxis[0], zAxis[1], fill='blue')
 
-    if doDrawHud: drawHud(app, canvas, startTime)
+    if doDrawHud: drawHud(client, canvas, startTime)
 
 def drawItemFromBlock2(sz: int, base: Image.Image) -> Image.Image:
     from typing import cast

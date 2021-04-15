@@ -6,6 +6,7 @@ new entities are spawned, other entities are removed, collisions occur, etc.
 
 from entity import Entity
 from player import Player
+from client import ClientState
 from util import BlockPos, roundHalfUp, rayAABBIntersect, ChunkPos
 import world
 import time
@@ -154,10 +155,26 @@ def tick(app):
     if player.pos[1] < -64.0:
         player.hit(app, 10.0, (0.0, 0.0))
     
+    syncClient(app)
+    
     endTime = time.time()
     app.tickTimes[app.tickTimeIdx] = (endTime - startTime)
     app.tickTimeIdx += 1
     app.tickTimeIdx %= len(app.tickTimes)
+
+def syncClient(app):
+    # TODO: Copy
+    client: ClientState = app.client
+    client.world = app.world
+    client.entities = app.entities
+    client.player = app.mode.player
+    client.time = app.time
+    client.breakingBlock = app.breakingBlock
+    client.breakingBlockPos = app.breakingBlockPos
+    client.cameraPos = app.cameraPos
+    client.cameraPitch = app.cameraPitch
+    client.cameraYaw = app.cameraYaw
+    client.tickTimes = app.tickTimes
 
 def doMobDespawning(app):
     player = app.mode.player

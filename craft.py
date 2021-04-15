@@ -49,6 +49,8 @@ import cmu_112_graphics
 import tkinter
 import entity
 import tick
+import server
+from client import ClientState
 from util import ChunkPos
 from button import Button, ButtonManager, createSizedBackground
 from world import Chunk, World
@@ -108,7 +110,6 @@ class WorldLoadMode(Mode):
         if seed is None:
             seed = random.random()
 
-        #app.world = World(worldName, seed, anvilpath='C:/Users/Carson/AppData/Roaming/.minecraft/saves/TheTempleofNotch/region/')
         app.world = World(worldName, seed, importPath=importPath)
 
         try:
@@ -129,7 +130,6 @@ class WorldLoadMode(Mode):
         cz = math.floor(self.player.pos[2] / 16)
 
         app.world.loadChunk((app.textures, app.cube, app.textureIndices), ChunkPos(cx, cy, cz))
-
     
     def timerFired(self, app):
         if self.loadStage < 40:
@@ -137,6 +137,7 @@ class WorldLoadMode(Mode):
         elif self.loadStage < 60:
             world.tickChunks(app, maxTime=5.0)
         else:
+            tick.syncClient(app)
             app.mode = self.nextMode(app, self.player)
             
         self.loadStage += 1
@@ -356,7 +357,7 @@ class TitleMode(Mode):
                 app.mode = WorldListMode(app)
 
     def redrawAll(self, app, window, canvas):
-        render.redrawAll(app, canvas, doDrawHud=False)
+        render.redrawAll(app.client, canvas, doDrawHud=False)
 
         canvas.create_image(app.width / 2, 50, image=self.titleText)
         
@@ -482,7 +483,7 @@ class GameOverMode(Mode):
         self.buttons.addButton("respawn", respawnButton)
 
     def redrawAll(self, app, window, canvas):
-        render.redrawAll(app, canvas, doDrawHud=False)
+        render.redrawAll(app.client, canvas, doDrawHud=False)
         canvas.create_text(app.width / 2, app.height / 3, text="Game Over!")
         self.buttons.draw(app, canvas)
     
@@ -498,6 +499,11 @@ class GameOverMode(Mode):
             app.cameraPos = [0.0, 75.0, 0.0]
             app.mode = PlayingMode(app, player)
 
+def sendPlayerLook(app, yaw: float, pitch: float, onGround: bool):
+    app.cameraYaw = yaw
+    app.cameraPitch = pitch
+    app.mode.player.onGround = onGround
+
 class PlayingMode(Mode):
     lookedAtBlock = None
     mouseHeld: bool = False
@@ -505,18 +511,19 @@ class PlayingMode(Mode):
     player: Player
 
     def __init__(self, app, player: Player):
-        app.timerDelay = 30
+        app.timerDelay = 100
         setMouseCapture(app, True)
 
         self.player = player
 
     def redrawAll(self, app, window, canvas):
-        render.redrawAll(app, canvas, doDrawHud=app.doDrawHud)
+        render.redrawAll(app.client, canvas, doDrawHud=app.doDrawHud)
     
     def timerFired(self, app):
         self.lookedAtBlock = world.lookedAtBlock(app)
 
         if app.cinematic:
+            # TODO: Use framerate instead
             app.cameraPitch += app.pitchSpeed * 0.05
             app.cameraYaw += app.yawSpeed * 0.05
 
@@ -532,6 +539,9 @@ class PlayingMode(Mode):
                 self.player.velocity[1] = 0.0
 
         updateBlockBreaking(app, self)
+
+        client: ClientState = app.client
+        sendPlayerLook(app, client.cameraYaw, client.cameraPitch, client.getPlayer().onGround)
 
         tick.tick(app)
 
@@ -818,13 +828,13 @@ class InventoryMode(Mode):
     def redrawAll(self, app, window, canvas):
         self.submode.redrawAll(app, window, canvas)
 
-        render.drawMainInventory(app, canvas)
+        render.drawMainInventory(app.client, canvas)
 
         for gui in self.guis:
             gui.redrawAll(app, canvas)
         
         if app.mousePos is not None:
-            render.drawStack(app, canvas, app.mousePos[0], app.mousePos[1],
+            render.drawStack(app.client, canvas, app.mousePos[0], app.mousePos[1],
                 self.heldItem)
     
     def mousePressed(self, app, event):
@@ -955,20 +965,28 @@ def appStarted(app):
     # -------------------
     # Rendering Variables
     # -------------------
-    app.vpDist = 0.25
-    app.vpWidth = 3.0 / 4.0
-    app.vpHeight = app.vpWidth * app.height / app.width 
-    app.wireframe = False
-    app.renderDistanceSq = 9**2
 
-    app.horizFov = math.atan(app.vpWidth / app.vpDist)
-    app.vertFov = math.atan(app.vpHeight / app.vpDist)
+    client = ClientState()
 
-    print(f"Horizontal FOV: {app.horizFov} ({math.degrees(app.horizFov)}°)")
-    print(f"Vertical FOV: {app.vertFov} ({math.degrees(app.vertFov)}°)")
+    client.height = app.height
+    client.width = app.width
 
-    app.csToCanvasMat = render.csToCanvasMat(app.vpDist, app.vpWidth,
-                        app.vpHeight, app.width, app.height)
+    client.vpDist = 0.25
+    client.vpWidth = 3.0 / 4.0
+    client.vpHeight = client.vpWidth * app.height / app.width 
+    client.wireframe = False
+    client.renderDistanceSq = 9**2
+
+    client.horizFov = math.atan(client.vpWidth / client.vpDist)
+    client.vertFov = math.atan(client.vpHeight / client.vpDist)
+
+    print(f"Horizontal FOV: {client.horizFov} ({math.degrees(client.horizFov)}°)")
+    print(f"Vertical FOV: {client.vertFov} ({math.degrees(client.vertFov)}°)")
+
+    client.csToCanvasMat = render.csToCanvasMat(client.vpDist, client.vpWidth,
+                        client.vpHeight, client.width, client.height)
+
+    app.client = client
 
     # ---------------
     # Input Variables
@@ -1094,15 +1112,17 @@ def mouseMovedOrDragged(app, event):
 
         app.yawSpeed += 0.01 * (xChange - app.yawSpeed)
         app.pitchSpeed += 0.01 * (yChange - app.pitchSpeed)
+    
+        client: ClientState = app.client
 
         if not app.cinematic:
-            app.cameraPitch += yChange * 0.01
-            app.cameraYaw += xChange * 0.01
+            client.cameraPitch += yChange * 0.01
+            client.cameraYaw += xChange * 0.01
         
-        if app.cameraPitch < -math.pi / 2 * 0.95:
-            app.cameraPitch = -math.pi / 2 * 0.95
-        elif app.cameraPitch > math.pi / 2 * 0.95:
-            app.cameraPitch = math.pi / 2 * 0.95
+        if client.cameraPitch < -math.pi / 2 * 0.95:
+            client.cameraPitch = -math.pi / 2 * 0.95
+        elif client.cameraPitch > math.pi / 2 * 0.95:
+            client.cameraPitch = math.pi / 2 * 0.95
 
     if app.captureMouse:
         if config.USE_OPENGL_BACKEND:

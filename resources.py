@@ -11,6 +11,7 @@ import config
 import copy
 import entity
 import os
+from client import CLIENT_DATA
 from util import Color, BlockId
 from sound import Sound
 from shader import ShaderProgram
@@ -69,30 +70,30 @@ class Recipe:
         return True
 
 def loadEntityModels(app):
-    app.entityModels = dict()
+    CLIENT_DATA.entityModels = dict()
 
     for path, _, files in os.walk('assets/Vanilla_Resource_Pack_1.16.220/models'):
         for file in files:
-            app.entityModels.update(entity.openModels(path + '/' + file, app))
+            CLIENT_DATA.entityModels.update(entity.openModels(path + '/' + file, app))
     
-    app.entityModels.update(entity.openModels('assets/block.geo.json', app))
+    CLIENT_DATA.entityModels.update(entity.openModels('assets/block.geo.json', app))
     
 def loadEntityAnimations(app):
-    app.entityAnimations = dict()
+    CLIENT_DATA.entityAnimations = dict()
 
     for path, _, files in os.walk('assets/Vanilla_Resource_Pack_1.16.220/animations'):
         for file in files:
             if 'bee' in file:
                 # Who in their right mind puts COMMENTS in a JSON file????
                 continue
-            app.entityAnimations.update(entity.openAnimations(path + '/' + file))
+            CLIENT_DATA.entityAnimations.update(entity.openAnimations(path + '/' + file))
 
 def loadEntityTextures(app):
-    app.entityTextures = {}
-    app.entityTextures['creeper'] = loadTexture('assets/creeper.png')
-    app.entityTextures['fox'] = loadTexture('assets/fox.png')
-    app.entityTextures['zombie'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/zombie/zombie.png')
-    app.entityTextures['skeleton'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/skeleton/skeleton.png')
+    CLIENT_DATA.entityTextures = {}
+    CLIENT_DATA.entityTextures['creeper'] = loadTexture('assets/creeper.png')
+    CLIENT_DATA.entityTextures['fox'] = loadTexture('assets/fox.png')
+    CLIENT_DATA.entityTextures['zombie'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/zombie/zombie.png')
+    CLIENT_DATA.entityTextures['skeleton'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/skeleton/skeleton.png')
 
 def imageToTexture(image: Image.Image, flip=True) -> int:
     if flip:
@@ -605,32 +606,28 @@ def loadTextureAtlas(app):
             atlas.paste(im, (idx * 16, 0))
             idx += 1
     
-    app.atlasWidth = width
+    CLIENT_DATA.atlasWidth = width
         
     return imageToTexture(atlas)
 
 def loadGlTextures(app):
     app.cubeVao, app.cubeBuffer = loadCubeVao()
-    app.skyboxVao = loadSkyVao()
+    CLIENT_DATA.skyboxVao = loadSkyVao()
 
-    app.glTextures = dict()
+    CLIENT_DATA.glTextures = {}
 
     for (name, sides) in app.texturePaths.items():
-        app.glTextures[name] = imageToTexture(loadBlockUVFromSides(app, **sides))
+        CLIENT_DATA.glTextures[name] = imageToTexture(loadBlockUVFromSides(app, **sides))
 
-    app.breakTextures = []
+    CLIENT_DATA.breakTextures = []
     for i in range(10):
-        app.breakTextures.append(loadTexture(f'assets/destroy_stage_{i}.png'))
+        CLIENT_DATA.breakTextures.append(loadTexture(f'assets/destroy_stage_{i}.png'))
 
-    app.blockProgram = ShaderProgram('shaders/blockShader.vert', 'shaders/blockShader.frag')
-
-    app.chunkProgram = ShaderProgram('shaders/chunkShader.vert', 'shaders/chunkShader.frag')
-    
-    app.guiProgram = ShaderProgram('shaders/guiShader.vert', 'shaders/guiShader.frag')
-
-    app.entityProgram = ShaderProgram('shaders/entityShader.vert', 'shaders/entityShader.frag')
-
-    app.skyProgram = ShaderProgram('shaders/skyShader.vert', 'shaders/skyShader.frag')
+    CLIENT_DATA.blockProgram = ShaderProgram('shaders/blockShader.vert', 'shaders/blockShader.frag')
+    CLIENT_DATA.chunkProgram = ShaderProgram('shaders/chunkShader.vert', 'shaders/chunkShader.frag')
+    CLIENT_DATA.guiProgram = ShaderProgram('shaders/guiShader.vert', 'shaders/guiShader.frag')
+    CLIENT_DATA.entityProgram = ShaderProgram('shaders/entityShader.vert', 'shaders/entityShader.frag')
+    CLIENT_DATA.skyProgram = ShaderProgram('shaders/skyShader.vert', 'shaders/skyShader.frag')
 
 #def createTk
 
@@ -853,8 +850,8 @@ def loadResources(app):
     loadTkTextures(app)
     if config.USE_OPENGL_BACKEND:
         loadGlTextures(app)
-        app.textures = app.glTextures
-        app.textureAtlas = loadTextureAtlas(app)
+        app.textures = CLIENT_DATA.glTextures
+        CLIENT_DATA.textureAtlas = loadTextureAtlas(app)
         loadEntityTextures(app)
         loadEntityAnimations(app)
 
@@ -871,7 +868,7 @@ def loadResources(app):
         newTex.paste(tex, (0, 1 * tex.height))
         newTex.paste(moonTex, (0, 3 * tex.height))
 
-        app.sunTex = imageToTexture(newTex)
+        CLIENT_DATA.sunTex = imageToTexture(newTex)
 
         #app.sunTex = loadTexture('assets/furnace.png')
 
@@ -1043,9 +1040,9 @@ def loadResources(app):
             app.tkItemTextures[name] = newTkTex
     
     if config.USE_OPENGL_BACKEND:
-        app.itemTextures = app.glItemTextures
+        CLIENT_DATA.itemTextures = app.glItemTextures
     else:
-        app.itemTextures = app.tkItemTextures
+        CLIENT_DATA.itemTextures = app.tkItemTextures
 
 def getBlockDrop(app, block: world.BlockId, tool: world.ItemId) -> world.ItemId:
     drops = app.blockDrops[block]
