@@ -389,8 +389,8 @@ def submitChat(app, text: str):
         if parts[0] == 'pathfind':
             player: Player = app.mode.player
             target = player.getBlockPos()
-            for entity in app.entities:
-                entity.updatePath(app.world, target)
+            for ent in app.entities:
+                ent.updatePath(app.world, target)
         elif parts[0] == 'give':
             itemId = parts[1]
             if len(parts) == 3:
@@ -421,6 +421,11 @@ def submitChat(app, text: str):
                 app.mode.player.creative = True
             elif parts[1] == 'survival':
                 app.mode.player.creative = False
+        elif parts[0] == 'summon':
+            player = app.mode.player
+            ent = entity.Entity(app, parts[1],
+                player.pos[0]+0.5, player.pos[1]+0.5, player.pos[2]+0.5)
+            app.entities.append(ent)
 
     else:
         print(f"CHAT: {text}")
@@ -994,8 +999,15 @@ def updateBlockBreaking(app, mode: PlayingMode):
             droppedItem = getBlockDrop(app, app.world.getBlock(pos), tool)
             world.removeBlock(app, pos)
             app.sounds['destroy_grass'].play()
+
             if droppedItem is not None:
-                mode.player.pickUpItem(app, Stack(droppedItem, 1))
+                ent = entity.Entity(app, 'item', pos.x, pos.y, pos.z)
+                ent.extra.stack = Stack(droppedItem, 1)
+                ent.velocity[0] = (random.random() - 0.5) * 0.1
+                ent.velocity[1] = (random.random() - 0.5) * 0.1
+                ent.velocity[2] = (random.random() - 0.5) * 0.1
+
+                app.entities.append(ent)
     else:
         app.breakingBlock = 0.0
 

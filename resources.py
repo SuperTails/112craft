@@ -72,6 +72,8 @@ def loadEntityModels(app):
         for file in files:
             app.entityModels.update(entity.openModels(path + '/' + file, app))
     
+    app.entityModels.update(entity.openModels('assets/block.geo.json', app))
+    
 def loadEntityAnimations(app):
     app.entityAnimations = dict()
 

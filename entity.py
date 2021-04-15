@@ -25,7 +25,8 @@ import molang
 import model 
 import functools
 import config
-from util import BlockPos, roundHalfUp
+from inventory import Stack
+from util import BlockPos, roundHalfUp, ItemId
 from dataclasses import dataclass
 from OpenGL.GL import * #type:ignore
 from nbt import nbt
@@ -319,6 +320,43 @@ def openModels(path, app) -> dict[str, EntityModel]:
 
 #print(models['fox'].bones[3].cubes[0].toVertices())
 
+class ItemData:
+    stack: Stack
+    age: int
+    pickupDelay: int
+
+    def __init__(self):
+        self.stack = Stack('stone', 1)
+        self.age = 6000
+        # TODO: should increase if dropped by player or fox
+        self.pickupDelay = 10
+    
+    def tick(self, entity: 'Entity'):
+        self.age -= 1
+        if self.age == 0:
+            entity.health = 0
+
+        if self.pickupDelay > 0: 
+            self.pickupDelay -= 1
+
+
+    def toNbt(self) -> nbt.TAG_Compound:
+        tag = nbt.TAG_Compound()
+        tag.tags.append(nbt.TAG_Short(self.age, 'Age'))
+        tag.tags.append(nbt.TAG_Short(self.pickupDelay, 'PickupDelay'))
+
+        item = self.stack.toNbt()
+        assert(item is not None)
+        item.name = 'Item'
+        tag.tags.append(item)
+
+        return tag
+
+    def fromNbt(self, tag: nbt.TAG_Compound):
+        self.age = tag['Age'].value
+        self.pickupDelay = tag['PickupDelay'].value
+        self.stack = Stack.fromNbt(tag['Item'])
+
 @dataclass
 class EntityKind:
     name: str
@@ -328,6 +366,17 @@ class EntityKind:
     radius: float
     height: float
     ai: 'Ai'
+    extraData: Optional[Any]
+
+    def __init__(self, name, model, maxHealth, walkSpeed, radius, height, ai, extraData=None):
+        self.name = name
+        self.model = model
+        self.maxHealth = maxHealth
+        self.walkSpeed = walkSpeed
+        self.radius = radius
+        self.height = height
+        self.ai = ai
+        self.extraData = extraData
 
 def registerEntityKinds(app):
     app.entityKinds = {
@@ -376,6 +425,16 @@ def registerEntityKinds(app):
             height=1.5,
             ai=Ai([NullTask()])
         ),
+        'item': EntityKind(
+            name='item',
+            model='geometry.item',
+            maxHealth=5.0,
+            walkSpeed=0.0,
+            radius=0.1,
+            height=0.2,
+            ai=Ai([NullTask()]),
+            extraData=ItemData(),
+        ),
     }
 
 class Entity:
@@ -403,6 +462,8 @@ class Entity:
 
     ai: 'Ai'
 
+    extra: Optional[Any]
+
     def __init__(self, app, kind: str = '', x: float = 0.0, y: float = 0.0, z: float = 0.0, nbt: Optional[nbt.TAG_Compound] = None):
         if nbt is None:
             self.pos = [x, y, z]
@@ -422,9 +483,9 @@ class Entity:
 
             if self.kind.name == 'zombie':
                 self.variables['gliding_speed_value'] = 1.0
-            elif self.kind.name == 'leg_rot':
+            elif self.kind.name == 'creeper':
                 self.variables['leg_rot'] = 0.0
-
+            
             self.lifeTime = 0
             self.distanceMoved = 0.0
 
@@ -433,6 +494,7 @@ class Entity:
             self.walkSpeed = self.kind.walkSpeed
             self.health = self.kind.maxHealth
             self.ai = copy.deepcopy(self.kind.ai)
+            self.extra = copy.deepcopy(self.kind.extraData)
         else:
             self.fromNbt(app, nbt)
     
@@ -446,7 +508,10 @@ class Entity:
 
         self.health = data["Health"].value
         self.onGround = data["OnGround"].value
-    
+
+        if self.extra is not None:
+            self.extra.fromNbt(data)
+
     def toNbt(self) -> nbt.TAG_Compound:
         data = nbt.TAG_Compound()
 
@@ -467,6 +532,10 @@ class Entity:
         data.tags.append(nbt.TAG_Float(name="Health", value=self.health))
 
         data.tags.append(nbt.TAG_Byte(name="OnGround", value=self.onGround))
+
+        if self.extra is not None:
+            extra = self.extra.toNbt()
+            data.tags += extra.tags
 
         return data
     
@@ -510,13 +579,17 @@ class Entity:
             anim = app.entityAnimations['animation.humanoid.move']
         elif self.kind.name == 'skeleton':
             anim = app.entityAnimations['animation.humanoid.bow_and_arrow']
+        elif self.kind.name == 'item':
+            anim = None
         else:
             raise Exception(self.kind)
         
         #if anim is not None:
         #    print(boneName)
 
-        if boneName == 'head':
+        if self.kind.name == 'item':
+            rot = [0.0, self.lifeTime * 3.0, 0.0]
+        elif boneName == 'head':
             rot = [0.0, math.degrees(self.headAngle - self.bodyAngle), 0.0]
         elif anim is not None and boneName in anim.bones:
             (x, y, z) = anim.bones[boneName].rotation
@@ -622,6 +695,9 @@ class Entity:
         elif self.onGround:
             self.velocity[0] = 0.0
             self.velocity[2] = 0.0
+        
+        if self.extra is not None:
+            self.extra.tick(self)
     
     def updatePath(self, world, target: BlockPos):
         start = self.getBlockPos()

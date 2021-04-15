@@ -5,6 +5,7 @@ new entities are spawned, other entities are removed, collisions occur, etc.
 """
 
 from entity import Entity
+from player import Player
 from util import BlockPos, roundHalfUp, rayAABBIntersect
 import world
 import time
@@ -87,7 +88,7 @@ def tick(app):
     # Likewise for side to side movement
     x = float(app.d) - float(app.a)
 
-    player = app.mode.player
+    player: Player = app.mode.player
 
     if x != 0.0 or z != 0.0:
         mag = math.sqrt(x*x + z*z)
@@ -128,6 +129,14 @@ def tick(app):
             entity.velocity[1] = 0.40
         
         entity.tick(app.world, entities, player.pos[0], player.pos[2])
+
+        if entity.kind.name == 'item':
+            dx = (player.pos[0] - entity.pos[0])**2
+            dy = (player.pos[1] - entity.pos[1])**2
+            dz = (player.pos[2] - entity.pos[2])**2
+            if math.sqrt(dx + dy + dz) < 2.0 and entity.extra.pickupDelay == 0:
+                player.pickUpItem(app, entity.extra.stack)
+                entity.health = 0.0
     
     endTime = time.time()
     app.tickTimes[app.tickTimeIdx] = (endTime - startTime)

@@ -447,14 +447,25 @@ def drawEntities(app, view, projection):
 
     for entity in app.entities:
         model = app.entityModels[entity.kind.model]
-        texture = app.entityTextures[entity.kind.name]
+
+        if entity.kind.name == 'item':
+            item = entity.extra.stack.item
+            if item in app.glTextures:
+                texture = app.glTextures[entity.extra.stack.item]
+            else:
+                # FIXME: Items without a block form
+                texture = app.glTextures['stone']
+        else:
+            texture = app.entityTextures[entity.kind.name]
 
         glBindTexture(GL_TEXTURE_2D, texture)
 
+        sca = 0.25 if entity.kind.name == 'item' else 1.0
+
         modelMat = np.array([
-            1.0, 0.0, 0.0, 0.0,
-            0.0, 1.0, 0.0, 0.0,
-            0.0, 0.0, 1.0, 0.0,
+            sca, 0.0, 0.0, 0.0,
+            0.0, sca, 0.0, 0.0,
+            0.0, 0.0, sca, 0.0,
             entity.pos[0], entity.pos[1], entity.pos[2], 1.0
         ], dtype='float32')
 
