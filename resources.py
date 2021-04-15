@@ -11,7 +11,7 @@ import config
 import copy
 import entity
 import os
-from util import Color
+from util import Color, BlockId
 from sound import Sound
 from shader import ShaderProgram
 from PIL import Image
@@ -19,6 +19,9 @@ import typing
 from typing import List, Optional, Tuple
 from player import Stack
 from OpenGL.GL import * #type:ignore
+import json
+import requests
+import random
 
 class Recipe:
     inputs: List[List[Optional[world.ItemId]]]
@@ -659,16 +662,105 @@ def getAttackDamage(app, item: str):
         return 6.5
     else:
         return 0.0
+    
+def getVersionJson():
+    URL = 'https://launchermeta.mojang.com/v1/packages/436877ffaef948954053e1a78a366b8b7c204a91/1.16.5.json'
+
+    if not os.path.exists('assets/1.16.5.json'):
+        data = requests.get(URL).text
+        with open('assets/1.16.5.json', 'w') as f:
+            f.write(data)
+    
+    with open('assets/1.16.5.json', 'r') as f:
+        return json.load(f)
+
+def getAssetIndex():
+    versionJson = getVersionJson()
+    url = versionJson['assetIndex']['url']
+
+    if not os.path.exists('assets/1.16.assets.json'):
+        data = requests.get(url).text
+        with open('assets/1.16.assets.json', 'w') as f:
+            f.write(data)
+    
+    with open('assets/1.16.assets.json', 'r') as f:
+        return json.load(f)
+
+def downloadSound(assetIndex, name: str):
+    path = 'assets/sounds/' + name
+    if not os.path.exists(path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+        hashStr = assetIndex['objects'][name]['hash']
+        url = f'http://resources.download.minecraft.net/{hashStr[:2]}/{hashStr}'
+
+        print(f"Downloading {name}")
+    
+        data = requests.get(url)
+        with open(path, 'wb') as f:
+            f.write(data.content)
+
+def getSoundKind(app, blockId: BlockId):
+    try:
+        return app.soundKinds[blockId]
+    except:
+        print(f"Using fallback sound kind for {blockId}")
+        return 'grass'
+        
+def getStepSound(app, blockId: BlockId):
+    kind = getSoundKind(app, blockId)
+    return random.choice(app.stepSounds[kind])
+
+def getDigSound(app, blockId: BlockId):
+    kind = getSoundKind(app, blockId)
+    return random.choice(app.digSounds[kind])
+
+def loadSoundArray(app, index, category: str) -> dict[str, List[Sound]]:
+    result = {}
+
+    for blockKind in ['grass', 'gravel', 'stone', 'wood']:
+        sounds = []
+
+        i = 1
+        try:
+            while i < 10:
+                downloadSound(index, f'minecraft/sounds/{category}/{blockKind}{i}.ogg')
+
+                sounds.append(Sound(f'assets/sounds/minecraft/sounds/{category}/{blockKind}{i}.ogg'))
+
+                i += 1
+        except KeyError:
+            if i == 1:
+                raise Exception(f"Likely invalid sound type {category}/{blockKind}")
+        
+        result[blockKind] = sounds
+    
+    return result
+
+def loadSounds(app):
+    index = getAssetIndex()
+
+    app.stepSounds = {}
+    app.digSounds = {}
+
+    app.stepSounds = loadSoundArray(app, index, 'step')
+    app.digSounds = loadSoundArray(app, index, 'dig')
+
+    app.soundKinds = {
+        'grass': 'grass',
+        'dirt': 'gravel',
+        'cobblestone': 'stone',
+        'stone': 'stone',
+        'furnace': 'stone',
+        'log': 'wood',
+        'planks': 'wood',
+        'crafting_table': 'wood',
+    }
 
 def loadResources(app):
     app.rePack = ResourcePack('assets/Vanilla_Resource_Pack_1.16.220')
-
-    app.sounds = {
-        'grass': Sound('assets/grass.ogg'),
-        'destroy_grass': Sound('assets/destroy_grass.ogg')
-    }
     
-    #Sound('assets/Vanilla_Resource_Pack_1.16.220/sounds/dig/grass1.fsb')
+    loadSounds(app)
 
     app.furnaceRecipes = {
         'iron_ore': 'iron_ingot'

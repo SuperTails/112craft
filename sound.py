@@ -14,6 +14,13 @@ class Sound:
                 data = fsb5.FSB5(f.read())
 
             print(data.get_sample_extension())
+            for sample in data.samples:
+                print(f'frq: {sample.frequency}')
+                print(f'ch: {sample.channels}')
+                print(f'sa: {sample.samples}')
+        
+            rebuilt = data.rebuild_sample(data.samples[0])
+            print(rebuilt)
         else:
             raise Exception(f"Unsupported file type {path}")
     

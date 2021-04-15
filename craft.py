@@ -54,6 +54,7 @@ from world import Chunk, World
 from typing import List, Optional, Tuple, Any
 from enum import Enum
 from player import Player, Slot, Stack
+import resources
 from resources import loadResources, getHardnessAgainst, getBlockDrop, getAttackDamage
 from nbt import nbt
 
@@ -577,8 +578,10 @@ class PlayingMode(Mode):
 
                 if stack.amount > 0:
                     stack.amount -= 1
-
+                
                 world.addBlock(app, pos2, stack.item)
+
+                resources.getDigSound(app, app.world.getBlock(pos2)).play()
     
     def mouseReleased(self, app, event):
         self.mouseHeld = False
@@ -1018,8 +1021,10 @@ def updateBlockBreaking(app, mode: PlayingMode):
 
         if app.breakingBlock >= hardness:
             droppedItem = getBlockDrop(app, app.world.getBlock(pos), tool)
+
+            resources.getDigSound(app, app.world.getBlock(pos)).play()
+
             world.removeBlock(app, pos)
-            app.sounds['destroy_grass'].play()
 
             if droppedItem is not None:
                 ent = entity.Entity(app, 'item', pos.x, pos.y, pos.z)
