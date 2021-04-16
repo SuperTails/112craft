@@ -215,7 +215,7 @@ def cullInstance(client: ClientState, toCamMat: ndarray, inst: Instance, blockPo
                 else:
                     tool = toolSlot.stack.item
 
-                hardness = getHardnessAgainst(app, client.world.getBlock(blockPos), tool)
+                hardness = getHardnessAgainst(client.world.getBlock(blockPos), tool)
 
                 desaturation = client.breakingBlock / hardness
                 r += (avg - r) * desaturation
@@ -379,7 +379,7 @@ def renderInstancesGl(client: ClientState, canvas):
         blockId = client.world.getBlock(client.breakingBlockPos)
 
         if blockId != 'air':
-            hardness = getHardnessAgainst(app, blockId, tool)
+            hardness = getHardnessAgainst(blockId, tool)
 
             breakingBlockAmount = client.breakingBlock / hardness
 

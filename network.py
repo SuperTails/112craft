@@ -6,10 +6,39 @@ from quarry.types.chunk import BlockArray
 from queue import SimpleQueue
 from dataclasses import dataclass
 from typing import List, Any, Tuple, Optional
+from enum import Enum
+from util import BlockPos
 import math
 
 c2sQueue = SimpleQueue()
 s2cQueue = SimpleQueue()
+
+class DiggingAction(Enum):
+    START_DIGGING = 0,
+    CANCEL_DIGGING = 1,
+    FINISH_DIGGING = 2,
+    DROP_ITEM_STACK = 3,
+    DROP_ITEM = 4,
+    UPDATE_ITEM = 5,
+
+@dataclass
+class PlayerDiggingC2S:
+    action: DiggingAction
+    location: BlockPos
+    face: int
+
+    def send(self, pro):
+        if self.face == 2:
+            face = 3
+        elif self.face == 3:
+            face = 2
+        else:
+            face = self.face
+        
+        pro.send_packet('player_digging',
+            pro.buff_type.pack_varint(self.action.value[0]) +
+            pro.buff_type.pack_position(self.location.x, self.location.y, -(self.location.z+1)) +
+            pro.buff_type.pack('b', face))
 
 @dataclass
 class PlayerMovementC2S:
@@ -55,7 +84,7 @@ class PlayerPositionAndLookC2S:
 
     def send(self, pro):
         pro.send_packet('player_position_and_look', 
-            pro.buff_type.pack('dddff?', self.x, self.y+0.5, -self.z, 180-math.degrees(self.yaw), math.degrees(-self.pitch), self.onGround))
+            pro.buff_type.pack('dddff?', self.x+0.5, self.y+0.5, -(self.z+0.5), 180-math.degrees(self.yaw), math.degrees(-self.pitch), self.onGround))
 
 @dataclass
 class PlayerPositionC2S:
@@ -66,7 +95,7 @@ class PlayerPositionC2S:
 
     def send(self, pro):
         pro.send_packet('player_position',
-            pro.buff_type.pack('ddd?', self.x, self.y+0.5, -self.z, self.onGround))
+            pro.buff_type.pack('ddd?', self.x+0.5, self.y+0.5, -(self.z+0.5), self.onGround))
 
 @dataclass
 class TeleportConfirmC2S:
@@ -74,6 +103,37 @@ class TeleportConfirmC2S:
 
     def send(self, pro):
         pro.send_packet('teleport_confirm', pro.buff_type.pack_varint(self.teleportId))
+
+@dataclass
+class AckPlayerDiggingS2C:
+    location: BlockPos
+    block: int
+    status: DiggingAction
+    successful: bool
+
+    @classmethod
+    def fromBuf(cls, buf):
+        x, y, z = buf.unpack_position()
+        location = BlockPos(x, y, -z-1)
+
+        block = buf.unpack_varint()
+
+        status = DiggingAction((buf.unpack_varint(),))
+
+        successful = buf.unpack('?')
+
+        return cls(location, block, status, successful)
+
+@dataclass
+class TimeUpdateS2C:
+    worldAge: int
+    dayTime: int
+
+    @classmethod
+    def fromBuf(cls, buf):
+        worldAge, dayTime = buf.unpack('ll')
+
+        return cls(worldAge, dayTime)
 
 @dataclass
 class PlayerPositionAndLookS2C:
@@ -103,7 +163,39 @@ class PlayerPositionAndLookS2C:
 
         teleportId = buf.unpack_varint()
 
-        return cls(x, y-0.5, -z, 180-yaw, -pitch, xRel, yRel, zRel, yawRel, pitchRel, teleportId)
+        return cls(x-0.5, y-0.5, -(z-0.5), 180-yaw, -pitch, xRel, yRel, zRel, yawRel, pitchRel, teleportId)
+
+@dataclass
+class SpawnEntityS2C:
+    entityId: int
+    objectUUID: Any
+
+    kind: int
+
+    x: float
+    y: float
+    z: float
+
+    pitch: float
+    yaw: float
+
+    data: int
+
+    xVel: int
+    yVel: int
+    zVel: int
+
+    @classmethod
+    def fromBuf(cls, buf):
+        entityId = buf.unpack_varint()
+        objectUUID = buf.unpack_uuid()
+        kind = buf.unpack_varint()
+        x, y, z, pitch, yaw = buf.unpack('dddbb')
+        data = buf.unpack('I')
+        xVel, yVel, zVel = buf.unpack('hhh')
+
+        return cls(entityId, objectUUID, kind, x-0.5, y-0.5, -(z-0.5), math.pi*2*256*-pitch, math.pi*2*256*-yaw, data, xVel, yVel, zVel)
+
 
 @dataclass
 class ChunkDataS2C:
@@ -148,6 +240,24 @@ class MinecraftProtocol(ClientProtocol):
         
         self.mainLoop = self.ticker.add_loop(1, doTick)
         self.ticker.start()
+    
+    def packet_spawn_object(self, buf):
+        s2cQueue.put(SpawnEntityS2C.fromBuf(buf))
+        buf.discard()
+    
+    def packet_acknowledge_player_digging(self, buf):
+        s2cQueue.put(AckPlayerDiggingS2C.fromBuf(buf))
+        buf.discard()
+    
+    def packet_time_update(self, buf):
+        s2cQueue.put(TimeUpdateS2C.fromBuf(buf))
+        buf.discard()
+    
+    def packet_destroy_entities(self, buf):
+        buf.discard()
+    
+    def packet_entity_look(self, buf):
+        buf.discard()
     
     def packet_block_change(self, buf):
         buf.discard()
@@ -226,7 +336,7 @@ class MinecraftFactory(ClientFactory):
 @defer.inlineCallbacks
 def main():
     with open('creds.txt', 'r') as f:
-        [username, password] = f.readlines()
+        [username, password] = f.readlines()[:2]
     
     username = username.strip()
     password = password.strip()

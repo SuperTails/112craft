@@ -841,6 +841,10 @@ def loadResources(app):
         'torch': (None, 0.1),
     }
 
+    global HARDNESSES
+
+    HARDNESSES = app.hardnesses
+
     app.blockDrops = {
         'grass': { '': 'dirt' },
         'dirt': { '': 'dirt' }, 
@@ -1076,8 +1080,10 @@ def getBlockDrop(app, block: world.BlockId, tool: world.ItemId) -> world.ItemId:
     else:
         return drops['']
 
-def getHardnessAgainst(app, block: world.BlockId, tool: world.ItemId) -> float:
-    (goodTool, base) = app.hardnesses[block]
+HARDNESSES = {}
+
+def getHardnessAgainst(block: world.BlockId, tool: world.ItemId) -> float:
+    (goodTool, base) = HARDNESSES[block]
 
     pickaxes = { 'wooden_pickaxe': 0.5, 'stone_pickaxe': 0.25 }
     axes = { 'wooden_axe': 0.5 }

@@ -385,6 +385,8 @@ def setMouseCapture(app, value: bool) -> None:
             glfw.set_input_mode(app.window, glfw.CURSOR, glfw.CURSOR_NORMAL)
 
 def submitChat(app, text: str):
+    network.c2sQueue.put(network.ChatMessageC2S(text))
+
     if text.startswith('/'):
         text = text.removeprefix('/')
 
@@ -502,6 +504,10 @@ class GameOverMode(Mode):
             app.cameraPos = [0.0, 75.0, 0.0]
             app.mode = PlayingMode(app, player)
 
+def sendPlayerDigging(app, action: network.DiggingAction, location: BlockPos, face: int):
+
+    network.c2sQueue.put(network.PlayerDiggingC2S(action, location, face))
+
 def sendPlayerLook(app, yaw: float, pitch: float, onGround: bool):
     app.cameraYaw = yaw
     app.cameraPitch = pitch
@@ -591,6 +597,16 @@ class PlayingMode(Mode):
                 del app.world.chunks[ChunkPos(packet.x, 0, packet.z)]
 
                 app.world.serverChunks[ChunkPos(packet.x, 0, packet.z)] = packet
+            elif isinstance(packet, network.TimeUpdateS2C):
+                # TODO: World age
+
+                app.time = packet.dayTime
+            elif isinstance(packet, network.AckPlayerDiggingS2C):
+                print(packet)
+            elif isinstance(packet, network.SpawnEntityS2C):
+                if packet.kind == 102:
+                    kind = 'zombie'
+                print(packet)
         
         player = app.client.getPlayer()
 
@@ -1075,10 +1091,15 @@ def appStopped(app):
         nbtfile.tags.append(entity.toNbt([app.mode.player] + app.entities))
         nbtfile.write_file(path)
 
-
 def updateBlockBreaking(app, mode: PlayingMode):
     if mode.mouseHeld and mode.lookedAtBlock is not None:
-        pos = mode.lookedAtBlock[0]
+        pos, face = mode.lookedAtBlock
+
+        face = { 'bottom': 0, 'top': 1, 'back': 2, 'front': 3, 'left': 4, 'right': 5 }[face]
+
+        if app.breakingBlock == 0.0:
+            sendPlayerDigging(app, network.DiggingAction.START_DIGGING, pos, face)
+
         if mode.player.creative:
             app.breakingBlockPos = pos
             app.breakingBlock = 1000.0
@@ -1104,9 +1125,11 @@ def updateBlockBreaking(app, mode: PlayingMode):
         else:
             tool = toolStack.item
 
-        hardness = getHardnessAgainst(app, blockId, tool)
+        hardness = getHardnessAgainst(blockId, tool)
 
         if app.breakingBlock >= hardness:
+            sendPlayerDigging(app, network.DiggingAction.FINISH_DIGGING, pos, face)
+
             droppedItem = getBlockDrop(app, blockId, tool)
 
             resources.getDigSound(app, blockId).play()
@@ -1122,6 +1145,10 @@ def updateBlockBreaking(app, mode: PlayingMode):
 
                 app.entities.append(ent)
     else:
+        if app.breakingBlock > 0.0:
+            # FIXME: Face
+            sendPlayerDigging(app, network.DiggingAction.CANCEL_DIGGING, app.breakingBlockPos, 0)
+
         app.breakingBlock = 0.0
 
 
