@@ -122,10 +122,8 @@ def tick(app):
             player.velocity[2] += z / 10.0
         collideXZ(app, player)
 
-
-        app.cameraPos = copy.copy(player.pos)
-        app.cameraPos[1] += player.height
-
+    app.cameraPos = copy.copy(player.pos)
+    app.cameraPos[1] += player.height
 
     entities = app.entities + [player]
 
@@ -171,7 +169,7 @@ def syncClient(app):
     client.time = app.time
     client.breakingBlock = app.breakingBlock
     client.breakingBlockPos = app.breakingBlockPos
-    client.cameraPos = app.cameraPos
+    client.cameraPos = copy.copy(app.cameraPos)
     client.cameraPitch = app.cameraPitch
     client.cameraYaw = app.cameraYaw
     client.tickTimes = app.tickTimes

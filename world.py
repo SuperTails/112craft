@@ -45,6 +45,7 @@ from numpy import ndarray
 from typing import NamedTuple, List, Any, Tuple, Optional, Union
 from util import *
 from OpenGL.GL import * #type:ignore
+from network import ChunkDataS2C
 
 # Places a tree with its bottommost log at the given position in the world.
 # If `doUpdates` is True, this recalculates the lighting and block visibility.
@@ -394,6 +395,40 @@ def blockEntityFromNbt(tag: nbt.TAG_Compound) -> Union[Furnace]:
     else:
         raise Exception(f"Unknown block entity kind {kind}")
 
+def convertBlock(block, instData):
+    global seen
+
+    if block == 'grass_block':
+        block = 'grass'
+    elif block in ['smooth_stone_slab', 'gravel']:
+        block = 'stone'
+    elif block in ['mossy_cobblestone']:
+        block = 'cobblestone'
+    elif block in ['oak_leaves', 'birch_leaves']:
+        block = 'leaves'
+    elif block in ['oak_log', 'birch_log', 'jungle_wood']:
+        block = 'log'
+    elif block in ['dandelion', 'poppy', 'fern', 'grass', 'brown_mushroom', 'red_mushroom']:
+        block = 'air'
+    elif block in ['repeater', 'redstone_wire', 'redstone_torch', 'redstone_wall_torch', 'stone_button', 'stone_pressure_plate']:
+        block = 'air'
+    elif block in ['glowstone', 'dispenser', 'red_bed', 'chest', 'oak_planks', 'note_block', 'gold_block']:
+        block = 'planks'
+    elif block.endswith('_wool'):
+        block = 'crafting_table'
+    elif 'piston' in block:
+        block = 'crafting_table'
+    elif block == 'water':
+        block = 'air'
+    elif block != 'air' and block not in instData[0]:
+        if block not in seen:
+            #print(f"UNKNOWN BLOCK {block}")
+            seen.add(block)
+        block = 'bedrock'
+    
+    return block
+
+
 class Chunk:
     pos: ChunkPos
     blocks: ndarray
@@ -453,6 +488,27 @@ class Chunk:
             lightLevels=self.lightLevels,
             blockLightLevels=self.blockLightLevels,
         )
+    
+    @timed()
+    def loadFromPacket(self, world, instData, registry, packet: ChunkDataS2C):
+        for (idx, section) in enumerate(packet.sections):
+            if section is None:
+                self.blocks[:, (idx*16):(idx*16)+1, :] = 'air'
+            else:
+                section[0].registry = registry
+                for (blockIdx, block) in enumerate(section[0]):
+                    blockId = block['name'].removeprefix('minecraft:')
+                    blockId = convertBlock(blockId, instData)
+
+                    y = blockIdx // 256 + 16 * idx
+                    z = 15 - ((blockIdx // 16) % 16)
+                    x = blockIdx % 16
+
+                    self.blocks[x, y, z] = blockId
+
+        self.setAllBlocks(world, instData)
+
+        self.worldgenStage = WorldgenStage.POPULATED
 
     @timed()
     def loadFromAnvilChunk(self, world, instData, chunk):
@@ -460,40 +516,12 @@ class Chunk:
             y = (i // (16 * 16))
             z = (i // 16) % 16
             x = i % 16
-            global seen
 
-            block: str = block.id #type:ignore
-
-            if block == 'grass_block':
-                block = 'grass'
-            elif block in ['smooth_stone_slab', 'gravel']:
-                block = 'stone'
-            elif block in ['mossy_cobblestone']:
-                block = 'cobblestone'
-            elif block in ['oak_leaves', 'birch_leaves']:
-                block = 'leaves'
-            elif block in ['oak_log', 'birch_log', 'jungle_wood']:
-                block = 'log'
-            elif block in ['dandelion', 'poppy', 'fern', 'grass', 'brown_mushroom', 'red_mushroom']:
-                block = 'air'
-            elif block in ['repeater', 'redstone_wire', 'redstone_torch', 'redstone_wall_torch', 'stone_button', 'stone_pressure_plate']:
-                block = 'air'
-            elif block in ['glowstone', 'dispenser', 'red_bed', 'chest', 'oak_planks', 'note_block', 'gold_block']:
-                block = 'planks'
-            elif block.endswith('_wool'):
-                block = 'crafting_table'
-            elif 'piston' in block:
-                block = 'crafting_table'
-            elif block == 'water':
-                block = 'air'
-            elif block != 'air' and block not in instData[0]:
-                if block not in seen:
-                    #print(f"UNKNOWN BLOCK {block}")
-                    seen.add(block)
-                block = 'bedrock'
+            block: str = convertBlock(block.id, instData) #type:ignore
 
             if y == 0:
                 block = 'bedrock'
+
             self.setBlock(world, instData, BlockPos(x, y, z), block, doUpdateLight=False, doUpdateBuried=False)
 
             '''
@@ -1115,6 +1143,10 @@ class World:
     caveChecked: set[ChunkPos]
     caves: dict[ChunkPos, List[BlockPos]]
 
+    local: bool
+
+    serverChunks: dict[ChunkPos, ChunkDataS2C]
+
     def getHighestBlock(self, x: int, z: int) -> int:
         for y in range(CHUNK_HEIGHT - 1, -1, -1):
             if self.getBlock(BlockPos(x, y, z)) != 'air':
@@ -1127,8 +1159,12 @@ class World:
         self.importPath = importPath
         self.regions = {}
 
+        self.serverChunks = {}
+
         self.caveChecked = set()
         self.caves = {}
+
+        self.local = True
 
         if self.importPath != '' and not self.importPath.endswith('/'):
             self.importPath += '/'
@@ -1222,10 +1258,20 @@ class World:
 
                     self.caves[pos] = generateCaveCenter(caveStart, self.seed)
     
+    def canLoadChunk(self, pos: ChunkPos):
+        if self.local:
+            return True
+        else:
+            return pos in self.serverChunks
+    
     def loadChunk(self, instData, pos: ChunkPos):
         print(f"Loading chunk at {pos}")
-        self.checkCavesAround(pos)
-        self.chunks[pos] = self.createChunk(instData, pos)
+        if self.local:
+            self.checkCavesAround(pos)
+            self.chunks[pos] = self.createChunk(instData, pos)
+        else:
+            self.chunks[pos] = Chunk(pos)
+            self.chunks[pos].loadFromPacket(self, instData, self.registry, self.serverChunks[pos]) #type:ignore
     
     def unloadChunk(self, app, pos: ChunkPos):
         print(f"Unloading chunk at {pos}")
@@ -1355,8 +1401,6 @@ class World:
                         break
 
 
-        print(f"decreased: {decreased}")
-
         if decreased:
             # When a block is ADDED:
             # If the block is directly skylit:
@@ -1407,7 +1451,6 @@ class World:
                 existingLight = self.getLightLevel(pos) if isSky else self.getBlockLightLevel(pos)
 
                 if isSky:
-                    print(f"Setting {pos} to 0")
                     self.setLightLevel(pos, 0)
                 else:
                     self.setBlockLightLevel(pos, 0)
@@ -1470,8 +1513,6 @@ class World:
             if not isSky:
                 self.setBlockLightLevel(blockPos, getLuminance(block))
         
-        print(queue)
-
         visited = []
         
         while len(queue) > 0:
@@ -1659,7 +1700,7 @@ def loadUnloadChunks(app, centerPos):
 
             urgent = dist <= 1
 
-            if urgent or (loadedChunks < 1):
+            if (urgent or (loadedChunks < 1)) and app.world.canLoadChunk(loadChunkPos):
                 #queuedForLoad.append((app.world, (app.textures, app.cube), loadChunkPos))
                 loadedChunks += 1
                 app.world.loadChunk((app.textures, app.cube, app.textureIndices), loadChunkPos)

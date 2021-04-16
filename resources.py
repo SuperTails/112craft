@@ -23,6 +23,7 @@ from OpenGL.GL import * #type:ignore
 import json
 import requests
 import random
+from quarry.types.registry import LookupRegistry
 
 class Recipe:
     inputs: List[List[Optional[world.ItemId]]]
@@ -673,6 +674,16 @@ def getVersionJson():
     with open('assets/1.16.5.json', 'r') as f:
         return json.load(f)
 
+def getRegistry() -> LookupRegistry:
+    if not os.path.exists('assets/jar/1.16.5.jar'):
+        os.makedirs('assets/jar/', exist_ok=True)
+        url = getVersionJson()['downloads']['server']['url']
+        data = requests.get(url).content
+        with open('assets/jar/1.16.5.jar', 'wb') as f:
+            f.write(data)
+        
+    return LookupRegistry.from_jar('assets/jar/1.16.5.jar')
+
 def getAssetIndex():
     versionJson = getVersionJson()
     url = versionJson['assetIndex']['url']
@@ -1043,7 +1054,7 @@ def loadResources(app):
         CLIENT_DATA.itemTextures = app.glItemTextures
     else:
         CLIENT_DATA.itemTextures = app.tkItemTextures
-
+    
 def getBlockDrop(app, block: world.BlockId, tool: world.ItemId) -> world.ItemId:
     drops = app.blockDrops[block]
 

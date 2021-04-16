@@ -50,8 +50,9 @@ import tkinter
 import entity
 import tick
 import server
+from queue import SimpleQueue
 from client import ClientState
-from util import ChunkPos
+from util import ChunkPos, BlockPos
 from button import Button, ButtonManager, createSizedBackground
 from world import Chunk, World
 from typing import List, Optional, Tuple, Any
@@ -60,6 +61,8 @@ from player import Player, Slot, Stack
 import resources
 from resources import loadResources, getHardnessAgainst, getBlockDrop, getAttackDamage
 from nbt import nbt
+from dataclasses import dataclass
+import network
 
 # =========================================================================== #
 # ----------------------------- THE APP ------------------------------------- #
@@ -132,9 +135,9 @@ class WorldLoadMode(Mode):
         app.world.loadChunk((app.textures, app.cube, app.textureIndices), ChunkPos(cx, cy, cz))
     
     def timerFired(self, app):
-        if self.loadStage < 40:
+        if self.loadStage < 10:
             world.loadUnloadChunks(app, self.player.pos)
-        elif self.loadStage < 60:
+        elif self.loadStage < 20:
             world.tickChunks(app, maxTime=5.0)
         else:
             tick.syncClient(app)
@@ -504,6 +507,25 @@ def sendPlayerLook(app, yaw: float, pitch: float, onGround: bool):
     app.cameraPitch = pitch
     app.mode.player.onGround = onGround
 
+    network.c2sQueue.put(network.PlayerLookC2S(yaw, pitch, onGround))
+
+def sendPlayerPosition(app, x, y, z, onGround):
+    app.mode.player.pos = [x, y, z]
+    app.mode.player.onGround = onGround
+
+    network.c2sQueue.put(network.PlayerPositionC2S(x, y, z, onGround))
+
+def sendTeleportConfirm(app, teleportId: int):
+    network.c2sQueue.put(network.TeleportConfirmC2S(teleportId))
+
+def sendPlayerMovement(app, onGround: bool):
+    network.c2sQueue.put(network.PlayerMovementC2S(onGround))
+
+def sendClientStatus(app, status: int):
+    network.c2sQueue.put(network.ClientStatusC2S(status))
+
+networkReady = False
+
 class PlayingMode(Mode):
     lookedAtBlock = None
     mouseHeld: bool = False
@@ -511,6 +533,12 @@ class PlayingMode(Mode):
     player: Player
 
     def __init__(self, app, player: Player):
+        global networkReady
+        networkReady = True
+
+        app.world.local = False
+        app.world.registry = resources.getRegistry()
+
         app.timerDelay = 100
         setMouseCapture(app, True)
 
@@ -540,8 +568,39 @@ class PlayingMode(Mode):
 
         updateBlockBreaking(app, self)
 
+        while not network.s2cQueue.empty():
+            packet = network.s2cQueue.get()
+            if isinstance(packet, network.PlayerPositionAndLookS2C):
+                player = app.client.getPlayer()
+                player.pos[0] = packet.x + (player.pos[0] if packet.xRel else 0.0)
+                player.pos[1] = packet.y + (player.pos[1] if packet.yRel else 0.0)
+                player.pos[2] = packet.z + (player.pos[2] if packet.zRel else 0.0)
+                # TODO:
+                # yaw, pitch
+
+                sendTeleportConfirm(app, packet.teleportId)
+            elif isinstance(packet, network.ChunkDataS2C):
+
+                if ChunkPos(packet.x, 0, packet.z) not in app.world.chunks:
+                    app.world.chunks[ChunkPos(packet.x, 0, packet.z)] = world.Chunk(ChunkPos(packet.x, 0, packet.z))
+                chunk = app.world.chunks[ChunkPos(packet.x, 0, packet.z)]
+
+                dist = (abs(math.floor(app.mode.player.pos[0] / 16) - packet.x)
+                    + abs(math.floor(app.mode.player.pos[2] / 16) - packet.z))
+
+                del app.world.chunks[ChunkPos(packet.x, 0, packet.z)]
+
+                app.world.serverChunks[ChunkPos(packet.x, 0, packet.z)] = packet
+        
+        player = app.client.getPlayer()
+
         client: ClientState = app.client
         sendPlayerLook(app, client.cameraYaw, client.cameraPitch, client.getPlayer().onGround)
+        sendPlayerPosition(app, player.pos[0], player.pos[1], player.pos[2], player.onGround)
+        sendPlayerMovement(app, player.onGround)
+
+        if self.mouseHeld:
+            sendClientStatus(app, 0)
 
         tick.tick(app)
 
@@ -1175,5 +1234,16 @@ def main():
     else:
         cmu_112_graphics.runApp(width=600, height=400)
 
+import threading
+
+from time import sleep
+
 if __name__ == '__main__':
-    main()
+    gameThread = threading.Thread(target=main)
+    gameThread.start()
+
+    while not networkReady:
+        sleep(0.1)
+
+    network.go()
+    gameThread.join()
