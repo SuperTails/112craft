@@ -38,6 +38,7 @@ class ClientState:
 
     breakingBlock: float
     breakingBlockPos: BlockPos
+    lastDigSound: float
 
     cameraPos: List[float]
     cameraPitch: float

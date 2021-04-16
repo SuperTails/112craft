@@ -11,10 +11,53 @@ from util import BlockPos, roundHalfUp, rayAABBIntersect, ChunkPos
 import world
 import time
 import math
+import config
 from math import cos, sin
 import copy
 import random
+import network
+import resources
+from inventory import Stack
 from typing import Optional
+
+def sendPlayerDigging(app, action: network.DiggingAction, location: BlockPos, face: int):
+    if action == network.DiggingAction.START_DIGGING:
+        app.breakingBlock = 0.0
+        app.breakingBlockPos = location
+    elif action == network.DiggingAction.CANCEL_DIGGING:
+        app.breakingBlock = 0.0
+    elif action == network.DiggingAction.FINISH_DIGGING:
+        app.breakingBlock = 1000.0
+    else:
+        # TODO:
+        print(f"Ignoring other action {action}")
+
+    network.c2sQueue.put(network.PlayerDiggingC2S(action, location, face))
+
+def sendPlayerLook(app, yaw: float, pitch: float, onGround: bool):
+    app.cameraYaw = yaw
+    app.cameraPitch = pitch
+    app.mode.player.onGround = onGround
+
+    network.c2sQueue.put(network.PlayerLookC2S(yaw, pitch, onGround))
+
+def sendPlayerPosition(app, x, y, z, onGround):
+    app.mode.player.pos = [x, y, z]
+    app.mode.player.onGround = onGround
+
+    network.c2sQueue.put(network.PlayerPositionC2S(x, y, z, onGround))
+
+def sendTeleportConfirm(app, teleportId: int):
+    network.c2sQueue.put(network.TeleportConfirmC2S(teleportId))
+
+def sendPlayerMovement(app, onGround: bool):
+    network.c2sQueue.put(network.PlayerMovementC2S(onGround))
+
+def sendPlayerPlacement(app, hand: int, location: BlockPos, face: int, cx: float, cy: float, cz: float, insideBlock: bool):
+    network.c2sQueue.put(network.PlayerPlacementC2S(hand, location, face, cx, cy, cz, insideBlock))
+
+def sendClientStatus(app, status: int):
+    network.c2sQueue.put(network.ClientStatusC2S(status))
 
 def lookedAtEntity(app) -> Optional[int]:
     lookX = cos(app.cameraPitch)*sin(-app.cameraYaw)
@@ -66,6 +109,78 @@ def lookedAtEntity(app) -> Optional[int]:
         else:
             return inter[0]
 
+def updateBlockBreaking(app):
+    if not app.world.local:
+        return
+
+    pos = app.breakingBlockPos
+
+    if app.breakingBlock == 0.0:
+        return
+
+    blockId = app.world.getBlock(pos)
+
+    toolStack = app.mode.player.inventory[app.mode.player.hotbarIdx].stack
+    if toolStack.isEmpty():
+        tool = ''
+    else:
+        tool = toolStack.item
+
+    hardness = resources.getHardnessAgainst(blockId, tool)
+
+    # TODO: Sound effect packets
+
+    if app.breakingBlock >= hardness:
+        mcBlockId = app.world.registry.encode_block({ 'name': 'minecraft:' + blockId })
+
+        network.s2cQueue.put(network.AckPlayerDiggingS2C(
+            pos,
+            mcBlockId,
+            network.DiggingAction.FINISH_DIGGING,
+            True
+        ))
+
+        droppedItem = resources.getBlockDrop(app, blockId, tool)
+
+        resources.getDigSound(app, blockId).play()
+
+        world.removeBlock(app, pos)
+
+        app.breakingBlock = 0.0
+
+        if droppedItem is not None:
+            stack = Stack(droppedItem, 1)
+
+            entityId = getNextEntityId()
+
+            xVel = ((random.random() - 0.5) * 0.1)
+            yVel = ((random.random() - 0.5) * 0.1)
+            zVel = ((random.random() - 0.5) * 0.1)
+
+            # TODO: UUID
+            network.s2cQueue.put(network.SpawnEntityS2C(entityId, None, 37,
+                pos.x, pos.y, pos.z, 0.0, 0.0, 1,
+                int(xVel * 8000), int(yVel * 8000), int(zVel * 8000)))
+
+            itemId = app.world.registry.encode('minecraft:item', 'minecraft:' + stack.item)
+
+            network.s2cQueue.put(network.EntityMetadataS2C(
+                entityId, { (6, 7): { 'item': itemId, 'count': stack.amount } }
+            ))
+            
+            ent = Entity(app, 'item', pos.x, pos.y, pos.z)
+            ent.extra.stack = stack
+            ent.velocity = [xVel, yVel, zVel]
+            app.entities.append(ent)
+
+entityIdNum = 10_000
+
+def getNextEntityId() -> int:
+    global entityIdNum
+    entityIdNum += 1
+    return entityIdNum
+
+
 def tick(app):
     startTime = time.time()
 
@@ -74,6 +189,8 @@ def tick(app):
     world.loadUnloadChunks(app, app.cameraPos)
 
     world.tickChunks(app)
+
+    updateBlockBreaking(app)
 
     doMobSpawning(app)
     doMobDespawning(app)
@@ -139,13 +256,14 @@ def tick(app):
         
         entity.tick(app, app.world, entities, player.pos[0], player.pos[2])
 
-        if entity.kind.name == 'item':
-            dx = (player.pos[0] - entity.pos[0])**2
-            dy = (player.pos[1] - entity.pos[1])**2
-            dz = (player.pos[2] - entity.pos[2])**2
-            if math.sqrt(dx + dy + dz) < 2.0 and entity.extra.pickupDelay == 0:
-                player.pickUpItem(app, entity.extra.stack)
-                entity.health = 0.0
+        if not config.UGLY_HACK:
+            if entity.kind.name == 'item':
+                dx = (player.pos[0] - entity.pos[0])**2
+                dy = (player.pos[1] - entity.pos[1])**2
+                dz = (player.pos[2] - entity.pos[2])**2
+                if math.sqrt(dx + dy + dz) < 2.0 and entity.extra.pickupDelay == 0:
+                    player.pickUpItem(app, entity.extra.stack)
+                    entity.health = 0.0
             
         if entity.pos[1] < -64.0:
             entity.hit(app, 10.0, (0.0, 0.0))
@@ -167,12 +285,13 @@ def syncClient(app):
     client.entities = app.entities
     client.player = app.mode.player
     client.time = app.time
-    client.breakingBlock = app.breakingBlock
-    client.breakingBlockPos = app.breakingBlockPos
     client.cameraPos = copy.copy(app.cameraPos)
     client.cameraPitch = app.cameraPitch
     client.cameraYaw = app.cameraYaw
     client.tickTimes = app.tickTimes
+
+    #client.breakingBlock = app.breakingBlock
+    #client.breakingBlockPos = app.breakingBlockPos
 
 def doMobDespawning(app):
     player = app.mode.player

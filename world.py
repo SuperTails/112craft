@@ -1200,6 +1200,11 @@ class World:
             f.write(f"seed={self.seed}\n")
             if self.importPath != '':
                 f.write(f"importPath={self.importPath}\n")
+    
+    def setBlock(self, instData, blockPos: BlockPos, id: BlockId, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False):
+        (chunk, ckLocal) = self.getChunk(blockPos)
+        chunk.setBlock(self, instData, ckLocal, id, doUpdateLight, doUpdateBuried, doUpdateMesh)
+
 
     def getBlock(self, blockPos: BlockPos) -> str:
         (chunkPos, localPos) = toChunkLocal(blockPos)

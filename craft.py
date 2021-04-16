@@ -48,6 +48,7 @@ import time
 import cmu_112_graphics
 import tkinter
 import entity
+from tick import *
 import tick
 import server
 from queue import SimpleQueue
@@ -504,35 +505,6 @@ class GameOverMode(Mode):
             app.cameraPos = [0.0, 75.0, 0.0]
             app.mode = PlayingMode(app, player)
 
-def sendPlayerDigging(app, action: network.DiggingAction, location: BlockPos, face: int):
-
-    network.c2sQueue.put(network.PlayerDiggingC2S(action, location, face))
-
-def sendPlayerLook(app, yaw: float, pitch: float, onGround: bool):
-    app.cameraYaw = yaw
-    app.cameraPitch = pitch
-    app.mode.player.onGround = onGround
-
-    network.c2sQueue.put(network.PlayerLookC2S(yaw, pitch, onGround))
-
-def sendPlayerPosition(app, x, y, z, onGround):
-    app.mode.player.pos = [x, y, z]
-    app.mode.player.onGround = onGround
-
-    network.c2sQueue.put(network.PlayerPositionC2S(x, y, z, onGround))
-
-def sendTeleportConfirm(app, teleportId: int):
-    network.c2sQueue.put(network.TeleportConfirmC2S(teleportId))
-
-def sendPlayerMovement(app, onGround: bool):
-    network.c2sQueue.put(network.PlayerMovementC2S(onGround))
-
-def sendPlayerPlacement(app, hand: int, location: BlockPos, face: int, cx: float, cy: float, cz: float, insideBlock: bool):
-    network.c2sQueue.put(network.PlayerPlacementC2S(hand, location, face, cx, cy, cz, insideBlock))
-
-def sendClientStatus(app, status: int):
-    network.c2sQueue.put(network.ClientStatusC2S(status))
-
 networkReady = False
 
 class PlayingMode(Mode):
@@ -687,13 +659,42 @@ class PlayingMode(Mode):
                         print(packet.metadata)
                         for (ty, idx), value in packet.metadata.items():
                             if idx == 7 and ent.kind.name == 'item':
-                                itemId = app.world.registry.decode('minecraft:item', value['item']).removeprefix('minecraft:')
-                                print(itemId)
-                                ent.extra.stack = Stack(itemId, value['count'])
+                                if value['item'] is None:
+                                    # TODO: ????
+                                    pass
+                                else:
+                                    itemId = app.world.registry.decode('minecraft:item', value['item']).removeprefix('minecraft:')
+                                    print(itemId)
+                                    ent.extra.stack = Stack(itemId, value['count'])
                             else:
                                 # TODO:
                                 pass
                         break
+            elif isinstance(packet, network.SetSlotS2C):
+                if packet.itemId is None:
+                    stack = Stack('', 0)
+                else:
+                    stack = Stack(
+                        app.world.registry.decode('minecraft:item', packet.itemId).removeprefix('minecraft:'),
+                        packet.count)
+
+                if packet.windowId == 0:
+                    if packet.slotIdx < 45:
+                        print(f'Setting player inventory at {packet.slotIdx} to {stack}')
+                        app.mode.player.inventory[packet.slotIdx % 36].stack = stack
+                    else:
+                        # TODO:
+                        print(f'Other slot: {packet.slotIdx}')
+                else:
+                    # TODO:
+                    print(f'window ID: {packet.windowId}')
+            elif isinstance(packet, network.DestroyEntitiesS2C):
+                entIdx = 0
+                while entIdx < len(app.entities):
+                    if app.entities[entIdx].entityId in packet.entityIds:
+                        app.entities.pop(entIdx)
+                    else:
+                        entIdx += 1
             elif isinstance(packet, network.BlockChangeS2C):
                 blockId = app.world.registry.decode_block(packet.blockId)
                 blockId = blockId['name'].removeprefix('minecraft:')
@@ -1126,7 +1127,7 @@ def appStarted(app):
     # ----------------
     app.breakingBlock = 0.0
     app.breakingBlockPos = world.BlockPos(0, 0, 0)
-    app.lastDigSound = time.time()
+    app.newBreakingBlockPos = world.BlockPos(0, 0, 0)
 
     app.gravity = 0.10
 
@@ -1152,6 +1153,10 @@ def appStarted(app):
     client.vpHeight = client.vpWidth * app.height / app.width 
     client.wireframe = False
     client.renderDistanceSq = 9**2
+
+    client.breakingBlock = 0.0
+    client.breakingBlockPos = BlockPos(0, 0, 0)
+    client.lastDigSound = time.time()
 
     client.horizFov = math.atan(client.vpWidth / client.vpDist)
     client.vertFov = math.atan(client.vpHeight / client.vpDist)
@@ -1200,29 +1205,27 @@ def updateBlockBreaking(app, mode: PlayingMode):
 
         face = { 'bottom': 0, 'top': 1, 'back': 2, 'front': 3, 'left': 4, 'right': 5 }[face]
 
-        if app.breakingBlock == 0.0:
+        if client.breakingBlock == 0.0:
             sendPlayerDigging(app, network.DiggingAction.START_DIGGING, pos, face)
 
         if mode.player.creative:
-            app.breakingBlockPos = pos
-            app.breakingBlock = 1000.0
+            client.breakingBlockPos = pos
+            client.breakingBlock = 1000.0
         else:
-            if app.breakingBlockPos == pos: 
-                app.breakingBlock += 0.1
+            if client.breakingBlockPos == pos: 
+                client.breakingBlock += 0.1
             else:
-                app.breakingBlockPos = pos
-                app.breakingBlock = 0.0
-            
+                client.breakingBlockPos = pos
+                client.breakingBlock = 0.0
 
-        #app.sounds['grass'].play()
-        
-        blockId = app.world.getBlock(pos)
+        blockId = client.world.getBlock(pos)
 
-        if time.time() - app.lastDigSound > 0.2:
+        # TODO: This should be a packet too
+        if time.time() - client.lastDigSound > 0.2:
             resources.getStepSound(app, blockId).play(halfPitch=True, volume=0.3)
-            app.lastDigSound = time.time()
+            client.lastDigSound = time.time()
 
-        toolStack = mode.player.inventory[mode.player.hotbarIdx].stack
+        toolStack = client.player.inventory[client.player.hotbarIdx].stack
         if toolStack.isEmpty():
             tool = ''
         else:
@@ -1230,29 +1233,19 @@ def updateBlockBreaking(app, mode: PlayingMode):
 
         hardness = getHardnessAgainst(blockId, tool)
 
-        if app.breakingBlock >= hardness:
+        if client.breakingBlock >= hardness * 2.0:
             sendPlayerDigging(app, network.DiggingAction.FINISH_DIGGING, pos, face)
-
-            droppedItem = getBlockDrop(app, blockId, tool)
 
             resources.getDigSound(app, blockId).play()
 
-            world.removeBlock(app, pos)
-
-            if droppedItem is not None:
-                ent = entity.Entity(app, 'item', pos.x, pos.y, pos.z)
-                ent.extra.stack = Stack(droppedItem, 1)
-                ent.velocity[0] = (random.random() - 0.5) * 0.1
-                ent.velocity[1] = (random.random() - 0.5) * 0.1
-                ent.velocity[2] = (random.random() - 0.5) * 0.1
-
-                app.entities.append(ent)
+            # HACK:
+            app.world.setBlock((app.textures, app.cube, app.textureIndices), pos, 'air')
     else:
         if app.breakingBlock > 0.0:
             # FIXME: Face
             sendPlayerDigging(app, network.DiggingAction.CANCEL_DIGGING, app.breakingBlockPos, 0)
 
-        app.breakingBlock = 0.0
+        client.breakingBlock = 0.0
 
 
 def keyPressed(app, event):

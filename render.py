@@ -384,6 +384,7 @@ def renderInstancesGl(client: ClientState, canvas):
             breakingBlockAmount = client.breakingBlock / hardness
 
     b = math.floor(breakingBlockAmount * 10.0)
+    b = min(b, len(CLIENT_DATA.breakTextures) - 1)
 
     CLIENT_DATA.chunkProgram.useProgram()
     glUniformMatrix4fv(CLIENT_DATA.chunkProgram.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore

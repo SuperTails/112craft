@@ -267,7 +267,7 @@ class ChunkDataS2C:
 @dataclass
 class EntityMetadataS2C:
     entityId: int
-    metadata: Any
+    metadata: dict[Tuple[int, int], Any]
 
     @classmethod
     def fromBuf(cls, buf):
@@ -378,6 +378,38 @@ class EntityTeleportS2C:
         pitch = 2*math.pi*pitch/256
 
         return cls(entityId, x-0.5, y-0.5, -(z+0.5), yaw, pitch, onGround)
+    
+@dataclass
+class DestroyEntitiesS2C:
+    entityIds: List[int]
+
+    @classmethod
+    def fromBuf(cls, buf):
+        count = buf.unpack_varint()
+        entityIds = [buf.unpack_varint() for _ in range(count)]
+
+        return cls(entityIds)
+
+@dataclass
+class SetSlotS2C:
+    windowId: int
+    slotIdx: int
+
+    itemId: Optional[int]
+    count: int
+
+    @classmethod
+    def fromBuf(cls, buf):
+        windowId, slotIdx = buf.unpack('bh')
+        stack = buf.unpack_slot()
+
+        itemId = stack['item']
+        if 'count' in stack:
+            count = stack['count']
+        else:
+            count = 0
+
+        return cls(windowId, slotIdx, itemId, count)
 
 @dataclass
 class SpawnPlayerS2C:
@@ -403,7 +435,6 @@ class SpawnPlayerS2C:
 
         return cls(entityId, playerUUID, x-0.5, y-0.5, -(z+0.5), yaw, pitch)
 
-
 class MinecraftProtocol(ClientProtocol):
     def player_joined(self):
         print("hewwo")
@@ -427,6 +458,10 @@ class MinecraftProtocol(ClientProtocol):
         s2cQueue.put(SpawnPlayerS2C.fromBuf(buf))
         buf.discard()
     
+    def packet_set_slot(self, buf):
+        s2cQueue.put(SetSlotS2C.fromBuf(buf))
+        buf.discard()
+    
     def packet_acknowledge_player_digging(self, buf):
         s2cQueue.put(AckPlayerDiggingS2C.fromBuf(buf))
         buf.discard()
@@ -436,6 +471,7 @@ class MinecraftProtocol(ClientProtocol):
         buf.discard()
     
     def packet_destroy_entities(self, buf):
+        s2cQueue.put(DestroyEntitiesS2C.fromBuf(buf))
         buf.discard()
     
     def packet_entity_look(self, buf):
