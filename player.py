@@ -85,7 +85,7 @@ class Player(Entity):
 
         return tag
     
-    def tick(self):
+    def tick(self, app, world, entities, playerX, playerZ):
         if self.immunity > 0:
             self.immunity -= 1
     

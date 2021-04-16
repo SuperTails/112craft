@@ -108,7 +108,7 @@ def tick(app):
             x *= player.walkSpeed 
             z *= player.walkSpeed
 
-        player.tick()
+        player.tick(app, app.world, app.entities, 0.0, 0.0)
         
         #player.pos = copy.copy(app.cameraPos)
         #player.pos[1] -= player.height

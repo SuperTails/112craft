@@ -527,6 +527,9 @@ def sendTeleportConfirm(app, teleportId: int):
 def sendPlayerMovement(app, onGround: bool):
     network.c2sQueue.put(network.PlayerMovementC2S(onGround))
 
+def sendPlayerPlacement(app, hand: int, location: BlockPos, face: int, cx: float, cy: float, cz: float, insideBlock: bool):
+    network.c2sQueue.put(network.PlayerPlacementC2S(hand, location, face, cx, cy, cz, insideBlock))
+
 def sendClientStatus(app, status: int):
     network.c2sQueue.put(network.ClientStatusC2S(status))
 
@@ -606,7 +609,100 @@ class PlayingMode(Mode):
             elif isinstance(packet, network.SpawnEntityS2C):
                 if packet.kind == 102:
                     kind = 'zombie'
-                print(packet)
+                elif packet.kind == 37:
+                    kind = 'item'
+                else:
+                    kind = None
+                
+                if kind is None:
+                    print(f'Ignoring entity kind {packet.kind}')
+                else:
+                    # TODO: UUID
+                    ent = entity.Entity(app, kind, packet.x, packet.y, packet.z)
+                    ent.velocity[0] = packet.xVel / 8000
+                    ent.velocity[1] = packet.yVel / 8000
+                    ent.velocity[2] = packet.zVel / 8000
+                    ent.headYaw = packet.yaw
+                    ent.headPitch = packet.pitch
+                    ent.entityId = packet.entityId
+
+                    app.entities.append(ent)
+            elif isinstance(packet, network.SpawnPlayerS2C):
+                ent = Player(app)
+                ent.entityId = packet.entityId
+                ent.headYaw = packet.yaw
+                ent.headPitch = packet.pitch
+                ent.pos = [packet.x, packet.y, packet.z]
+
+                app.entities.append(ent)
+            elif isinstance(packet, network.EntityLookS2C):
+                for ent in app.entities:
+                    if ent.entityId == packet.entityId:
+                        ent.bodyAngle = packet.bodyYaw
+                        ent.headPitch = packet.headPitch
+                        break
+            elif isinstance(packet, network.EntityHeadLookS2C):
+                for ent in app.entities:
+                    if ent.entityId == packet.entityId:
+                        ent.headYaw = packet.headYaw
+                        break
+            elif isinstance(packet, network.EntityVelocityS2C):
+                for ent in app.entities:
+                    if ent.entityId == packet.entityId:
+                        ent.velocity[0] = packet.xVel / 8000
+                        ent.velocity[1] = packet.yVel / 8000
+                        ent.velocity[2] = packet.zVel / 8000
+                        break
+            elif isinstance(packet, network.EntityLookRelMoveS2C):
+                for ent in app.entities:
+                    if ent.entityId == packet.entityId:
+                        ent.pos[0] += packet.dx / (128*32)
+                        ent.pos[1] += packet.dy / (128*32)
+                        ent.pos[2] += packet.dz / (128*32)
+                        # TODO: Is this body or head yaw?
+                        ent.headYaw = packet.yaw
+                        ent.headPitch = packet.pitch
+                        ent.onGround = packet.onGround
+                        break
+            elif isinstance(packet, network.EntityRelMoveS2C):
+                for ent in app.entities:
+                    if ent.entityId == packet.entityId:
+                        ent.pos[0] += packet.dx / (128*32)
+                        ent.pos[1] += packet.dy / (128*32)
+                        ent.pos[2] += packet.dz / (128*32)
+                        ent.onGround = packet.onGround
+                        break
+            elif isinstance(packet, network.EntityTeleportS2C):
+                for ent in app.entities:
+                    if ent.entityId == packet.entityId:
+                        ent.pos = [packet.x, packet.y, packet.z]
+                        # TODO: Is this body or head yaw?
+                        ent.headYaw = packet.yaw
+                        ent.headPitch = packet.pitch
+                        ent.onGround = packet.onGround
+                        break
+            elif isinstance(packet, network.EntityMetadataS2C):
+                for ent in app.entities:
+                    if ent.entityId == packet.entityId:
+                        print(packet.metadata)
+                        for (ty, idx), value in packet.metadata.items():
+                            if idx == 7 and ent.kind.name == 'item':
+                                itemId = app.world.registry.decode('minecraft:item', value['item']).removeprefix('minecraft:')
+                                print(itemId)
+                                ent.extra.stack = Stack(itemId, value['count'])
+                            else:
+                                # TODO:
+                                pass
+                        break
+            elif isinstance(packet, network.BlockChangeS2C):
+                blockId = app.world.registry.decode_block(packet.blockId)
+                blockId = blockId['name'].removeprefix('minecraft:')
+                blockId = world.convertBlock(blockId, (app.textures, app.cube, app.textureIndices))
+
+                try:
+                    world.setBlock(app, packet.location, blockId)
+                except KeyError:
+                    pass
         
         player = app.client.getPlayer()
 
@@ -667,6 +763,11 @@ class PlayingMode(Mode):
 
                 if stack.amount > 0:
                     stack.amount -= 1
+                
+                mcFace = { 'bottom': 0, 'top': 1, 'back': 2, 'front': 3, 'left': 4, 'right': 5 }[face]
+                
+                # TODO: Cursor position, inside block??
+                sendPlayerPlacement(app, 0, pos2, mcFace, 0.5, 0.5, 0.5, False)
                 
                 world.addBlock(app, pos2, stack.item)
 
@@ -1081,7 +1182,7 @@ def appStarted(app):
 
 def appStopped(app):
     # FIXME:
-    if hasattr(app, 'world'):
+    if hasattr(app, 'world') and app.world.local:
         app.world.save()
 
         path = app.world.saveFolderPath() + '/entities.dat'
@@ -1092,6 +1193,8 @@ def appStopped(app):
         nbtfile.write_file(path)
 
 def updateBlockBreaking(app, mode: PlayingMode):
+    client: ClientState = app.client
+
     if mode.mouseHeld and mode.lookedAtBlock is not None:
         pos, face = mode.lookedAtBlock
 

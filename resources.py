@@ -96,6 +96,10 @@ def loadEntityTextures(app):
     CLIENT_DATA.entityTextures['zombie'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/zombie/zombie.png')
     CLIENT_DATA.entityTextures['skeleton'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/skeleton/skeleton.png')
 
+    # TODO:
+    #CLIENT_DATA.entityTextures['player'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/steve.png')
+    CLIENT_DATA.entityTextures['player'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/zombie/zombie.png')
+
 def imageToTexture(image: Image.Image, flip=True) -> int:
     if flip:
         image = image.transpose(Image.FLIP_TOP_BOTTOM)

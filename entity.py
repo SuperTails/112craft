@@ -461,7 +461,8 @@ class Entity:
     walkSpeed: float
 
     bodyAngle: float
-    headAngle: float
+    headYaw: float
+    headPitch: float
 
     lifeTime: int
     distanceMoved: float
@@ -474,6 +475,8 @@ class Entity:
 
     extra: Optional[Any]
 
+    entityId: int
+
     def __init__(self, app, kind: str = '', x: float = 0.0, y: float = 0.0, z: float = 0.0, nbt: Optional[nbt.TAG_Compound] = None):
         if nbt is None:
             self.pos = [x, y, z]
@@ -481,9 +484,13 @@ class Entity:
             self.onGround = False
 
             self.bodyAngle = 0.0
-            self.headAngle = 0.0
+            self.headPitch = 0.0
+            self.headYaw = 0.0
 
             self.immunity = 0
+
+            # TODO:
+            self.entityId = 0
 
             self.path = []
 
@@ -589,6 +596,8 @@ class Entity:
             anim = entityAnimations['animation.quadruped.walk']
         elif self.kind.name == 'zombie':
             anim = entityAnimations['animation.humanoid.move']
+        elif self.kind.name == 'player':
+            anim = entityAnimations['animation.humanoid.move']
         elif self.kind.name == 'skeleton':
             anim = entityAnimations['animation.humanoid.bow_and_arrow']
         elif self.kind.name == 'item':
@@ -602,7 +611,7 @@ class Entity:
         if self.kind.name == 'item':
             rot = [0.0, self.lifeTime * 3.0, 0.0]
         elif boneName == 'head':
-            rot = [0.0, math.degrees(self.headAngle - self.bodyAngle), 0.0]
+            rot = [math.degrees(self.headPitch), math.degrees(self.headYaw - self.bodyAngle), 0.0]
         elif anim is not None and boneName in anim.bones:
             (x, y, z) = anim.bones[boneName].rotation
             rot = [self.calc(x), self.calc(y), self.calc(z)]
@@ -652,7 +661,7 @@ class Entity:
         return result
 
     def tick(self, app, world, entities: List['Entity'], playerX, playerZ):
-        self.headAngle = math.atan2(playerX - self.pos[0], playerZ - self.pos[2])
+        #self.headYaw = math.atan2(playerX - self.pos[0], playerZ - self.pos[2])
 
         if math.sqrt(self.velocity[0]**2 + self.velocity[2]**2) > 0.01:
             goalAngle = math.atan2(self.velocity[0], self.velocity[2])

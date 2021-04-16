@@ -1,3 +1,4 @@
+from sys import float_repr_style
 from twisted.internet import defer, reactor
 from quarry.net.auth import Profile
 from quarry.net.client import ClientFactory, ClientProtocol
@@ -39,6 +40,31 @@ class PlayerDiggingC2S:
             pro.buff_type.pack_varint(self.action.value[0]) +
             pro.buff_type.pack_position(self.location.x, self.location.y, -(self.location.z+1)) +
             pro.buff_type.pack('b', face))
+
+@dataclass
+class PlayerPlacementC2S:
+    hand: int
+    location: BlockPos
+    face: int
+    cx: float
+    cy: float
+    cz: float
+    insideBlock: bool
+
+    def send(self, pro):
+        if self.face == 2:
+            face = 3
+        elif self.face == 3:
+            face = 2
+        else:
+            face = self.face
+        
+        pro.send_packet('player_block_placement',
+            pro.buff_type.pack_varint(self.hand) +
+            pro.buff_type.pack_position(self.location.x, self.location.y, -(self.location.z+1)) +
+            pro.buff_type.pack_varint(self.face) +
+            pro.buff_type.pack('fff?', self.cx, self.cy, self.cz, self.insideBlock)
+        )
 
 @dataclass
 class PlayerMovementC2S:
@@ -114,7 +140,7 @@ class AckPlayerDiggingS2C:
     @classmethod
     def fromBuf(cls, buf):
         x, y, z = buf.unpack_position()
-        location = BlockPos(x, y, -z-1)
+        location = BlockPos(x, y, -(z+1))
 
         block = buf.unpack_varint()
 
@@ -163,7 +189,7 @@ class PlayerPositionAndLookS2C:
 
         teleportId = buf.unpack_varint()
 
-        return cls(x-0.5, y-0.5, -(z-0.5), 180-yaw, -pitch, xRel, yRel, zRel, yawRel, pitchRel, teleportId)
+        return cls(x-0.5, y-0.5, -(z+0.5), 180-yaw, -pitch, xRel, yRel, zRel, yawRel, pitchRel, teleportId)
 
 @dataclass
 class SpawnEntityS2C:
@@ -194,7 +220,20 @@ class SpawnEntityS2C:
         data = buf.unpack('I')
         xVel, yVel, zVel = buf.unpack('hhh')
 
-        return cls(entityId, objectUUID, kind, x-0.5, y-0.5, -(z-0.5), math.pi*2*256*-pitch, math.pi*2*256*-yaw, data, xVel, yVel, zVel)
+        return cls(entityId, objectUUID, kind, x-0.5, y-0.5, -(z+0.5), math.pi*2*-pitch/256, math.pi*2*-yaw/256, data, xVel, yVel, -zVel)
+
+@dataclass
+class BlockChangeS2C:
+    location: BlockPos
+    blockId: int
+
+    @classmethod
+    def fromBuf(cls, buf):
+        x, y, z = buf.unpack_position()
+        location = BlockPos(x, y, -(z+1))
+        blockId = buf.unpack_varint()
+        
+        return cls(location, blockId)
 
 
 @dataclass
@@ -223,7 +262,146 @@ class ChunkDataS2C:
         sections = buf.unpack_chunk(bitmask)
         blockEntities = [buf.unpack_nbt() for _ in range(buf.unpack_varint())]
 
-        return cls(x, -z-1, full, bitmask, heightmap, biomes, sections, blockEntities)
+        return cls(x, -(z+1), full, bitmask, heightmap, biomes, sections, blockEntities)
+
+@dataclass
+class EntityMetadataS2C:
+    entityId: int
+    metadata: Any
+
+    @classmethod
+    def fromBuf(cls, buf):
+        entityId = buf.unpack_varint()
+        metadata = buf.unpack_entity_metadata()
+
+        return cls(entityId, metadata)
+
+@dataclass
+class EntityHeadLookS2C:
+    entityId: int
+    headYaw: float
+
+    @classmethod
+    def fromBuf(cls, buf):
+        entityId = buf.unpack_varint()
+        headYaw = buf.unpack('b')
+
+        headYaw = 2*math.pi*(0.5 + headYaw/256)
+
+        return cls(entityId, headYaw)
+
+@dataclass
+class EntityLookS2C:
+    entityId: int
+    bodyYaw: float
+    headPitch: float
+
+    @classmethod
+    def fromBuf(cls, buf):
+        entityId = buf.unpack_varint()
+        bodyYaw, headPitch = buf.unpack('bb')
+
+        bodyYaw = 2*math.pi*(0.5 + bodyYaw/256)
+        headPitch = 2*math.pi*headPitch/256
+
+        return cls(entityId, bodyYaw, headPitch)
+
+@dataclass
+class EntityVelocityS2C:
+    entityId: int
+    xVel: int
+    yVel: int
+    zVel: int
+
+    @classmethod
+    def fromBuf(cls, buf):
+        entityId = buf.unpack_varint()
+        xVel, yVel, zVel = buf.unpack('hhh')
+
+        return cls(entityId, xVel, yVel, -zVel)
+
+@dataclass
+class EntityRelMoveS2C:
+    entityId: int
+    dx: int
+    dy: int
+    dz: int
+    onGround: bool
+    
+    @classmethod
+    def fromBuf(cls, buf):
+        entityId = buf.unpack_varint()
+        dx, dy, dz, onGround = buf.unpack('hhh?')
+
+        return cls(entityId, dx, dy, -dz, onGround)
+
+@dataclass
+class EntityLookRelMoveS2C:
+    entityId: int
+    dx: int
+    dy: int
+    dz: int
+
+    yaw: float
+    pitch: float
+
+    onGround: bool
+
+    @classmethod
+    def fromBuf(cls, buf):
+        entityId = buf.unpack_varint()
+        dx, dy, dz, yaw, pitch = buf.unpack('hhhbb')
+
+        yaw = 2*math.pi*(0.5 + yaw/256)
+        pitch = 2*math.pi*pitch/256
+
+        onGround = buf.unpack('?')
+
+        return cls(entityId, dx, dy, -dz, yaw, pitch, onGround)
+
+@dataclass
+class EntityTeleportS2C:
+    entityId: int
+    x: float
+    y: float
+    z: float
+    yaw: float
+    pitch: float
+    onGround: bool
+
+    @classmethod
+    def fromBuf(cls, buf):
+        entityId = buf.unpack_varint()
+        x, y, z, yaw, pitch, onGround = buf.unpack('dddbb?')
+
+        yaw = 2*math.pi*(0.5 + yaw/256)
+        pitch = 2*math.pi*pitch/256
+
+        return cls(entityId, x-0.5, y-0.5, -(z+0.5), yaw, pitch, onGround)
+
+@dataclass
+class SpawnPlayerS2C:
+    entityId: int
+    playerUUID: Any
+
+    x: float
+    y: float
+    z: float
+
+    yaw: float
+    pitch: float
+
+    @classmethod
+    def fromBuf(cls, buf):
+        entityId = buf.unpack_varint()
+        playerUUID = buf.unpack_uuid()
+
+        x, y, z, yaw, pitch = buf.unpack('dddbb')
+
+        yaw = 2*math.pi*(0.5 + yaw/256)
+        pitch = 2*math.pi*pitch/256
+
+        return cls(entityId, playerUUID, x-0.5, y-0.5, -(z+0.5), yaw, pitch)
 
 
 class MinecraftProtocol(ClientProtocol):
@@ -245,6 +423,10 @@ class MinecraftProtocol(ClientProtocol):
         s2cQueue.put(SpawnEntityS2C.fromBuf(buf))
         buf.discard()
     
+    def packet_spawn_player(self, buf):
+        s2cQueue.put(SpawnPlayerS2C.fromBuf(buf))
+        buf.discard()
+    
     def packet_acknowledge_player_digging(self, buf):
         s2cQueue.put(AckPlayerDiggingS2C.fromBuf(buf))
         buf.discard()
@@ -257,14 +439,43 @@ class MinecraftProtocol(ClientProtocol):
         buf.discard()
     
     def packet_entity_look(self, buf):
+        s2cQueue.put(EntityLookS2C.fromBuf(buf))
         buf.discard()
     
-    def packet_block_change(self, buf):
+    def packet_entity_head_look(self, buf):
+        s2cQueue.put(EntityHeadLookS2C.fromBuf(buf))
+        buf.discard()
+
+    def packet_entity_velocity(self, buf):
+        s2cQueue.put(EntityVelocityS2C.fromBuf(buf))
+        buf.discard()
+
+    def packet_entity_look_and_relative_move(self, buf):
+        s2cQueue.put(EntityLookRelMoveS2C.fromBuf(buf))
+        buf.discard()
+
+    def packet_entity_relative_move(self, buf):
+        s2cQueue.put(EntityRelMoveS2C.fromBuf(buf))
+        buf.discard()
+
+    def packet_entity_teleport(self, buf):
+        s2cQueue.put(EntityTeleportS2C.fromBuf(buf))
         buf.discard()
     
     def packet_entity_status(self, buf):
         buf.discard()
 
+    def packet_entity_properties(self, buf):
+        buf.discard()
+    
+    def packet_entity_metadata(self, buf):
+        s2cQueue.put(EntityMetadataS2C.fromBuf(buf))
+        buf.discard()
+    
+    def packet_block_change(self, buf):
+        s2cQueue.put(BlockChangeS2C.fromBuf(buf))
+        buf.discard()
+    
     def packet_chat_message(self, buf):
         p_text = buf.unpack_chat().to_string()
         p_position = 0
@@ -279,31 +490,10 @@ class MinecraftProtocol(ClientProtocol):
         if p_position in (0, 1) and p_text.strip():
             print(p_text)
 
-    def packet_entity_velocity(self, buf):
-        buf.discard()
-
-    def packet_entity_look_and_relative_move(self, buf):
-        buf.discard()
-
-    def packet_entity_head_look(self, buf):
-        buf.discard()
-
     def packet_sound_effect(self, buf):
         buf.discard()
 
-    def packet_entity_relative_move(self, buf):
-        buf.discard()
-
-    def packet_entity_teleport(self, buf):
-        buf.discard()
-    
     def packet_update_light(self, buf):
-        buf.discard()
-    
-    def packet_entity_properties(self, buf):
-        buf.discard()
-    
-    def packet_entity_metadata(self, buf):
         buf.discard()
     
     def packet_spawn_mob(self, buf):
