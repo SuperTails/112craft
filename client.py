@@ -58,6 +58,8 @@ class ClientState:
     vpHeight: float
 
     wireframe: bool
+    
+    local: bool
 
     renderDistanceSq: int
 

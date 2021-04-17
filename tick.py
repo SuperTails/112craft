@@ -7,6 +7,7 @@ new entities are spawned, other entities are removed, collisions occur, etc.
 from entity import Entity
 from player import Player
 from client import ClientState
+from server import ServerState
 from util import BlockPos, roundHalfUp, ChunkPos
 import world
 import time
@@ -84,17 +85,16 @@ def sendHeldItemChange(app, newSlot: int):
 
     network.c2sQueue.put(network.HeldItemChangeC2S(newSlot))
 
+def updateBlockBreaking(app, server: ServerState):
+    # TODO:
+    return
 
-def updateBlockBreaking(app):
-    if not app.world.local:
-        return
-
-    pos = app.breakingBlockPos
+    pos = server.breakingBlockPos
 
     if app.breakingBlock == 0.0:
         return
 
-    blockId = app.world.getBlock(pos)
+    blockId = server.world.getBlock(pos)
 
     toolStack = app.mode.player.inventory[app.mode.player.hotbarIdx].stack
     if toolStack.isEmpty():
@@ -200,7 +200,7 @@ def clientTick(client: ClientState, instData):
             player.velocity[0] += x / 10.0
             player.velocity[2] += z / 10.0
         collideXZ(client, player)
-
+    
     client.cameraPos = copy.copy(player.pos)
     client.cameraPos[1] += player.height
 
@@ -219,21 +219,21 @@ def clientTick(client: ClientState, instData):
     client.tickTimeIdx %= len(client.tickTimes)
 
 
-def tick(app):
+def serverTick(app, server: ServerState):
     startTime = time.time()
 
     app.time += 1
 
     instData = (app.textures, app.cube, app.textureIndices)
 
-    app.world.loadUnloadChunks(app.cameraPos, (app.textures, app.cube, app.textureIndices))
-    app.world.addChunkDetails(instData)
-    app.world.tickChunks((app.textures, app.cube, app.textureIndices))
+    server.world.loadUnloadChunks(app.cameraPos, (app.textures, app.cube, app.textureIndices))
+    server.world.addChunkDetails(instData)
+    server.world.tickChunks((app.textures, app.cube, app.textureIndices))
 
-    updateBlockBreaking(app)
+    updateBlockBreaking(app, server)
 
-    doMobSpawning(app)
-    doMobDespawning(app)
+    doMobSpawning(app, server)
+    doMobDespawning(app, server)
 
     # Ticking is done in stages so that collision detection works as expected:
     # First we update the player's Y position and resolve Y collisions,
@@ -290,7 +290,7 @@ def tick(app):
         entChunkPos = world.toChunkLocal(entity.getBlockPos())[0]
         entChunkPos = ChunkPos(entChunkPos.x, 0, entChunkPos.z)
 
-        if entChunkPos not in app.world.chunks or not app.world.chunks[entChunkPos].isTicking:
+        if entChunkPos not in server.world.chunks or not app.world.chunks[entChunkPos].isTicking:
             continue
 
         againstWall = collide(app, entity)
@@ -334,14 +334,15 @@ def syncClient(app):
     #client.breakingBlock = app.breakingBlock
     #client.breakingBlockPos = app.breakingBlockPos
 
-def doMobDespawning(app):
-    player = app.mode.player
+def doMobDespawning(app, server: ServerState):
+    # HACK:
+    player = server.players[0]
 
     toDelete = []
 
     idx = 0
-    while idx < len(app.entities):
-        [x, y, z] = app.entities[idx].pos
+    while idx < len(server.entities):
+        [x, y, z] = server.entities[idx].pos
         dist = math.sqrt((x-player.pos[0])**2 + (y-player.pos[1])**2 + (z-player.pos[2])**2)
 
         maxDist = 128.0
@@ -354,17 +355,18 @@ def doMobDespawning(app):
     
     network.s2cQueue.put(network.DestroyEntitiesS2C(toDelete))
 
-def doMobSpawning(app):
-    mobCap = len(app.world.chunks) / 4
+def doMobSpawning(app, server: ServerState):
+    mobCap = len(server.world.chunks) / 4
 
     random.seed(time.time())
 
-    player = app.mode.player
+    # HACK:
+    player = server.players[0]
 
-    for (chunkPos, chunk) in app.world.chunks.items():
+    for (chunkPos, chunk) in server.world.chunks.items():
         chunk: world.Chunk
         if chunk.isTicking:
-            if len(app.entities) > mobCap:
+            if len(server.entities) > mobCap:
                 return
 
             # FIXME: Random tick speed?
@@ -388,7 +390,7 @@ def doMobSpawning(app):
                 x += random.randint(-2, 2)
                 z += random.randint(-2, 2)
                 if isValidSpawnLocation(app, BlockPos(x, y, z)):
-                    app.entities.append(Entity(app, mob, x, y, z))
+                    server.entities.append(Entity(app, mob, x, y, z))
 
 def isValidSpawnLocation(app, pos: BlockPos):
     floor = BlockPos(pos.x, pos.y - 1, pos.z)

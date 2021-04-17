@@ -292,6 +292,41 @@ class SpawnEntityS2C:
         return cls(entityId, objectUUID, kind, x-0.5, y-0.5, -(z+0.5), math.pi*2*-pitch/256, math.pi*2*-yaw/256, data, xVel, yVel, -zVel)
 
 @dataclass
+class SpawnMobS2C:
+    entityId: int
+    uuid: Any
+    kind: int
+
+    x: float
+    y: float
+    z: float
+
+    yaw: float
+    pitch: float
+    headPitch: float
+
+    xVel: int
+    yVel: int
+    zVel: int
+
+    @classmethod
+    def fromBuf(cls, buf):
+        entityId = buf.unpack_varint()
+        uuid = buf.unpack_uuid()
+        kind = buf.unpack_varint()
+
+        x, y, z, yaw, pitch, headPitch = buf.unpack('dddbbb')
+
+        yaw = 2*math.pi*(0.5 + yaw/256)
+        pitch = 2*math.pi*(0.5 + pitch/256)
+        headPitch = 2*math.pi*(0.5 + headPitch/256)
+
+        xVel, yVel, zVel = buf.unpack('hhh')
+
+        return cls(entityId, uuid, kind, x-0.5, y-0.5, -(z+0.5), yaw, pitch, headPitch, xVel, yVel, -zVel)
+
+
+@dataclass
 class BlockChangeS2C:
     location: BlockPos
     blockId: int
@@ -651,6 +686,7 @@ class MinecraftProtocol(ClientProtocol):
         buf.discard()
     
     def packet_spawn_mob(self, buf):
+        s2cQueue.put(SpawnMobS2C.fromBuf(buf))
         buf.discard()
     
     def packet_player_position_and_look(self, buf):

@@ -117,6 +117,8 @@ class WorldLoadMode(Mode):
         app.world = World(worldName, seed, importPath=importPath)
         app.world.local = local
 
+        app.client.local = local
+
         if local:
             try:
                 path = app.world.saveFolderPath() + '/entities.dat'
@@ -813,6 +815,22 @@ def handleS2CPackets(mode, app, client: ClientState):
                 ent.entityId = packet.entityId
 
                 entities.append(ent)
+        elif isinstance(packet, network.SpawnMobS2C):
+            kind = app.world.registry.decode('minecraft:entity_type', packet.kind).removeprefix('minecraft:')
+            if kind in ['zombie', 'creeper', 'fox', 'skeleton']:
+                ent = Entity(app, kind, packet.x, packet.y, packet.z)
+                ent.velocity[0] = packet.xVel / 8000
+                ent.velocity[1] = packet.yVel / 8000
+                ent.velocity[2] = packet.zVel / 8000
+
+                ent.headYaw = packet.yaw
+                ent.headPitch = packet.pitch
+
+                entities.append(ent)
+            else:
+                print(f'Ignoring unknown mob kind {kind}')
+
+
         elif isinstance(packet, network.SpawnPlayerS2C):
             ent = Player(app)
             ent.entityId = packet.entityId
@@ -921,7 +939,8 @@ def handleS2CPackets(mode, app, client: ClientState):
             blockId = world.convertBlock(blockId, (app.textures, app.cube, app.textureIndices))
 
             try:
-                world.setBlock(app, packet.location, blockId)
+                if not app.client.local:
+                    world.setBlock(app, packet.location, blockId)
             except KeyError:
                 pass
         elif isinstance(packet, network.WindowConfirmationS2C):
@@ -1228,13 +1247,6 @@ class InventoryMode(Mode):
 def appStarted(app):
     loadResources(app)
 
-    #app.mode = WorldLoadMode(app, 'world', TitleMode)
-    def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
-    #app.mode = CreateWorldMode(app)
-
-    #app.entities = [entity.Entity(app, 'skeleton', 0.0, 71.0, 1.0), entity.Entity(app, 'fox', 5.0, 72.0, 3.0)]
-
     app.btnBg = createSizedBackground(app, 200, 40)
 
     app.doDrawHud = True
@@ -1306,6 +1318,11 @@ def appStarted(app):
 
     app.client = client
 
+    #app.mode = WorldLoadMode(app, 'world', TitleMode)
+    def makePlayingMode(app, player): return PlayingMode(app, player)
+    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
+    #app.mode = CreateWorldMode(app)
+
     # ---------------
     # Input Variables
     # ---------------
@@ -1375,8 +1392,8 @@ def updateBlockBreaking(app, mode: PlayingMode):
 
             resources.getDigSound(app, blockId).play()
 
-            # HACK:
-            app.world.setBlock((app.textures, app.cube, app.textureIndices), pos, 'air')
+            if not app.client.local:
+                app.world.setBlock((app.textures, app.cube, app.textureIndices), pos, 'air')
     else:
         if app.breakingBlock > 0.0:
             # FIXME: Face
