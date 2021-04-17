@@ -7,7 +7,7 @@ new entities are spawned, other entities are removed, collisions occur, etc.
 from entity import Entity
 from player import Player
 from client import ClientState
-from util import BlockPos, roundHalfUp, rayAABBIntersect, ChunkPos
+from util import BlockPos, roundHalfUp, ChunkPos
 import world
 import time
 import math
@@ -37,25 +37,39 @@ def sendPlayerDigging(app, action: network.DiggingAction, location: BlockPos, fa
 def sendPlayerLook(app, yaw: float, pitch: float, onGround: bool):
     app.cameraYaw = yaw
     app.cameraPitch = pitch
-    app.mode.player.onGround = onGround
+
+    # TODO:
+    #app.mode.player.onGround = onGround
 
     network.c2sQueue.put(network.PlayerLookC2S(yaw, pitch, onGround))
 
 def sendPlayerPosition(app, x, y, z, onGround):
-    app.mode.player.pos = [x, y, z]
-    app.mode.player.onGround = onGround
+    # TODO:
+    #app.mode.player.pos = [x, y, z]
+    #app.mode.player.onGround = onGround
 
     network.c2sQueue.put(network.PlayerPositionC2S(x, y, z, onGround))
 
 def sendClickWindow(app, windowId: int, slotIdx: int, button: int, actionNum: int, mode: int, item, count):
     # TODO:
 
+    print(f'Sending window ID {windowId} and slot {slotIdx}, action {actionNum}')
+
     network.c2sQueue.put(network.ClickWindowC2S(windowId, slotIdx, button, actionNum, mode, item, count))
+
+def sendCloseWindow(app, windowId: int):
+    network.c2sQueue.put(network.CloseWindowC2S(windowId))
+
+def sendUseItem(app, hand: int):
+    network.c2sQueue.put(network.UseItemC2S(hand))
 
 def sendTeleportConfirm(app, teleportId: int):
     network.c2sQueue.put(network.TeleportConfirmC2S(teleportId))
 
 def sendPlayerMovement(app, onGround: bool):
+    # TODO:
+    #app.mode.player.onGround = onGround
+
     network.c2sQueue.put(network.PlayerMovementC2S(onGround))
 
 def sendPlayerPlacement(app, hand: int, location: BlockPos, face: int, cx: float, cy: float, cz: float, insideBlock: bool):
@@ -65,59 +79,11 @@ def sendClientStatus(app, status: int):
     network.c2sQueue.put(network.ClientStatusC2S(status))
 
 def sendHeldItemChange(app, newSlot: int):
-    app.mode.player.hotbarIdx = newSlot
+    # TODO:
+    #app.mode.player.hotbarIdx = newSlot
 
     network.c2sQueue.put(network.HeldItemChangeC2S(newSlot))
 
-def lookedAtEntity(app) -> Optional[int]:
-    lookX = cos(app.cameraPitch)*sin(-app.cameraYaw)
-    lookY = sin(app.cameraPitch)
-    lookZ = cos(app.cameraPitch)*cos(-app.cameraYaw)
-
-    if lookX == 0.0:
-        lookX = 1e-6
-    if lookY == 0.0:
-        lookY = 1e-6
-    if lookZ == 0.0:
-        lookZ = 1e-6
-
-    mag = math.sqrt(lookX**2 + lookY**2 + lookZ**2)
-    lookX /= mag
-    lookY /= mag
-    lookZ /= mag
-
-    rayOrigin = app.cameraPos
-    rayDir = (lookX, lookY, lookZ)
-
-    inters = []
-
-    for idx, entity in enumerate(app.entities):
-        if abs(entity.pos[0] - app.cameraPos[0]) + abs(entity.pos[2] - app.cameraPos[2]) > 2 * app.mode.player.reach:
-            continue
-
-        (aabb0, aabb1) = entity.getAABB()
-        inter = rayAABBIntersect(rayOrigin, rayDir, aabb0, aabb1)
-        if inter is not None:
-            inters.append((idx, inter))
-        
-    def dist(inter):
-        (_, i) = inter
-        dx = i[0] - rayOrigin[0]
-        dy = i[1] - rayOrigin[1]
-        dz = i[2] - rayOrigin[2]
-        return math.sqrt(dx**2 + dy**2 + dz**2)
-    
-    inters.sort(key=dist)
-
-    if inters == []:
-        return None
-    else:
-        inter = inters[0]
-        if dist(inter) > app.mode.player.reach:
-            print(f"dist: {dist(inter)}")
-            return None
-        else:
-            return inter[0]
 
 def updateBlockBreaking(app):
     if not app.world.local:
@@ -191,14 +157,78 @@ def getNextEntityId() -> int:
     return entityIdNum
 
 
+def clientTick(client: ClientState, instData):
+    startTime = time.time()
+
+    client.time += 1
+
+    client.world.loadUnloadChunks(client.cameraPos, instData)
+    client.world.addChunkDetails(instData)
+
+    player: Player = client.player
+
+    playerChunkPos = world.toChunkLocal(player.getBlockPos())[0]
+    playerChunkPos = ChunkPos(playerChunkPos.x, 0, playerChunkPos.z)
+
+    # W makes the player go forward, S makes them go backwards,
+    # and pressing both makes them stop!
+    z = float(client.w) - float(client.s)
+    # Likewise for side to side movement
+    x = float(client.d) - float(client.a)
+
+    if playerChunkPos in client.world.chunks and client.world.chunks[playerChunkPos].isTicking:
+        if x != 0.0 or z != 0.0:
+            mag = math.sqrt(x*x + z*z)
+            x /= mag
+            z /= mag
+
+            newX = math.cos(client.cameraYaw) * x - math.sin(client.cameraYaw) * z
+            newZ = math.sin(client.cameraYaw) * x + math.cos(client.cameraYaw) * z
+
+            x, z = newX, newZ
+
+            x *= player.walkSpeed 
+            z *= player.walkSpeed
+
+        #player.tick(app, app.world, app.entities, 0.0, 0.0)
+        
+        collideY(client, player)
+        if player.onGround:
+            player.velocity[0] = x
+            player.velocity[2] = z
+        else:
+            player.velocity[0] += x / 10.0
+            player.velocity[2] += z / 10.0
+        collideXZ(client, player)
+
+    client.cameraPos = copy.copy(player.pos)
+    client.cameraPos[1] += player.height
+
+    for entity in client.entities:
+        entChunkPos = world.toChunkLocal(entity.getBlockPos())[0]
+        entChunkPos = ChunkPos(entChunkPos.x, 0, entChunkPos.z)
+
+        if entChunkPos not in client.world.chunks or not client.world.chunks[entChunkPos].isTicking:
+            continue
+    
+        collide(client, entity)
+
+    endTime = time.time()
+    client.tickTimes[client.tickTimeIdx] = (endTime - startTime)
+    client.tickTimeIdx += 1
+    client.tickTimeIdx %= len(client.tickTimes)
+
+
 def tick(app):
     startTime = time.time()
 
     app.time += 1
 
-    world.loadUnloadChunks(app, app.cameraPos)
+    instData = (app.textures, app.cube, app.textureIndices)
 
-    world.tickChunks(app)
+    app.world.loadUnloadChunks(app.cameraPos, (app.textures, app.cube, app.textureIndices))
+    app.world.addChunkDetails(instData)
+    app.world.tickChunks((app.textures, app.cube, app.textureIndices))
 
     updateBlockBreaking(app)
 
@@ -210,11 +240,13 @@ def tick(app):
     # then we update the player's X position and resolve X collisions,
     # and finally update the player's Z position and resolve Z collisions.
 
+    # TODO: USE MOVE PACKETS
+
     # W makes the player go forward, S makes them go backwards,
     # and pressing both makes them stop!
-    z = float(app.w) - float(app.s)
+    z = float(app.client.w) - float(app.client.s)
     # Likewise for side to side movement
-    x = float(app.d) - float(app.a)
+    x = float(app.client.d) - float(app.client.a)
 
     player: Player = app.mode.player
 
@@ -261,7 +293,9 @@ def tick(app):
         if entChunkPos not in app.world.chunks or not app.world.chunks[entChunkPos].isTicking:
             continue
 
-        if collide(app, entity) and entity.onGround:
+        againstWall = collide(app, entity)
+
+        if againstWall and entity.onGround:
             entity.velocity[1] = 0.40
         
         entity.tick(app, app.world, entities, player.pos[0], player.pos[2])
@@ -295,11 +329,8 @@ def syncClient(app):
     client.entities = app.entities
     client.player = app.mode.player
     client.time = app.time
-    client.cameraPos = copy.copy(app.cameraPos)
-    client.cameraPitch = app.cameraPitch
-    client.cameraYaw = app.cameraYaw
-    client.tickTimes = app.tickTimes
 
+    #client.tickTimes = app.tickTimes
     #client.breakingBlock = app.breakingBlock
     #client.breakingBlockPos = app.breakingBlockPos
 
@@ -368,20 +399,20 @@ def isValidSpawnLocation(app, pos: BlockPos):
     
     return isOk
 
-def collideY(app, entity: Entity):
+def collideY(client: ClientState, entity: Entity):
     entity.pos[1] += entity.velocity[1]
 
     if entity.onGround:
-        if not world.hasBlockBeneath(app, entity):
+        if not client.world.hasBlockBeneath(entity):
             entity.onGround = False
     else:
         #if not hasattr(entity, 'flying') or not entity.flying: #type:ignore
-        entity.velocity[1] -= app.gravity
+        entity.velocity[1] -= client.gravity
         [_, yPos, _] = entity.pos
         #yPos -= entity.height
         yPos -= 0.1
         feetPos = roundHalfUp(yPos)
-        if world.hasBlockBeneath(app, entity): 
+        if client.world.hasBlockBeneath(entity): 
             entity.onGround = True
             if hasattr(entity, 'flying'): entity.flying = False #type:ignore
             entity.velocity[1] = 0.0
@@ -393,18 +424,18 @@ def collideY(app, entity: Entity):
             for z in [entity.pos[2] - entity.radius * 0.99, entity.pos[2] + entity.radius * 0.99]:
                 hiYCoord = roundHalfUp(entity.pos[1] + entity.height)
 
-                if app.world.coordsOccupied(BlockPos(round(x), hiYCoord, round(z))):
+                if client.world.coordsOccupied(BlockPos(round(x), hiYCoord, round(z))):
                     yEdge = hiYCoord - 0.55
                     entity.pos[1] = yEdge - entity.height
                     if entity.velocity[1] > 0.0:
                         entity.velocity[1] = 0.0
 
 
-def collide(app, entity: Entity):
-    collideY(app, entity)
-    return collideXZ(app, entity)
+def collide(client: ClientState, entity: Entity):
+    collideY(client, entity)
+    return collideXZ(client, entity)
 
-def collideXZ(app, entity: Entity):
+def collideXZ(client: ClientState, entity: Entity):
     hitWall = False
 
     minY = roundHalfUp((entity.pos[1]))
@@ -419,12 +450,12 @@ def collideXZ(app, entity: Entity):
             hiXBlockCoord = round((x + entity.radius))
             loXBlockCoord = round((x - entity.radius))
 
-            if app.world.coordsOccupied(BlockPos(hiXBlockCoord, y, round(z))):
+            if client.world.coordsOccupied(BlockPos(hiXBlockCoord, y, round(z))):
                 # Collision on the right, so move to the left
                 xEdge = (hiXBlockCoord - 0.5)
                 entity.pos[0] = xEdge - entity.radius
                 hitWall = True
-            elif app.world.coordsOccupied(BlockPos(loXBlockCoord, y, round(z))):
+            elif client.world.coordsOccupied(BlockPos(loXBlockCoord, y, round(z))):
                 # Collision on the left, so move to the right
                 xEdge = (loXBlockCoord + 0.5)
                 entity.pos[0] = xEdge + entity.radius
@@ -439,11 +470,11 @@ def collideXZ(app, entity: Entity):
             hiZBlockCoord = round((z + entity.radius))
             loZBlockCoord = round((z - entity.radius))
 
-            if app.world.coordsOccupied(BlockPos(round(x), y, hiZBlockCoord)):
+            if client.world.coordsOccupied(BlockPos(round(x), y, hiZBlockCoord)):
                 zEdge = (hiZBlockCoord - 0.5)
                 entity.pos[2] = zEdge - entity.radius
                 hitWall = True
-            elif app.world.coordsOccupied(BlockPos(round(x), y, loZBlockCoord)):
+            elif client.world.coordsOccupied(BlockPos(round(x), y, loZBlockCoord)):
                 zEdge = (loZBlockCoord + 0.5)
                 entity.pos[2] = zEdge + entity.radius
                 hitWall = True

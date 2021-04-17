@@ -50,7 +50,7 @@ from network import ChunkDataS2C
 # Places a tree with its bottommost log at the given position in the world.
 # If `doUpdates` is True, this recalculates the lighting and block visibility.
 # Normally that's a good thing, but during worldgen it's redundant.
-def generateTree(app, basePos: BlockPos, doUpdates=True):
+def generateTree(world: 'World', instData, basePos: BlockPos, doUpdates=True):
     x = basePos.x
     y = basePos.y
     z = basePos.z
@@ -59,35 +59,35 @@ def generateTree(app, basePos: BlockPos, doUpdates=True):
     b = doUpdates
 
     # Place bottom logs
-    setBlock(app, basePos, 'oak_log', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, basePos, 'oak_log', doUpdateLight=l, doUpdateBuried=b)
     y += 1
-    setBlock(app, BlockPos(x, y, z), 'oak_log', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x, y, z), 'oak_log', doUpdateLight=l, doUpdateBuried=b)
     # Place log and leaves around it
     for _ in range(2):
         y += 1
-        setBlock(app, BlockPos(x, y, z), 'oak_log', doUpdateLight=l, doUpdateBuried=b)
+        world.setBlock(instData, BlockPos(x, y, z), 'oak_log', doUpdateLight=l, doUpdateBuried=b)
         for xOffset in range(-2, 2+1):
             for zOffset in range(-2, 2+1):
                 if abs(xOffset) == 2 and abs(zOffset) == 2: continue
                 if xOffset == 0 and zOffset == 0: continue
 
-                setBlock(app, BlockPos(x + xOffset, y, z + zOffset), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+                world.setBlock(instData, BlockPos(x + xOffset, y, z + zOffset), 'leaves', doUpdateLight=l, doUpdateBuried=b)
     
     # Narrower top part
     y += 1
-    setBlock(app, BlockPos(x - 1, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
-    setBlock(app, BlockPos(x + 1, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
-    setBlock(app, BlockPos(x, y, z - 1), 'leaves', doUpdateLight=l, doUpdateBuried=b)
-    setBlock(app, BlockPos(x, y, z + 1), 'leaves', doUpdateLight=l, doUpdateBuried=b)
-    setBlock(app, BlockPos(x, y, z), 'log', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x - 1, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x + 1, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x, y, z - 1), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x, y, z + 1), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x, y, z), 'log', doUpdateLight=l, doUpdateBuried=b)
 
     # Top cap of just leaves
     y += 1
-    setBlock(app, BlockPos(x - 1, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
-    setBlock(app, BlockPos(x + 1, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
-    setBlock(app, BlockPos(x, y, z - 1), 'leaves', doUpdateLight=l, doUpdateBuried=b)
-    setBlock(app, BlockPos(x, y, z + 1), 'leaves', doUpdateLight=l, doUpdateBuried=b)
-    setBlock(app, BlockPos(x, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x - 1, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x + 1, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x, y, z - 1), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x, y, z + 1), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
 
 
 class WorldgenStage(IntEnum):
@@ -490,7 +490,7 @@ class Chunk:
         )
     
     @timed()
-    def loadFromPacket(self, world, instData, registry, packet: ChunkDataS2C):
+    def loadFromPacket(self, world: 'World', instData, registry, packet: ChunkDataS2C):
         for (idx, section) in enumerate(packet.sections):
             if section is None:
                 self.blocks[:, (idx*16):(idx*16)+1, :] = 'air'
@@ -644,9 +644,7 @@ class Chunk:
 
         self.worldgenStage = WorldgenStage.GENERATED
     
-    def disperseOre(self, app, seed, ore: BlockId, frequency: int, maxHeight: int):
-        instData = (app.textures, app.cube, app.textureIndices)
-
+    def disperseOre(self, world: 'World', instData, seed, ore: BlockId, frequency: int, maxHeight: int):
         for _ in range(frequency):
             x = random.randrange(0, 16)
             y = random.randrange(0, maxHeight)
@@ -656,13 +654,13 @@ class Chunk:
                 for y in range(y, min(y + 2, CHUNK_HEIGHT)):
                     for z in range(z, min(z + 2, 16)):
                         if self.blocks[x, y, z] == 'stone':
-                            self.setBlock(app.world, instData, BlockPos(x, y, z), ore, doUpdateLight=False, doUpdateBuried=False, doUpdateMesh=False)
+                            self.setBlock(world, instData, BlockPos(x, y, z), ore, doUpdateLight=False, doUpdateBuried=False, doUpdateMesh=False)
     
-    def populate(self, app, seed):
+    def populate(self, world: 'World', instData, seed):
         random.seed(hash((self.pos, seed)))
 
-        self.disperseOre(app, seed, 'coal_ore', 20, CHUNK_HEIGHT // 2)
-        self.disperseOre(app, seed, 'iron_ore', 20, CHUNK_HEIGHT // 4)
+        self.disperseOre(world, instData, seed, 'coal_ore', 20, CHUNK_HEIGHT // 2)
+        self.disperseOre(world, instData, seed, 'iron_ore', 20, CHUNK_HEIGHT // 4)
 
         treePos = []
 
@@ -688,11 +686,11 @@ class Chunk:
             globalPos = self._globalBlockPos(BlockPos(treeX, baseY, treeZ))
         
             if globalPos.y < CHUNK_HEIGHT - 6:
-                generateTree(app, globalPos, doUpdates=False)
+                generateTree(world, instData, globalPos, doUpdates=False)
         
         self.worldgenStage = WorldgenStage.POPULATED
     
-    def doFirstLighting(self, app):
+    def doFirstLighting(self):
         import heapq
 
         highestBlock = CHUNK_HEIGHT - 1
@@ -752,7 +750,7 @@ class Chunk:
                         self.lightLevels[newPos[0], yIdx, newPos[1]] = newLevel
                         heapq.heappush(queue, (-newLevel, newPos))
     
-    def updateAllBuried(self, app):
+    def updateAllBuried(self, world: 'World'):
         for i in range(16 * CHUNK_HEIGHT * 16):
             if self.instances[i] is not None:
                 self.instances[i][1] = True
@@ -803,11 +801,11 @@ class Chunk:
         
         for y in range(CHUNK_HEIGHT):
             for foo in range(16):
-                updateBuriedStateAt(app.world, self._globalBlockPos(BlockPos(0, y, foo)))
-                updateBuriedStateAt(app.world, self._globalBlockPos(BlockPos(15, y, foo)))
+                updateBuriedStateAt(world, self._globalBlockPos(BlockPos(0, y, foo)))
+                updateBuriedStateAt(world, self._globalBlockPos(BlockPos(15, y, foo)))
 
-                updateBuriedStateAt(app.world, self._globalBlockPos(BlockPos(foo, y, 0)))
-                updateBuriedStateAt(app.world, self._globalBlockPos(BlockPos(foo, y, 15)))
+                updateBuriedStateAt(world, self._globalBlockPos(BlockPos(foo, y, 0)))
+                updateBuriedStateAt(world, self._globalBlockPos(BlockPos(foo, y, 15)))
     '''
     def updateAllBuried(self, app):
         for xIdx in range(16):
@@ -817,12 +815,12 @@ class Chunk:
     '''
     
     @timed()
-    def lightAndOptimize(self, app):
+    def lightAndOptimize(self, world: 'World'):
         print(f"Lighting and optimizing chunk at {self.pos}")
         
-        self.updateAllBuried(app)
+        self.updateAllBuried(world)
         
-        self.doFirstLighting(app)
+        self.doFirstLighting()
             
         self.worldgenStage = WorldgenStage.OPTIMIZED
     
@@ -849,7 +847,7 @@ class Chunk:
         if not any(self.meshDirtyFlags):
             self.worldgenStage = WorldgenStage.COMPLETE
     
-    @timed(count=1)
+    #@timed(count=1)
     def createOneMeshUncached(self, meshIdx: int, world: 'World', instData):
         self.meshDirtyFlags[meshIdx] = False
 
@@ -1205,10 +1203,113 @@ class World:
         (chunk, ckLocal) = self.getChunk(blockPos)
         chunk.setBlock(self, instData, ckLocal, id, doUpdateLight, doUpdateBuried, doUpdateMesh)
 
-
     def getBlock(self, blockPos: BlockPos) -> str:
         (chunkPos, localPos) = toChunkLocal(blockPos)
         return self.chunks[chunkPos].blocks[localPos.x, localPos.y, localPos.z]
+    
+    def hasBlockBeneath(self, entity):
+        [xPos, yPos, zPos] = entity.pos
+        yPos -= 0.1
+
+        for x in [xPos - entity.radius * 0.99, xPos + entity.radius * 0.99]:
+            for z in [zPos - entity.radius * 0.99, zPos + entity.radius * 0.99]:
+                feetPos = nearestBlockPos(x, yPos, z)
+                if self.coordsOccupied(feetPos):
+                    return True
+        
+        return False
+    
+    def addChunkDetails(self, instData, maxTime=0.030):
+        startTime = time.perf_counter()
+
+        keepGoing = True
+
+        for chunkPos in self.chunks:
+            chunk: Chunk = self.chunks[chunkPos]
+            (adj, gen, pop, opt, com) = self.countLoadedAdjacentChunks(chunkPos, 1)
+            if chunk.worldgenStage == WorldgenStage.GENERATED and gen == 8:
+                chunk.populate(self, instData, self.seed)
+                if time.perf_counter() - startTime > maxTime:
+                    keepGoing = False
+                
+            if keepGoing and chunk.worldgenStage == WorldgenStage.POPULATED and pop == 8:
+                chunk.lightAndOptimize(self)
+                if time.perf_counter() - startTime > maxTime:
+                    keepGoing = False
+
+            if keepGoing and chunk.worldgenStage == WorldgenStage.OPTIMIZED and opt == 8:
+                while keepGoing and chunk.createNextMesh(self, instData):
+                    if time.perf_counter() - startTime > maxTime:
+                        keepGoing = False
+            
+            if keepGoing and chunk.worldgenStage == WorldgenStage.COMPLETE:
+                while keepGoing and chunk.createNextMesh(self, instData):
+                    if time.perf_counter() - startTime > maxTime:
+                        keepGoing = False
+
+            chunk.isVisible = chunk.worldgenStage == WorldgenStage.COMPLETE
+            chunk.isTicking = chunk.isVisible and adj == 8
+
+            if not keepGoing:
+                break
+        
+    def tickChunks(self, app):
+        for chunk in self.chunks.values():
+            if chunk.isTicking:
+                chunk.tick(app)
+
+    
+    def loadUnloadChunks(self, centerPos, instData):
+        (chunkPos, _) = toChunkLocal(nearestBlockPos(centerPos[0], centerPos[1], centerPos[2]))
+        (x, _, z) = chunkPos
+
+        chunkLoadDistance = math.ceil(config.CHUNK_LOAD_DISTANCE / 16)
+
+        # Unload chunks
+        shouldUnload = []
+        for unloadChunkPos in self.chunks:
+            (ux, _, uz) = unloadChunkPos
+            dist = max(abs(ux - x), abs(uz - z))
+            if dist > chunkLoadDistance + 1:
+                # Unload chunk
+                shouldUnload.append(unloadChunkPos)
+
+        for unloadChunkPos in shouldUnload:
+            self.unloadChunk(unloadChunkPos)
+
+        loadedChunks = 0
+
+        #queuedForLoad = []
+
+        for loadChunkPos in itertools.chain(adjacentChunks(chunkPos, chunkLoadDistance), (chunkPos, )):
+            if loadChunkPos not in self.chunks:
+                (ux, _, uz) = loadChunkPos
+                dist = max(abs(ux - x), abs(uz - z))
+
+                urgent = dist <= 1
+
+                if (urgent or (loadedChunks < 1)) and self.canLoadChunk(loadChunkPos):
+                    #queuedForLoad.append((app.world, (app.textures, app.cube), loadChunkPos))
+                    loadedChunks += 1
+                    self.loadChunk(instData, loadChunkPos)
+
+    def countLoadedAdjacentChunks(self, chunkPos: ChunkPos, dist: int) -> Tuple[int, int, int, int, int]:
+        totalCount = 0
+        genCount = 0
+        popCount = 0
+        optCount = 0
+        comCount = 0
+        for pos in adjacentChunks(chunkPos, dist):
+            if pos in self.chunks:
+                totalCount += 1
+                chunk = self.chunks[pos]
+                if chunk.worldgenStage >= WorldgenStage.GENERATED: genCount += 1
+                if chunk.worldgenStage >= WorldgenStage.POPULATED: popCount += 1
+                if chunk.worldgenStage >= WorldgenStage.OPTIMIZED: optCount += 1
+                if chunk.worldgenStage >= WorldgenStage.COMPLETE:  comCount += 1
+                
+        return (totalCount, genCount, popCount, optCount, comCount)
+
     
     def saveFolderPath(self) -> str:
         return f'saves/{self.name}'
@@ -1278,7 +1379,7 @@ class World:
             self.chunks[pos] = Chunk(pos)
             self.chunks[pos].loadFromPacket(self, instData, self.registry, self.serverChunks[pos]) #type:ignore
     
-    def unloadChunk(self, app, pos: ChunkPos):
+    def unloadChunk(self, pos: ChunkPos):
         print(f"Unloading chunk at {pos}")
         saveFile = self.chunkFileName(pos)
         self.chunks[pos].save(saveFile)
@@ -1676,112 +1777,12 @@ def mapMultiFunc(pair):
     (world, instData, chunkPos) = pair
     return (chunkPos, world.createChunk(instData, chunkPos))
 
-def loadUnloadChunks(app, centerPos):
-    (chunkPos, _) = toChunkLocal(nearestBlockPos(centerPos[0], centerPos[1], centerPos[2]))
-    (x, _, z) = chunkPos
-
-    chunkLoadDistance = math.ceil(config.CHUNK_LOAD_DISTANCE / 16)
-
-    # Unload chunks
-    shouldUnload = []
-    for unloadChunkPos in app.world.chunks:
-        (ux, _, uz) = unloadChunkPos
-        dist = max(abs(ux - x), abs(uz - z))
-        if dist > chunkLoadDistance + 1:
-            # Unload chunk
-            shouldUnload.append(unloadChunkPos)
-
-    for unloadChunkPos in shouldUnload:
-        app.world.unloadChunk(app, unloadChunkPos)
-
-    loadedChunks = 0
-
-    #queuedForLoad = []
-
-    for loadChunkPos in itertools.chain(adjacentChunks(chunkPos, chunkLoadDistance), (chunkPos, )):
-        if loadChunkPos not in app.world.chunks:
-            (ux, _, uz) = loadChunkPos
-            dist = max(abs(ux - x), abs(uz - z))
-
-            urgent = dist <= 1
-
-            if (urgent or (loadedChunks < 1)) and app.world.canLoadChunk(loadChunkPos):
-                #queuedForLoad.append((app.world, (app.textures, app.cube), loadChunkPos))
-                loadedChunks += 1
-                app.world.loadChunk((app.textures, app.cube, app.textureIndices), loadChunkPos)
-
-def countLoadedAdjacentChunks(app, chunkPos: ChunkPos, dist: int) -> Tuple[int, int, int, int, int]:
-    totalCount = 0
-    genCount = 0
-    popCount = 0
-    optCount = 0
-    comCount = 0
-    for pos in adjacentChunks(chunkPos, dist):
-        if pos in app.world.chunks:
-            totalCount += 1
-            chunk = app.world.chunks[pos]
-            if chunk.worldgenStage >= WorldgenStage.GENERATED: genCount += 1
-            if chunk.worldgenStage >= WorldgenStage.POPULATED: popCount += 1
-            if chunk.worldgenStage >= WorldgenStage.OPTIMIZED: optCount += 1
-            if chunk.worldgenStage >= WorldgenStage.COMPLETE:  comCount += 1
-            
-    return (totalCount, genCount, popCount, optCount, comCount)
-
-def tickChunks(app, maxTime=0.030):
-    startTime = time.perf_counter()
-
-    keepGoing = True
-
-    for chunkPos in app.world.chunks:
-        chunk: Chunk = app.world.chunks[chunkPos]
-        (adj, gen, pop, opt, com) = countLoadedAdjacentChunks(app, chunkPos, 1)
-        if chunk.worldgenStage == WorldgenStage.GENERATED and gen == 8:
-            chunk.populate(app, app.world.seed)
-            if time.perf_counter() - startTime > maxTime:
-                keepGoing = False
-            
-        if keepGoing and chunk.worldgenStage == WorldgenStage.POPULATED and pop == 8:
-            chunk.lightAndOptimize(app)
-            if time.perf_counter() - startTime > maxTime:
-                keepGoing = False
-
-        if keepGoing and chunk.worldgenStage == WorldgenStage.OPTIMIZED and opt == 8:
-            while keepGoing and chunk.createNextMesh(app.world, (app.textures, app.cube, app.textureIndices)):
-                if time.perf_counter() - startTime > maxTime:
-                    keepGoing = False
-        
-        if keepGoing and chunk.worldgenStage == WorldgenStage.COMPLETE:
-            while keepGoing and chunk.createNextMesh(app.world, (app.textures, app.cube, app.textureIndices)):
-                if time.perf_counter() - startTime > maxTime:
-                    keepGoing = False
-
-        chunk.isVisible = chunk.worldgenStage == WorldgenStage.COMPLETE
-        chunk.isTicking = chunk.isVisible and adj == 8
-
-        if not keepGoing:
-            break
-    
-    for chunk in app.world.chunks.values():
-        if chunk.isTicking:
-            chunk.tick(app)
     
 def removeBlock(app, blockPos: BlockPos):
     setBlock(app, blockPos, 'air', doUpdateMesh=True)
 
 def addBlock(app, blockPos: BlockPos, id: BlockId):
     setBlock(app, blockPos, id, doUpdateMesh=True)
-
-def hasBlockBeneath(app, entity):
-    [xPos, yPos, zPos] = entity.pos
-    yPos -= 0.1
-
-    for x in [xPos - entity.radius * 0.99, xPos + entity.radius * 0.99]:
-        for z in [zPos - entity.radius * 0.99, zPos + entity.radius * 0.99]:
-            feetPos = nearestBlockPos(x, yPos, z)
-            if app.world.coordsOccupied(feetPos):
-                return True
-    
-    return False
 
 def adjacentBlockPos(blockPos: BlockPos, faceIdx: int) -> BlockPos:
     [x, y, z] = blockPos
@@ -1816,89 +1817,3 @@ def getLookVector(app) -> Tuple[float, float, float]:
 
     return (lookX, lookY, lookZ)
 
-def lookedAtBlock(app) -> Optional[Tuple[BlockPos, str]]:
-    lookX = cos(app.cameraPitch)*sin(-app.cameraYaw)
-    lookY = sin(app.cameraPitch)
-    lookZ = cos(app.cameraPitch)*cos(-app.cameraYaw)
-
-    if lookX == 0.0:
-        lookX = 1e-6
-    if lookY == 0.0:
-        lookY = 1e-6
-    if lookZ == 0.0:
-        lookZ = 1e-6
-
-    mag = math.sqrt(lookX**2 + lookY**2 + lookZ**2)
-    lookX /= mag
-    lookY /= mag
-    lookZ /= mag
-
-    # From the algorithm/code shown here:
-    # http://www.cse.yorku.ca/~amana/research/grid.pdf
-
-    x = nearestBlockCoord(app.cameraPos[0])
-    y = nearestBlockCoord(app.cameraPos[1])
-    z = nearestBlockCoord(app.cameraPos[2])
-
-    stepX = 1 if lookX > 0.0 else -1
-    stepY = 1 if lookY > 0.0 else -1
-    stepZ = 1 if lookZ > 0.0 else -1
-
-    tDeltaX = 1.0 / abs(lookX)
-    tDeltaY = 1.0 / abs(lookY)
-    tDeltaZ = 1.0 / abs(lookZ)
-
-    nextXWall = x + 0.5 if stepX == 1 else x - 0.5
-    nextYWall = y + 0.5 if stepY == 1 else y - 0.5
-    nextZWall = z + 0.5 if stepZ == 1 else z - 0.5
-
-    tMaxX = (nextXWall - app.cameraPos[0]) / lookX
-    tMaxY = (nextYWall - app.cameraPos[1]) / lookY
-    tMaxZ = (nextZWall - app.cameraPos[2]) / lookZ
-
-    blockPos = None
-    lastMaxVal = 0.0
-
-    while 1:
-        if app.world.coordsOccupied(BlockPos(x, y, z)):
-            blockPos = BlockPos(x, y, z)
-            break
-
-        minVal = min(tMaxX, tMaxY, tMaxZ)
-
-        if minVal == tMaxX:
-            x += stepX
-            # FIXME: if outside...
-            lastMaxVal = tMaxX
-            tMaxX += tDeltaX
-        elif minVal == tMaxY:
-            y += stepY
-            lastMaxVal = tMaxY
-            tMaxY += tDeltaY
-        else:
-            z += stepZ
-            lastMaxVal = tMaxZ
-            tMaxZ += tDeltaZ
-        
-        if lastMaxVal > app.mode.player.reach:
-            break
-    
-    if blockPos is None:
-        return None
-    else:
-        pointX = app.cameraPos[0] + lastMaxVal * lookX
-        pointY = app.cameraPos[1] + lastMaxVal * lookY
-        pointZ = app.cameraPos[2] + lastMaxVal * lookZ
-
-        pointX -= blockPos.x
-        pointY -= blockPos.y
-        pointZ -= blockPos.z
-
-        if abs(pointX) > abs(pointY) and abs(pointX) > abs(pointZ):
-            face = 'right' if pointX > 0.0 else 'left'
-        elif abs(pointY) > abs(pointX) and abs(pointY) > abs(pointZ):
-            face = 'top' if pointY > 0.0 else 'bottom'
-        else:
-            face = 'front' if pointZ > 0.0 else 'back'
-        
-        return (blockPos, face)

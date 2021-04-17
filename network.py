@@ -10,6 +10,7 @@ from typing import List, Any, Tuple, Optional
 from enum import Enum
 from util import BlockPos
 from quarry.types.buffer import BufferUnderrun
+from quarry.types.chat import Message
 import math
 
 host = None
@@ -155,6 +156,34 @@ class ClickWindowC2S:
             pro.buff_type.pack('Bhbh', self.windowId, self.slotIdx, self.button, self.actionNum) +
             pro.buff_type.pack_varint(self.mode) +
             pro.buff_type.pack_slot(self.item, self.count))
+
+@dataclass
+class CloseWindowC2S:
+    windowId: int
+
+    def send(self, pro):
+        pro.send_packet('close_window', pro.buff_type.pack_varint(self.windowId))
+
+@dataclass
+class UseItemC2S:
+    hand: int
+
+    def send(self, pro):
+        pro.send_packet('use_item', pro.buff_type.pack_varint(self.hand))
+
+@dataclass
+class OpenWindowS2C:
+    windowId: int
+    kind: int
+    title: Message
+
+    @classmethod
+    def fromBuf(cls, buf):
+        windowId = buf.unpack_varint()
+        kind = buf.unpack_varint()
+        title = buf.unpack_chat()
+
+        return cls(windowId, kind, title)
 
 @dataclass
 class AckPlayerDiggingS2C:
@@ -502,7 +531,7 @@ class MinecraftProtocol(ClientProtocol):
             while not c2sQueue.empty():
                 packet = c2sQueue.get()
                 if packet is None:
-                    print("Stopping reactor!")
+                    print('Stopping reactor!')
                     pro.ticker.stop()
                     reactor.stop() #type:ignore
                     break
@@ -527,6 +556,10 @@ class MinecraftProtocol(ClientProtocol):
     
     def packet_spawn_player(self, buf):
         s2cQueue.put(SpawnPlayerS2C.fromBuf(buf))
+        buf.discard()
+    
+    def packet_open_window(self, buf):
+        s2cQueue.put(OpenWindowS2C.fromBuf(buf))
         buf.discard()
     
     def packet_window_items(self, buf):

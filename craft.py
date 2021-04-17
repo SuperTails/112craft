@@ -52,7 +52,7 @@ from tick import *
 import tick
 import server
 from queue import SimpleQueue
-from client import ClientState
+from client import ClientState, lookedAtBlock, lookedAtEntity
 from util import ChunkPos, BlockPos
 from button import Button, ButtonManager, createSizedBackground
 from world import Chunk, World
@@ -145,9 +145,9 @@ class WorldLoadMode(Mode):
         
     def timerFired(self, app):
         if self.loadStage < 10:
-            world.loadUnloadChunks(app, self.player.pos)
+            app.world.loadUnloadChunks(self.player.pos, (app.textures, app.cube, app.textureIndices))
         elif self.loadStage < 20:
-            world.tickChunks(app, maxTime=5.0)
+            app.world.addChunkDetails((app.textures, app.cube, app.textureIndices), maxTime=5.0)
         else:
             tick.syncClient(app)
             app.mode = self.nextMode(app, self.player)
@@ -397,6 +397,9 @@ def submitChat(app, text: str):
     network.c2sQueue.put(network.ChatMessageC2S(text))
 
     if text.startswith('/'):
+        # TODO: 
+        raise Exception("todo")
+
         text = text.removeprefix('/')
 
         parts = text.split()
@@ -517,7 +520,7 @@ class PlayingMode(Mode):
     lookedAtBlock = None
     mouseHeld: bool = False
 
-    player: Player
+    overlay: Optional['InventoryMode']
 
     def __init__(self, app, player: Player):
         app.world.local = False
@@ -526,15 +529,24 @@ class PlayingMode(Mode):
         app.timerDelay = 100
         setMouseCapture(app, True)
 
-        self.player = player
+        app.client.player = player
+
+        self.overlay = None
 
         sendClientStatus(app, 0)
 
     def redrawAll(self, app, window, canvas):
-        render.redrawAll(app.client, canvas, doDrawHud=app.doDrawHud)
+        doDrawHud = app.doDrawHud and self.overlay is None
+
+        render.redrawAll(app.client, canvas, doDrawHud)
+
+        if self.overlay is not None:
+            self.overlay.redrawAll(app, window, canvas)
     
     def timerFired(self, app):
-        self.lookedAtBlock = world.lookedAtBlock(app)
+        self.lookedAtBlock = lookedAtBlock(app.client)
+
+        player = app.client.getPlayer()
 
         if app.cinematic:
             # TODO: Use framerate instead
@@ -544,196 +556,47 @@ class PlayingMode(Mode):
             app.pitchSpeed *= 0.95
             app.yawSpeed *= 0.95
         
-        if self.player.flying:
+        if player.flying:
             if app.space:
-                self.player.velocity[1] = 0.2
+                player.velocity[1] = 0.2
             elif app.shift:
-                self.player.velocity[1] = -0.2
+                player.velocity[1] = -0.2
             else:
-                self.player.velocity[1] = 0.0
+                player.velocity[1] = 0.0
 
         updateBlockBreaking(app, self)
 
-        while not network.s2cQueue.empty():
-            packet = network.s2cQueue.get()
-            if isinstance(packet, network.PlayerPositionAndLookS2C):
-                player = app.client.getPlayer()
-                player.pos[0] = packet.x + (player.pos[0] if packet.xRel else 0.0)
-                player.pos[1] = packet.y + (player.pos[1] if packet.yRel else 0.0)
-                player.pos[2] = packet.z + (player.pos[2] if packet.zRel else 0.0)
-                # TODO:
-                # yaw, pitch
-
-                sendTeleportConfirm(app, packet.teleportId)
-            elif isinstance(packet, network.ChunkDataS2C):
-                chunkPos = ChunkPos(packet.x, 0, packet.z)
-                
-                if chunkPos in app.world.chunks:
-                    del app.world.chunks[chunkPos]
-
-                app.world.serverChunks[chunkPos] = packet
-            elif isinstance(packet, network.TimeUpdateS2C):
-                # TODO: World age
-
-                app.time = packet.dayTime
-            elif isinstance(packet, network.AckPlayerDiggingS2C):
-                print(packet)
-            elif isinstance(packet, network.SpawnEntityS2C):
-                if packet.kind == 37:
-                    kind = 'item'
-                else:
-                    kind = None
-                
-                if kind is None:
-                    print(f'Ignoring entity kind {packet.kind}')
-                else:
-                    # TODO: UUID
-                    ent = entity.Entity(app, kind, packet.x, packet.y, packet.z)
-                    ent.velocity[0] = packet.xVel / 8000
-                    ent.velocity[1] = packet.yVel / 8000
-                    ent.velocity[2] = packet.zVel / 8000
-                    ent.headYaw = packet.yaw
-                    ent.headPitch = packet.pitch
-                    ent.entityId = packet.entityId
-
-                    app.entities.append(ent)
-            elif isinstance(packet, network.SpawnPlayerS2C):
-                ent = Player(app)
-                ent.entityId = packet.entityId
-                ent.headYaw = packet.yaw
-                ent.headPitch = packet.pitch
-                ent.pos = [packet.x, packet.y, packet.z]
-
-                app.entities.append(ent)
-            elif isinstance(packet, network.EntityLookS2C):
-                for ent in app.entities:
-                    if ent.entityId == packet.entityId:
-                        ent.bodyAngle = packet.bodyYaw
-                        ent.headPitch = packet.headPitch
-                        break
-            elif isinstance(packet, network.EntityHeadLookS2C):
-                for ent in app.entities:
-                    if ent.entityId == packet.entityId:
-                        ent.headYaw = packet.headYaw
-                        break
-            elif isinstance(packet, network.EntityVelocityS2C):
-                for ent in app.entities:
-                    if ent.entityId == packet.entityId:
-                        ent.velocity[0] = packet.xVel / 8000
-                        ent.velocity[1] = packet.yVel / 8000
-                        ent.velocity[2] = packet.zVel / 8000
-                        break
-            elif isinstance(packet, network.EntityLookRelMoveS2C):
-                for ent in app.entities:
-                    if ent.entityId == packet.entityId:
-                        ent.pos[0] += packet.dx / (128*32)
-                        ent.pos[1] += packet.dy / (128*32)
-                        ent.pos[2] += packet.dz / (128*32)
-                        # TODO: Is this body or head yaw?
-                        ent.headYaw = packet.yaw
-                        ent.headPitch = packet.pitch
-                        ent.onGround = packet.onGround
-                        break
-            elif isinstance(packet, network.EntityRelMoveS2C):
-                for ent in app.entities:
-                    if ent.entityId == packet.entityId:
-                        ent.pos[0] += packet.dx / (128*32)
-                        ent.pos[1] += packet.dy / (128*32)
-                        ent.pos[2] += packet.dz / (128*32)
-                        ent.onGround = packet.onGround
-                        break
-            elif isinstance(packet, network.EntityTeleportS2C):
-                for ent in app.entities:
-                    if ent.entityId == packet.entityId:
-                        ent.pos = [packet.x, packet.y, packet.z]
-                        # TODO: Is this body or head yaw?
-                        ent.headYaw = packet.yaw
-                        ent.headPitch = packet.pitch
-                        ent.onGround = packet.onGround
-                        break
-            elif isinstance(packet, network.EntityMetadataS2C):
-                for ent in app.entities:
-                    if ent.entityId == packet.entityId:
-                        print(packet.metadata)
-                        for (ty, idx), value in packet.metadata.items():
-                            if idx == 7 and ent.kind.name == 'item':
-                                if value['item'] is None:
-                                    # TODO: ????
-                                    pass
-                                else:
-                                    itemId = app.world.registry.decode('minecraft:item', value['item']).removeprefix('minecraft:')
-                                    print(itemId)
-                                    ent.extra.stack = Stack(itemId, value['count'])
-                            else:
-                                # TODO:
-                                pass
-                        break
-            elif isinstance(packet, network.WindowItemsS2C):
-                print(packet)
-            elif isinstance(packet, network.SetSlotS2C):
-                if packet.itemId is None:
-                    stack = Stack('', 0)
-                else:
-                    stack = Stack(
-                        app.world.registry.decode('minecraft:item', packet.itemId).removeprefix('minecraft:'),
-                        packet.count)
-
-                if packet.windowId == 0:
-                    if 9 <= packet.slotIdx < 45:
-                        print(f'Setting player inventory at {packet.slotIdx} to {stack}')
-                        app.mode.player.inventory[packet.slotIdx % 36].stack = stack
-                    else:
-                        # TODO:
-                        print(f'Other slot: {packet.slotIdx}')
-                else:
-                    # TODO:
-                    print(f'window ID: {packet.windowId}')
-            elif isinstance(packet, network.DestroyEntitiesS2C):
-                entIdx = 0
-                while entIdx < len(app.entities):
-                    if app.entities[entIdx].entityId in packet.entityIds:
-                        app.entities.pop(entIdx)
-                    else:
-                        entIdx += 1
-            elif isinstance(packet, network.BlockChangeS2C):
-                blockId = app.world.registry.decode_block(packet.blockId)
-                blockId = blockId['name'].removeprefix('minecraft:')
-                blockId = world.convertBlock(blockId, (app.textures, app.cube, app.textureIndices))
-
-                try:
-                    world.setBlock(app, packet.location, blockId)
-                except KeyError:
-                    pass
-            elif isinstance(packet, network.WindowConfirmationS2C):
-                print(packet)
-            elif packet is None:
-                raise Exception("Disconnected")
+        handleS2CPackets(self, app, app.client)
         
-        player = app.client.getPlayer()
-
         client: ClientState = app.client
         sendPlayerLook(app, client.cameraYaw, client.cameraPitch, client.getPlayer().onGround)
         sendPlayerPosition(app, player.pos[0], player.pos[1], player.pos[2], player.onGround)
         sendPlayerMovement(app, player.onGround)
 
-        tick.tick(app)
+        tick.clientTick(app.client, (app.textures, app.cube, app.textureIndices))
 
-        if self.player.health <= 0.0:
+        if player.health <= 0.0:
             app.mode = GameOverMode(app)
 
     def mousePressed(self, app, event):
+        if self.overlay is not None:
+            self.overlay.mousePressed(app, event)
+            return
+
         self.mouseHeld = True
 
-        idx = tick.lookedAtEntity(app)
+        player: Player = app.client.getPlayer()
+
+        idx = lookedAtEntity(app.client)
         if idx is not None:
             entity = app.entities[idx]
 
-            knockback = [entity.pos[0] - self.player.pos[0], entity.pos[2] - self.player.pos[2]]
+            knockback = [entity.pos[0] - player.pos[0], entity.pos[2] - player.pos[2]]
             mag = math.sqrt(knockback[0]**2 + knockback[1]**2)
             knockback[0] /= mag
             knockback[1] /= mag
 
-            slot = self.player.inventory[self.player.hotbarIdx]
+            slot = player.inventory[player.hotbarIdx]
             
             if slot.isEmpty():
                 dmg = 1.0
@@ -743,22 +606,30 @@ class PlayingMode(Mode):
             entity.hit(app, dmg, knockback)
 
     def rightMousePressed(self, app, event):
-        block = world.lookedAtBlock(app)
+        if self.overlay is not None:
+            self.overlay.rightMousePressed(app, event)
+            return
+
+        player: Player = app.client.getPlayer()
+
+        block = lookedAtBlock(app.client)
         if block is not None:
             (pos, face) = block
             faceIdx = ['left', 'right', 'back', 'front', 'bottom', 'top'].index(face) * 2
             pos2 = world.adjacentBlockPos(pos, faceIdx)
 
+            mcFace = { 'bottom': 0, 'top': 1, 'back': 2, 'front': 3, 'left': 4, 'right': 5 }[face]
+
             if not app.world.coordsInBounds(pos2): return
 
-            if app.world.getBlock(pos) == 'crafting_table':
-                app.mode = InventoryMode(app, self, name='crafting_table')
-            elif app.world.getBlock(pos) == 'furnace':
-                (ckPos, ckLocal) = world.toChunkLocal(pos)
-                furnace = app.world.chunks[ckPos].tileEntities[ckLocal]
-                app.mode = InventoryMode(app, self, name='furnace', extra=furnace)
+            blockId = app.world.getBlock(pos)
+
+            if blockId in ['crafting_table', 'furnace']:
+                mcFace = 2*(mcFace // 2) + (1-(mcFace%2))
+
+                sendPlayerPlacement(app, 0, pos, mcFace, 0.5, 0.5, 0.5, False)
             else:
-                stack = self.player.inventory[self.player.hotbarIdx].stack
+                stack = player.inventory[player.hotbarIdx].stack
                 if stack.amount == 0: return
                 
                 if stack.item not in app.textures: return
@@ -766,39 +637,53 @@ class PlayingMode(Mode):
                 if stack.amount > 0:
                     stack.amount -= 1
                 
-                mcFace = { 'bottom': 0, 'top': 1, 'back': 2, 'front': 3, 'left': 4, 'right': 5 }[face]
-                
                 # TODO: Cursor position, inside block??
                 sendPlayerPlacement(app, 0, pos2, mcFace, 0.5, 0.5, 0.5, False)
                 
-                world.addBlock(app, pos2, stack.item)
+                if config.UGLY_HACK:
+                    world.addBlock(app, pos2, stack.item)
 
                 resources.getDigSound(app, app.world.getBlock(pos2)).play()
     
     def mouseReleased(self, app, event):
+        if self.overlay is not None:
+            self.overlay.mouseReleased(app, event)
+            return
+
         self.mouseHeld = False
     
     def keyPressed(self, app, event):
+        if self.overlay is not None:
+            doExit = self.overlay.keyPressed(app, event)
+            sendCloseWindow(app, self.overlay.windowId)
+            if doExit:
+                self.overlay = None
+            return
+
+        client: ClientState = app.client
+        player = client.getPlayer()
+        assert(isinstance(player, Player))
+
         key = event.key.upper()
         if len(key) == 1 and key.isdigit():
             keyNum = int(key)
             if keyNum != 0:
                 sendHeldItemChange(app, keyNum - 1)
         elif key == 'W':
-            app.w = True
+            client.w = True
         elif key == 'S':
-            app.s = True
+            client.s = True
         elif key == 'A':
-            app.a = True
+            client.a = True
         elif key == 'D':
-            app.d = True
+            client.d = True
         elif key == 'E':
-            app.mode = InventoryMode(app, self, name='inventory')
-            app.w = app.s = app.a = app.d = False
+            self.overlay = InventoryMode(app, 0, name='inventory')
+            client.w = client.s = client.a = client.d = False
         elif key == 'Q':
-            stack = self.player.inventory[self.player.hotbarIdx].stack
+            stack = player.inventory[player.hotbarIdx].stack
             if not stack.isEmpty():
-                ent = entity.Entity(app, 'item', self.player.pos[0], self.player.pos[1] + self.player.height - 0.5, self.player.pos[2])
+                ent = entity.Entity(app, 'item', player.pos[0], player.pos[1] + player.height - 0.5, player.pos[2])
                 ent.extra.stack = Stack(stack.item, 1)
 
                 look = world.getLookVector(app)
@@ -812,51 +697,226 @@ class PlayingMode(Mode):
                 app.entities.append(ent)
 
         elif key == 'SPACE' or key == ' ':
-            app.space = True
-            if self.player.onGround:
-                app.mode.player.velocity[1] = 0.35
-            elif self.player.creative and not self.player.onGround:
-                self.player.flying = True
+            client.space = True
+            if player.onGround:
+                player.velocity[1] = 0.35
+            elif player.creative and not player.onGround:
+                player.flying = True
         elif key == 'SHIFT':
-            app.shift = True
+            client.shift = True
         elif key == 'ESCAPE':
             setMouseCapture(app, not app.captureMouse)
         elif key == 'T':
             app.mode = ChatMode(app, self, '')
         elif key == '/':
             app.mode = ChatMode(app, self, '/')
-        elif self.player.flying:
-            self.player.velocity[1] = 0.0
+        elif player.flying:
+            player.velocity[1] = 0.0
 
     def keyReleased(self, app, event):
+        if self.overlay is not None:
+            self.overlay.keyReleased(app, event)
+            return
+
+        client: ClientState = app.client
+
         key = event.key.upper()
         if key == 'W':
-            app.w = False
+            client.w = False
         elif key == 'S':
-            app.s = False 
+            client.s = False 
         elif key == 'A':
-            app.a = False
+            client.a = False
         elif key == 'D':
-            app.d = False
+            client.d = False
         elif key == 'SHIFT':
-            app.shift = False
+            client.shift = False
         elif key == 'SPACE' or key == ' ':
-            app.space = False
+            client.space = False
+
+def handleS2CPackets(mode, app, client: ClientState):
+    player = client.getPlayer()
+    entities = client.entities
+
+    while not network.s2cQueue.empty():
+        packet = network.s2cQueue.get()
+        if isinstance(packet, network.PlayerPositionAndLookS2C):
+            player.pos[0] = packet.x + (player.pos[0] if packet.xRel else 0.0)
+            player.pos[1] = packet.y + (player.pos[1] if packet.yRel else 0.0)
+            player.pos[2] = packet.z + (player.pos[2] if packet.zRel else 0.0)
+            # TODO:
+            # yaw, pitch
+
+            sendTeleportConfirm(app, packet.teleportId)
+        elif isinstance(packet, network.ChunkDataS2C):
+            chunkPos = ChunkPos(packet.x, 0, packet.z)
+            
+            if chunkPos in client.world.chunks:
+                del client.world.chunks[chunkPos]
+
+            client.world.serverChunks[chunkPos] = packet
+        elif isinstance(packet, network.TimeUpdateS2C):
+            # TODO: World age
+
+            client.time = packet.dayTime
+        elif isinstance(packet, network.AckPlayerDiggingS2C):
+            print(packet)
+        elif isinstance(packet, network.SpawnEntityS2C):
+            if packet.kind == 37:
+                kind = 'item'
+            else:
+                kind = None
+            
+            if kind is None:
+                print(f'Ignoring entity kind {packet.kind}')
+            else:
+                # TODO: remove `app`, UUID
+                ent = Entity(app, kind, packet.x, packet.y, packet.z)
+                ent.velocity[0] = packet.xVel / 8000
+                ent.velocity[1] = packet.yVel / 8000
+                ent.velocity[2] = packet.zVel / 8000
+                ent.headYaw = packet.yaw
+                ent.headPitch = packet.pitch
+                ent.entityId = packet.entityId
+
+                entities.append(ent)
+        elif isinstance(packet, network.SpawnPlayerS2C):
+            ent = Player(app)
+            ent.entityId = packet.entityId
+            ent.headYaw = packet.yaw
+            ent.headPitch = packet.pitch
+            ent.pos = [packet.x, packet.y, packet.z]
+
+            entities.append(ent)
+        elif isinstance(packet, network.EntityLookS2C):
+            for ent in entities:
+                if ent.entityId == packet.entityId:
+                    ent.bodyAngle = packet.bodyYaw
+                    ent.headPitch = packet.headPitch
+                    break
+        elif isinstance(packet, network.EntityHeadLookS2C):
+            for ent in entities:
+                if ent.entityId == packet.entityId:
+                    ent.headYaw = packet.headYaw
+                    break
+        elif isinstance(packet, network.EntityVelocityS2C):
+            for ent in entities:
+                if ent.entityId == packet.entityId:
+                    ent.velocity[0] = packet.xVel / 8000
+                    ent.velocity[1] = packet.yVel / 8000
+                    ent.velocity[2] = packet.zVel / 8000
+                    break
+        elif isinstance(packet, network.EntityLookRelMoveS2C):
+            for ent in entities:
+                if ent.entityId == packet.entityId:
+                    ent.pos[0] += packet.dx / (128*32)
+                    ent.pos[1] += packet.dy / (128*32)
+                    ent.pos[2] += packet.dz / (128*32)
+                    # TODO: Is this body or head yaw?
+                    ent.headYaw = packet.yaw
+                    ent.headPitch = packet.pitch
+                    ent.onGround = packet.onGround
+                    break
+        elif isinstance(packet, network.EntityRelMoveS2C):
+            for ent in entities:
+                if ent.entityId == packet.entityId:
+                    ent.pos[0] += packet.dx / (128*32)
+                    ent.pos[1] += packet.dy / (128*32)
+                    ent.pos[2] += packet.dz / (128*32)
+                    ent.onGround = packet.onGround
+                    break
+        elif isinstance(packet, network.EntityTeleportS2C):
+            for ent in entities:
+                if ent.entityId == packet.entityId:
+                    ent.pos = [packet.x, packet.y, packet.z]
+                    # TODO: Is this body or head yaw?
+                    ent.headYaw = packet.yaw
+                    ent.headPitch = packet.pitch
+                    ent.onGround = packet.onGround
+                    break
+        elif isinstance(packet, network.EntityMetadataS2C):
+            for ent in entities:
+                if ent.entityId == packet.entityId:
+                    print(packet.metadata)
+                    for (ty, idx), value in packet.metadata.items():
+                        if idx == 7 and ent.kind.name == 'item':
+                            if value['item'] is None:
+                                # TODO: ????
+                                pass
+                            else:
+                                itemId = app.world.registry.decode('minecraft:item', value['item']).removeprefix('minecraft:')
+                                print(itemId)
+                                ent.extra.stack = Stack(itemId, value['count'])
+                        else:
+                            # TODO:
+                            pass
+                    break
+        elif isinstance(packet, network.WindowItemsS2C):
+            print(packet)
+        elif isinstance(packet, network.SetSlotS2C):
+            if packet.itemId is None:
+                stack = Stack('', 0)
+            else:
+                stack = Stack(
+                    app.world.registry.decode('minecraft:item', packet.itemId).removeprefix('minecraft:'),
+                    packet.count)
+
+            if packet.windowId == 0:
+                if 9 <= packet.slotIdx < 45:
+                    print(f'Setting player inventory at {packet.slotIdx} to {stack}')
+                    player.inventory[packet.slotIdx % 36].stack = stack
+                else:
+                    # TODO:
+                    print(f'Other slot: {packet.slotIdx}')
+            elif hasattr(mode.overlay, 'heldItem') and packet.windowId == -1 and packet.slotIdx == -1:
+                mode.overlay.heldItem = stack
+            elif hasattr(mode.overlay, 'slots') and packet.windowId == mode.windowId:
+                mode.overlay.slots[packet.slotIdx][2].stack
+            else:
+                # TODO:
+                print(f'window ID: {packet.windowId}, stack: {stack}')
+        elif isinstance(packet, network.DestroyEntitiesS2C):
+            entIdx = 0
+            while entIdx < len(entities):
+                if entities[entIdx].entityId in packet.entityIds:
+                    entities.pop(entIdx)
+                else:
+                    entIdx += 1
+        elif isinstance(packet, network.BlockChangeS2C):
+            blockId = app.world.registry.decode_block(packet.blockId)
+            blockId = blockId['name'].removeprefix('minecraft:')
+            blockId = world.convertBlock(blockId, (app.textures, app.cube, app.textureIndices))
+
+            try:
+                world.setBlock(app, packet.location, blockId)
+            except KeyError:
+                pass
+        elif isinstance(packet, network.WindowConfirmationS2C):
+            print(packet)
+        elif isinstance(packet, network.OpenWindowS2C):
+            windowName = app.world.registry.decode('minecraft:menu', packet.kind).removeprefix('minecraft:')
+
+            print(f'Opening window {windowName} with ID {packet.windowId}')
+
+            app.mode.overlay = InventoryMode(app, packet.windowId, windowName)
+        elif packet is None:
+            raise Exception("Disconnected")
+
+
+
 
 class ContainerGui:
     slots: List[Tuple[int, int, Slot]]
-    windowId: int
     actionNum: int
 
-    def __init__(self, slots, windowId: int):
+    def __init__(self, slots):
         self.slots = slots
-        self.windowId = windowId
         self.actionNum = 1
     
     def getMcSlot(self, idx: int) -> int:
         return idx
     
-    def onClick(self, app, isRight, mx, my):
+    def onClick(self, app, isRight, mx, my, windowId):
         (_, _, w) = render.getSlotCenterAndSize(app, 0)
 
         for (i, (x, y, slot)) in enumerate(self.slots):
@@ -879,11 +939,11 @@ class ContainerGui:
                     item = app.world.registry.encode('minecraft:item', 'minecraft:' + stack.item)
                     count = stack.amount
 
-                sendClickWindow(app, self.windowId, self.getMcSlot(i), button, self.actionNum, mode, item, count)
+                sendClickWindow(app, windowId, self.getMcSlot(i), button, self.actionNum, mode, item, count)
 
                 self.actionNum += 1
 
-                app.mode.onSlotClicked(app, isRight, slot)
+                app.mode.overlay.onSlotClicked(app, isRight, slot)
                 self.postClick(app, i)
     
     def postClick(self, app, slotIdx):
@@ -905,18 +965,23 @@ class FurnaceGui(ContainerGui):
             (app.width / 2 + 50, app.height / 4, self.furnace.outputSlot),
         ]
 
-        super().__init__(slots, app.world.registry.encode('minecraft:menu', 'minecraft:furnace'))
+        super().__init__(slots)
 
 def craftingGuiPostClick(gui, app, slotIdx):
+    if isinstance(gui, CraftingTableGui):
+       totalCraftSlots = 9+1
+    else:
+        totalCraftSlots = 4+1
+
     if slotIdx == 0 and gui.prevOutput != gui.slots[0][2].stack:
         # Something was crafted
-        for (_, _, slot) in gui.slots:
+        for (_, _, slot) in gui.slots[1:totalCraftSlots]:
             if slot.stack.amount > 0:
                 slot.stack.amount -= 1
 
     def toid(s): return None if s.isEmpty() else s.item
 
-    rowLen = round(math.sqrt((len(gui.slots) - 1)))
+    rowLen = round(math.sqrt(totalCraftSlots - 1))
 
     c = []
 
@@ -953,7 +1018,7 @@ class InventoryCraftingGui(ContainerGui):
                 y = rowIdx * w + 100
                 slots.append((x, y, Slot(persistent=False)))
 
-        super().__init__(slots, 0)
+        super().__init__(slots)
     
     def postClick(self, app, slotIdx):
         craftingGuiPostClick(self, app, slotIdx)
@@ -968,6 +1033,8 @@ class CraftingTableGui(ContainerGui):
         
         (_, _, w) = render.getSlotCenterAndSize(app, 0)
 
+        slots.append((app.width // 2 + w * 2, 70 + w, Slot(canInput=False)))
+
         for rowIdx in range(3):
             for colIdx in range(3):
                 x = app.width / 2 + (colIdx - 3) * w
@@ -975,9 +1042,8 @@ class CraftingTableGui(ContainerGui):
 
                 slots.append((x, y, Slot(persistent=False)))
         
-        slots.append((app.width // 2 + w * 2, 70 + w, Slot(canInput=False)))
 
-        super().__init__(slots, app.world.registry.encode('minecraft:menu', 'minecraft:crafting'))
+        super().__init__(slots)
     
     def postClick(self, app, slotIdx):
         craftingGuiPostClick(self, app, slotIdx)
@@ -993,57 +1059,50 @@ class PauseMode(Mode):
     def redrawAll(self, app, window, canvas):
         self.submode.redrawAll(app, window, canvas)
 
-class InventoryGui(ContainerGui):
-    def __init__(self, app, player):
-        slots = []
+def getInventorySlots(app, player) -> List[Any]:
+    result = []
 
-        for i in range(36):
-            (x, y, _) = render.getSlotCenterAndSize(app, i)
-            slot = player.inventory[i]
-            slots.append((x, y, slot))
-        
-        super().__init__(slots, 0)
+    for i in range(27):
+        (x, y, _) = render.getSlotCenterAndSize(app, i + 9)
+        slot = player.inventory[i + 9]
+        result.append((x, y, slot))
+
+    for i in range(9):
+        (x, y, _) = render.getSlotCenterAndSize(app, i)
+        slot = player.inventory[i]
+        result.append((x, y, slot))
     
-    def getMcSlot(self, idx: int) -> int:
-        if idx <= 9:
-            return idx + 36
-        else:
-            return idx
+    return result
 
 class InventoryMode(Mode):
-    submode: PlayingMode
     heldItem: Stack
     player: Player
+    windowId: int
 
-    def __init__(self, app, submode: PlayingMode, name: str, extra=None):
+    def __init__(self, app, windowId: int, name: str, extra=None):
         setMouseCapture(app, False)
-        self.submode = submode
         self.heldItem = Stack('', 0)
         self.craftOutput = Stack('', 0)
+        self.windowId = windowId
 
-        self.player = submode.player
-
-        self.guis: List[Any] = [InventoryGui(app, self.player)]
+        self.player = app.client.getPlayer()
 
         if name == 'inventory':
-            self.guis.append(InventoryCraftingGui(app))
-        elif name == 'crafting_table':
-            self.guis.append(CraftingTableGui(app))
+            self.gui = InventoryCraftingGui(app)
+            self.gui.slots += [(0, 0, Slot())] * 4 # Armor slots
+        elif name == 'crafting':
+            self.gui = CraftingTableGui(app)
         elif name == 'furnace':
-            self.guis.append(FurnaceGui(app, extra))
+            self.gui = FurnaceGui(app, extra)
         else:
             raise Exception(f"unknown gui {name}")
         
-    def timerFired(self, app):
-        self.submode.timerFired(app)
-
+        self.gui.slots += getInventorySlots(app, self.player)
+        
     def redrawAll(self, app, window, canvas):
-        self.submode.redrawAll(app, window, canvas)
-
         render.drawMainInventory(app.client, canvas)
 
-        for gui in self.guis:
-            gui.redrawAll(app, canvas)
+        self.gui.redrawAll(app, canvas)
         
         if app.mousePos is not None:
             render.drawStack(app.client, canvas, app.mousePos[0], app.mousePos[1],
@@ -1117,21 +1176,20 @@ class InventoryMode(Mode):
     def someMousePressed(self, app, event, isRight: bool):
         (_, _, w) = render.getSlotCenterAndSize(app, 0)
 
-        for gui in self.guis:
-            gui.onClick(app, isRight, event.x, event.y)
+        self.gui.onClick(app, isRight, event.x, event.y, self.windowId)
  
     def keyPressed(self, app, event):
         key = event.key.upper()
         if key == 'E':
-            for gui in self.guis:
-                for (_, _, slot) in gui.slots:
-                    if not slot.persistent:
-                        self.submode.player.pickUpItem(app, slot.stack)
+            for (_, _, slot) in self.gui.slots:
+                if not slot.persistent:
+                    self.player.pickUpItem(app, slot.stack)
 
-            self.submode.player.pickUpItem(app, self.heldItem)
+            self.player.pickUpItem(app, self.heldItem)
             self.heldItem = Stack('', 0)
-            app.mode = self.submode
             setMouseCapture(app, True)
+            return True
+        return False
 
 # Initializes all the data needed to run 112craft
 def appStarted(app):
@@ -1183,6 +1241,11 @@ def appStarted(app):
     client.height = app.height
     client.width = app.width
 
+    client.tickTimes = [0.0] * 10
+    client.tickTimeIdx = 0
+
+    client.gravity = app.gravity
+
     client.vpDist = 0.25
     client.vpWidth = 3.0 / 4.0
     client.vpHeight = client.vpWidth * app.height / app.width 
@@ -1192,6 +1255,10 @@ def appStarted(app):
     client.breakingBlock = 0.0
     client.breakingBlockPos = BlockPos(0, 0, 0)
     client.lastDigSound = time.time()
+
+    client.cameraPos = [0.0, 0.0, 0.0]
+    client.cameraYaw = 0.0
+    client.cameraPitch = 0.0
 
     client.horizFov = math.atan(client.vpWidth / client.vpDist)
     client.vertFov = math.atan(client.vpHeight / client.vpDist)
@@ -1209,12 +1276,12 @@ def appStarted(app):
     # ---------------
     app.mouseMovedDelay = 10
 
-    app.w = False
-    app.s = False
-    app.a = False
-    app.d = False
-    app.space = False
-    app.shift = False
+    client.w = False
+    client.s = False
+    client.a = False
+    client.d = False
+    client.space = False
+    client.shift = False
 
     app.prevMouse = None
 
@@ -1229,7 +1296,7 @@ def appStopped(app):
 
         nbtfile = nbt.NBTFile()
         nbtfile.name = "Entities"
-        nbtfile.tags.append(entity.toNbt([app.mode.player] + app.entities))
+        nbtfile.tags.append(entity.toNbt([app.client.getPlayer()] + app.entities))
         nbtfile.write_file(path)
 
 def updateBlockBreaking(app, mode: PlayingMode):
@@ -1243,7 +1310,7 @@ def updateBlockBreaking(app, mode: PlayingMode):
         if client.breakingBlock == 0.0:
             sendPlayerDigging(app, network.DiggingAction.START_DIGGING, pos, face)
 
-        if mode.player.creative:
+        if client.getPlayer().creative:
             client.breakingBlockPos = pos
             client.breakingBlock = 1000.0
         else:
