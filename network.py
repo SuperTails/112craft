@@ -11,6 +11,8 @@ from enum import Enum
 from util import BlockPos
 import math
 
+host = None
+
 c2sQueue = SimpleQueue()
 s2cQueue = SimpleQueue()
 
@@ -436,6 +438,11 @@ class SpawnPlayerS2C:
         return cls(entityId, playerUUID, x-0.5, y-0.5, -(z+0.5), yaw, pitch)
 
 class MinecraftProtocol(ClientProtocol):
+    def connection_lost(self, reason):
+        print(f'Connection lost: {reason}')
+        s2cQueue.put(None)
+        reactor.stop() #type:ignore
+
     def player_joined(self):
         print("hewwo")
         self.ticker.interval = 0.1
@@ -445,8 +452,14 @@ class MinecraftProtocol(ClientProtocol):
         def doTick():
             while not c2sQueue.empty():
                 packet = c2sQueue.get()
-                packet.send(pro)
-        
+                if packet is None:
+                    print("Stopping reactor!")
+                    pro.ticker.stop()
+                    reactor.stop() #type:ignore
+                    break
+                else:
+                    packet.send(pro)
+            
         self.mainLoop = self.ticker.add_loop(1, doTick)
         self.ticker.start()
     

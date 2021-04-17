@@ -106,7 +106,7 @@ def worldToFolderName(name: str) -> str:
 class WorldLoadMode(Mode):
     loadStage: int = 0
 
-    def __init__(self, app, worldName, nextMode, seed=None, importPath=''):
+    def __init__(self, app, worldName, local: bool, nextMode, seed=None, importPath=''):
         self.nextMode = nextMode
 
         app.timerDelay = 10
@@ -115,26 +115,34 @@ class WorldLoadMode(Mode):
             seed = random.random()
 
         app.world = World(worldName, seed, importPath=importPath)
+        app.world.local = local
 
-        try:
-            path = app.world.saveFolderPath() + '/entities.dat'
+        if local:
+            try:
+                path = app.world.saveFolderPath() + '/entities.dat'
 
-            nbtfile = nbt.NBTFile(path)
+                nbtfile = nbt.NBTFile(path)
 
-            self.player = Player(app, tag=nbtfile["Entities"][0])
+                self.player = Player(app, tag=nbtfile["Entities"][0])
 
-            app.entities = [entity.Entity(app, nbt=tag) for tag in nbtfile["Entities"][1:]]
-        except FileNotFoundError:
+                app.entities = [entity.Entity(app, nbt=tag) for tag in nbtfile["Entities"][1:]]
+            except FileNotFoundError:
+                self.player = Player(app)
+                self.player.pos[1] = 75.0
+                app.entities = [entity.Entity(app, 'skeleton', 0.0, 71.0, 1.0), entity.Entity(app, 'fox', 5.0, 72.0, 3.0)]
+
+            cx = math.floor(self.player.pos[0] / 16)
+            cy = math.floor(self.player.pos[1] / world.CHUNK_HEIGHT)
+            cz = math.floor(self.player.pos[2] / 16)
+
+            app.world.loadChunk((app.textures, app.cube, app.textureIndices), ChunkPos(cx, cy, cz))
+
+        else:
             self.player = Player(app)
-            self.player.pos[1] = 75.0
-            app.entities = [entity.Entity(app, 'skeleton', 0.0, 71.0, 1.0), entity.Entity(app, 'fox', 5.0, 72.0, 3.0)]
+            app.entities = []
         
-        cx = math.floor(self.player.pos[0] / 16)
-        cy = math.floor(self.player.pos[1] / world.CHUNK_HEIGHT)
-        cz = math.floor(self.player.pos[2] / 16)
-
-        app.world.loadChunk((app.textures, app.cube, app.textureIndices), ChunkPos(cx, cy, cz))
-    
+            network.host = worldName
+        
     def timerFired(self, app):
         if self.loadStage < 10:
             world.loadUnloadChunks(app, self.player.pos)
@@ -209,7 +217,7 @@ class WorldListMode(Mode):
             elif btn == 'play' and self.selectedWorld is not None:
                 # FIXME: Gamemodes, seed
                 def makePlayingMode(app, player): return PlayingMode(app, player)
-                app.mode = WorldLoadMode(app, self.worlds[self.selectedWorld], makePlayingMode)
+                app.mode = WorldLoadMode(app, self.worlds[self.selectedWorld], True, makePlayingMode)
 
 
 def posInBox(x, y, bounds) -> bool:
@@ -320,7 +328,7 @@ class CreateWorldMode(Mode):
                 else:
                     importPath = ''
 
-                app.mode = WorldLoadMode(app, self.worldName, makePlayingMode, seed=random.random(), importPath=importPath)
+                app.mode = WorldLoadMode(app, self.worldName, True, makePlayingMode, seed=random.random(), importPath=importPath)
             elif btn == 'worldSource':
                 if self.worldSource == 'generated':
                     self.setWorldSource('imported')
@@ -505,8 +513,6 @@ class GameOverMode(Mode):
             app.cameraPos = [0.0, 75.0, 0.0]
             app.mode = PlayingMode(app, player)
 
-networkReady = False
-
 class PlayingMode(Mode):
     lookedAtBlock = None
     mouseHeld: bool = False
@@ -514,9 +520,6 @@ class PlayingMode(Mode):
     player: Player
 
     def __init__(self, app, player: Player):
-        global networkReady
-        networkReady = True
-
         app.world.local = False
         app.world.registry = resources.getRegistry()
 
@@ -524,6 +527,8 @@ class PlayingMode(Mode):
         setMouseCapture(app, True)
 
         self.player = player
+
+        sendClientStatus(app, 0)
 
     def redrawAll(self, app, window, canvas):
         render.redrawAll(app.client, canvas, doDrawHud=app.doDrawHud)
@@ -561,17 +566,12 @@ class PlayingMode(Mode):
 
                 sendTeleportConfirm(app, packet.teleportId)
             elif isinstance(packet, network.ChunkDataS2C):
+                chunkPos = ChunkPos(packet.x, 0, packet.z)
+                
+                if chunkPos in app.world.chunks:
+                    del app.world.chunks[chunkPos]
 
-                if ChunkPos(packet.x, 0, packet.z) not in app.world.chunks:
-                    app.world.chunks[ChunkPos(packet.x, 0, packet.z)] = world.Chunk(ChunkPos(packet.x, 0, packet.z))
-                chunk = app.world.chunks[ChunkPos(packet.x, 0, packet.z)]
-
-                dist = (abs(math.floor(app.mode.player.pos[0] / 16) - packet.x)
-                    + abs(math.floor(app.mode.player.pos[2] / 16) - packet.z))
-
-                del app.world.chunks[ChunkPos(packet.x, 0, packet.z)]
-
-                app.world.serverChunks[ChunkPos(packet.x, 0, packet.z)] = packet
+                app.world.serverChunks[chunkPos] = packet
             elif isinstance(packet, network.TimeUpdateS2C):
                 # TODO: World age
 
@@ -704,6 +704,8 @@ class PlayingMode(Mode):
                     world.setBlock(app, packet.location, blockId)
                 except KeyError:
                     pass
+            elif packet is None:
+                raise Exception("Disconnected")
         
         player = app.client.getPlayer()
 
@@ -711,9 +713,6 @@ class PlayingMode(Mode):
         sendPlayerLook(app, client.cameraYaw, client.cameraPitch, client.getPlayer().onGround)
         sendPlayerPosition(app, player.pos[0], player.pos[1], player.pos[2], player.onGround)
         sendPlayerMovement(app, player.onGround)
-
-        if self.mouseHeld:
-            sendClientStatus(app, 0)
 
         tick.tick(app)
 
@@ -1104,7 +1103,7 @@ def appStarted(app):
 
     #app.mode = WorldLoadMode(app, 'world', TitleMode)
     def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'cavetest4', makePlayingMode, seed=random.randint(0, 2**31))
+    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     #app.entities = [entity.Entity(app, 'skeleton', 0.0, 71.0, 1.0), entity.Entity(app, 'fox', 5.0, 72.0, 3.0)]
@@ -1356,6 +1355,8 @@ def main():
         openglapp.runApp(width=600, height=400)
     else:
         cmu_112_graphics.runApp(width=600, height=400)
+    
+    network.c2sQueue.put(None)
 
 import threading
 
@@ -1365,8 +1366,9 @@ if __name__ == '__main__':
     gameThread = threading.Thread(target=main)
     gameThread.start()
 
-    while not networkReady:
+    while network.host is None:
         sleep(0.1)
 
     network.go()
+    print("Waiting for game thread to close...")
     gameThread.join()
