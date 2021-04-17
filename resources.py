@@ -780,8 +780,8 @@ def loadSounds(app):
         'furnace': 's tone',
         'coal_ore': 'stone',
         'iron_ore': 'stone',
-        'log': 'wood',
-        'planks': 'wood',
+        'oak_log': 'wood',
+        'oak_planks': 'wood',
         'torch': 'wood',
         'crafting_table': 'wood',
     }
@@ -805,9 +805,9 @@ def loadResources(app):
         'iron_ore': { 'all': 'iron_ore' },
         'cobblestone': { 'all': 'cobblestone' },
         'leaves': { 'all': 'leaves_oak_opaque' },
-        'log': { 'side': 'log_oak', 'up': 'log_oak_top', 'down': 'log_oak_top' },
+        'oak_log': { 'side': 'log_oak', 'up': 'log_oak_top', 'down': 'log_oak_top' },
         'bedrock': { 'all': 'bedrock' },
-        'planks': { 'all': 'planks_oak' },
+        'oak_planks': { 'all': 'planks_oak' },
         'crafting_table': {
             "down": 'planks_oak',
             "east": 'crafting_table_side',
@@ -838,8 +838,8 @@ def loadResources(app):
         'iron_ore': ('pickaxe', 6.0),
         'cobblestone': ('pickaxe', 6.0),
         'leaves': (None, 0.5),
-        'log': ('axe', 2.0),
-        'planks': ('axe', 2.0),
+        'oak_log': ('axe', 2.0),
+        'oak_planks': ('axe', 2.0),
         'crafting_table': ('axe', 2.0),
         'bedrock': (None, float('inf')),
         'torch': (None, 0.1),
@@ -858,8 +858,8 @@ def loadResources(app):
         'cobblestone': { '': 'cobblestone' },
         'furnace': { 'pickaxe': 'furnace' },
         'leaves': { '': None },
-        'log': { '': 'log' },
-        'planks': { '': 'planks' },
+        'oak_log': { '': 'oak_log' },
+        'oak_planks': { '': 'oak_planks' },
         'crafting_table': { '': 'crafting_table' },
         'bedrock': { '': None },
         'glowstone': { '': 'glowstone' },
@@ -924,8 +924,8 @@ def loadResources(app):
                 '---',
                 '---'
             ],
-            Stack('planks', 4),
-            { 'l': 'log' }
+            Stack('oak_planks', 4),
+            { 'l': 'oak_log' }
         ),
         Recipe(
             [
@@ -934,7 +934,7 @@ def loadResources(app):
                 '---'
             ],
             Stack('stick', 4),
-            { 'p': 'planks' }
+            { 'p': 'oak_planks' }
         ),
         Recipe(
             [
@@ -943,7 +943,7 @@ def loadResources(app):
                 '---'
             ],
             Stack('crafting_table', 1),
-            { 'p': 'planks' }
+            { 'p': 'oak_planks' }
         ),
         Recipe(
             [
@@ -952,7 +952,7 @@ def loadResources(app):
                 '-s-',
             ],
             Stack('wooden_pickaxe', 1),
-            { 'p': 'planks', 's': 'stick' }
+            { 'p': 'oak_planks', 's': 'stick' }
         ),
         Recipe(
             [
@@ -970,7 +970,7 @@ def loadResources(app):
                 '-s-',
             ],
             Stack('wooden_axe', 1),
-            { 'p': 'planks', 's': 'stick' }
+            { 'p': 'oak_planks', 's': 'stick' }
         ),
         Recipe(
             [
@@ -979,7 +979,7 @@ def loadResources(app):
                 's--',
             ],
             Stack('wooden_shovel', 1),
-            { 'p': 'planks', 's': 'stick' }
+            { 'p': 'oak_planks', 's': 'stick' }
         ),
         Recipe(
             [
@@ -1006,7 +1006,7 @@ def loadResources(app):
                 's--',
             ],
             Stack('wooden_sword', 1),
-            { 'p': 'planks', 's': 'stick' }
+            { 'p': 'oak_planks', 's': 'stick' }
         ),
         Recipe(
             [

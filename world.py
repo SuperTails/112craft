@@ -59,13 +59,13 @@ def generateTree(app, basePos: BlockPos, doUpdates=True):
     b = doUpdates
 
     # Place bottom logs
-    setBlock(app, basePos, 'log', doUpdateLight=l, doUpdateBuried=b)
+    setBlock(app, basePos, 'oak_log', doUpdateLight=l, doUpdateBuried=b)
     y += 1
-    setBlock(app, BlockPos(x, y, z), 'log', doUpdateLight=l, doUpdateBuried=b)
+    setBlock(app, BlockPos(x, y, z), 'oak_log', doUpdateLight=l, doUpdateBuried=b)
     # Place log and leaves around it
     for _ in range(2):
         y += 1
-        setBlock(app, BlockPos(x, y, z), 'log', doUpdateLight=l, doUpdateBuried=b)
+        setBlock(app, BlockPos(x, y, z), 'oak_log', doUpdateLight=l, doUpdateBuried=b)
         for xOffset in range(-2, 2+1):
             for zOffset in range(-2, 2+1):
                 if abs(xOffset) == 2 and abs(zOffset) == 2: continue
@@ -406,14 +406,14 @@ def convertBlock(block, instData):
         block = 'cobblestone'
     elif block in ['oak_leaves', 'birch_leaves']:
         block = 'leaves'
-    elif block in ['oak_log', 'birch_log', 'jungle_wood']:
-        block = 'log'
+    elif block in ['birch_log', 'jungle_wood']:
+        block = 'oak_log'
     elif block in ['dandelion', 'poppy', 'fern', 'grass', 'brown_mushroom', 'red_mushroom']:
         block = 'air'
     elif block in ['repeater', 'redstone_wire', 'redstone_torch', 'redstone_wall_torch', 'stone_button', 'stone_pressure_plate']:
         block = 'air'
-    elif block in ['glowstone', 'dispenser', 'red_bed', 'chest', 'oak_planks', 'note_block', 'gold_block']:
-        block = 'planks'
+    elif block in ['glowstone', 'dispenser', 'red_bed', 'chest', 'note_block', 'gold_block']:
+        block = 'oak_planks'
     elif block.endswith('_wool'):
         block = 'crafting_table'
     elif 'piston' in block:

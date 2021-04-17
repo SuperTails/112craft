@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import List, Any, Tuple, Optional
 from enum import Enum
 from util import BlockPos
+from quarry.types.buffer import BufferUnderrun
 import math
 
 host = None
@@ -74,6 +75,13 @@ class PlayerMovementC2S:
 
     def send(self, pro):
         pro.send_packet('player', pro.buff_type.pack('?', self.onGround))
+
+@dataclass
+class HeldItemChangeC2S:
+    newSlot: int
+
+    def send(self, pro):
+        pro.send_packet('held_item_change', pro.buff_type.pack('h', self.newSlot))
     
 @dataclass
 class ClientStatusC2S:
@@ -131,6 +139,22 @@ class TeleportConfirmC2S:
 
     def send(self, pro):
         pro.send_packet('teleport_confirm', pro.buff_type.pack_varint(self.teleportId))
+    
+@dataclass
+class ClickWindowC2S:
+    windowId: int
+    slotIdx: int
+    button: int
+    actionNum: int
+    mode: int
+    item: Any
+    count: int
+
+    def send(self, pro):
+        pro.send_packet('click_window',
+            pro.buff_type.pack('Bhbh', self.windowId, self.slotIdx, self.button, self.actionNum) +
+            pro.buff_type.pack_varint(self.mode) +
+            pro.buff_type.pack_slot(self.item, self.count))
 
 @dataclass
 class AckPlayerDiggingS2C:
@@ -393,6 +417,31 @@ class DestroyEntitiesS2C:
         return cls(entityIds)
 
 @dataclass
+class WindowConfirmationS2C:
+    windowId: int
+    actionNum: int
+    accepted: bool
+
+    @classmethod
+    def fromBuf(cls, buf):
+        windowId, actionNum, accepted = buf.unpack('Bh?')
+
+        return cls(windowId, actionNum, accepted)
+
+@dataclass
+class WindowItemsS2C:
+    windowId: int
+    stacks: List[Any]
+
+    @classmethod
+    def fromBuf(cls, buf):
+        windowId = buf.unpack('B')
+
+        stacks = [buf.unpack_slot() for _ in range(buf.unpack_varint())]
+
+        return cls(windowId, stacks)
+
+@dataclass
 class SetSlotS2C:
     windowId: int
     slotIdx: int
@@ -463,12 +512,25 @@ class MinecraftProtocol(ClientProtocol):
         self.mainLoop = self.ticker.add_loop(1, doTick)
         self.ticker.start()
     
+    def packet_confirm_transaction(self, buf):
+        s2cQueue.put(WindowConfirmationS2C.fromBuf(buf))
+        buf.discard()
+    
     def packet_spawn_object(self, buf):
-        s2cQueue.put(SpawnEntityS2C.fromBuf(buf))
+        try:
+            s2cQueue.put(SpawnEntityS2C.fromBuf(buf))
+        except BufferUnderrun:
+            # Sometimes the server's first packet is all zeros.
+            # No idea why.
+            pass
         buf.discard()
     
     def packet_spawn_player(self, buf):
         s2cQueue.put(SpawnPlayerS2C.fromBuf(buf))
+        buf.discard()
+    
+    def packet_window_items(self, buf):
+        s2cQueue.put(WindowItemsS2C.fromBuf(buf))
         buf.discard()
     
     def packet_set_slot(self, buf):
@@ -584,7 +646,7 @@ def main():
 
     factory = MinecraftFactory(profile)
 
-    factory.connect("localhost", 25565)
+    factory.connect(host, 25565)
 
 def go():
     main()

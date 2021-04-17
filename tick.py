@@ -47,6 +47,11 @@ def sendPlayerPosition(app, x, y, z, onGround):
 
     network.c2sQueue.put(network.PlayerPositionC2S(x, y, z, onGround))
 
+def sendClickWindow(app, windowId: int, slotIdx: int, button: int, actionNum: int, mode: int, item, count):
+    # TODO:
+
+    network.c2sQueue.put(network.ClickWindowC2S(windowId, slotIdx, button, actionNum, mode, item, count))
+
 def sendTeleportConfirm(app, teleportId: int):
     network.c2sQueue.put(network.TeleportConfirmC2S(teleportId))
 
@@ -58,6 +63,11 @@ def sendPlayerPlacement(app, hand: int, location: BlockPos, face: int, cx: float
 
 def sendClientStatus(app, status: int):
     network.c2sQueue.put(network.ClientStatusC2S(status))
+
+def sendHeldItemChange(app, newSlot: int):
+    app.mode.player.hotbarIdx = newSlot
+
+    network.c2sQueue.put(network.HeldItemChangeC2S(newSlot))
 
 def lookedAtEntity(app) -> Optional[int]:
     lookX = cos(app.cameraPitch)*sin(-app.cameraYaw)

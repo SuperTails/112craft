@@ -579,9 +579,7 @@ class PlayingMode(Mode):
             elif isinstance(packet, network.AckPlayerDiggingS2C):
                 print(packet)
             elif isinstance(packet, network.SpawnEntityS2C):
-                if packet.kind == 102:
-                    kind = 'zombie'
-                elif packet.kind == 37:
+                if packet.kind == 37:
                     kind = 'item'
                 else:
                     kind = None
@@ -670,6 +668,8 @@ class PlayingMode(Mode):
                                 # TODO:
                                 pass
                         break
+            elif isinstance(packet, network.WindowItemsS2C):
+                print(packet)
             elif isinstance(packet, network.SetSlotS2C):
                 if packet.itemId is None:
                     stack = Stack('', 0)
@@ -679,7 +679,7 @@ class PlayingMode(Mode):
                         packet.count)
 
                 if packet.windowId == 0:
-                    if packet.slotIdx < 45:
+                    if 9 <= packet.slotIdx < 45:
                         print(f'Setting player inventory at {packet.slotIdx} to {stack}')
                         app.mode.player.inventory[packet.slotIdx % 36].stack = stack
                     else:
@@ -704,6 +704,8 @@ class PlayingMode(Mode):
                     world.setBlock(app, packet.location, blockId)
                 except KeyError:
                     pass
+            elif isinstance(packet, network.WindowConfirmationS2C):
+                print(packet)
             elif packet is None:
                 raise Exception("Disconnected")
         
@@ -781,7 +783,7 @@ class PlayingMode(Mode):
         if len(key) == 1 and key.isdigit():
             keyNum = int(key)
             if keyNum != 0:
-                self.player.hotbarIdx = keyNum - 1
+                sendHeldItemChange(app, keyNum - 1)
         elif key == 'W':
             app.w = True
         elif key == 'S':
@@ -843,9 +845,16 @@ class PlayingMode(Mode):
 
 class ContainerGui:
     slots: List[Tuple[int, int, Slot]]
+    windowId: int
+    actionNum: int
 
-    def __init__(self, slots):
+    def __init__(self, slots, windowId: int):
         self.slots = slots
+        self.windowId = windowId
+        self.actionNum = 1
+    
+    def getMcSlot(self, idx: int) -> int:
+        return idx
     
     def onClick(self, app, isRight, mx, my):
         (_, _, w) = render.getSlotCenterAndSize(app, 0)
@@ -855,6 +864,25 @@ class ContainerGui:
             y0, y1 = y - w/2, y + w/2
 
             if x0 <= mx <= x1 and y0 <= my <= y1:
+                if isRight:
+                    button = 1
+                    mode = 0
+                else:
+                    button = 0
+                    mode = 0
+                
+                stack = self.slots[i][2].stack
+                if stack.isEmpty():
+                    item = None
+                    count = 0
+                else:
+                    item = app.world.registry.encode('minecraft:item', 'minecraft:' + stack.item)
+                    count = stack.amount
+
+                sendClickWindow(app, self.windowId, self.getMcSlot(i), button, self.actionNum, mode, item, count)
+
+                self.actionNum += 1
+
                 app.mode.onSlotClicked(app, isRight, slot)
                 self.postClick(app, i)
     
@@ -877,10 +905,10 @@ class FurnaceGui(ContainerGui):
             (app.width / 2 + 50, app.height / 4, self.furnace.outputSlot),
         ]
 
-        super().__init__(slots)
+        super().__init__(slots, app.world.registry.encode('minecraft:menu', 'minecraft:furnace'))
 
 def craftingGuiPostClick(gui, app, slotIdx):
-    if slotIdx == len(gui.slots) - 1 and gui.prevOutput != gui.slots[-1][2].stack:
+    if slotIdx == 0 and gui.prevOutput != gui.slots[0][2].stack:
         # Something was crafted
         for (_, _, slot) in gui.slots:
             if slot.stack.amount > 0:
@@ -895,17 +923,17 @@ def craftingGuiPostClick(gui, app, slotIdx):
     for rowIdx in range(rowLen):
         row = []
         for colIdx in range(rowLen):
-            row.append(toid(gui.slots[rowIdx * rowLen + colIdx][2].stack))
+            row.append(toid(gui.slots[1 + rowIdx * rowLen + colIdx][2].stack))
         c.append(row)
     
-    gui.slots[-1][2].stack = Stack('', 0)
+    gui.slots[0][2].stack = Stack('', 0)
 
     for r in app.recipes:
         if r.isCraftedBy(c):
-            gui.slots[-1][2].stack = copy.copy(r.outputs)
+            gui.slots[0][2].stack = copy.copy(r.outputs)
             break
     
-    gui.prevOutput = copy.copy(gui.slots[-1][2].stack)
+    gui.prevOutput = copy.copy(gui.slots[0][2].stack)
 
 class InventoryCraftingGui(ContainerGui):
     prevOutput: Stack
@@ -914,16 +942,18 @@ class InventoryCraftingGui(ContainerGui):
         self.prevOutput = Stack('', 0)
 
         (_, _, w) = render.getSlotCenterAndSize(app, 0)
+
         slots = []
+
+        slots.append((460, 100 + w / 2, Slot(canInput=False)))
+
         for rowIdx in range(2):
             for colIdx in range(2):
                 x = colIdx * w + 350
                 y = rowIdx * w + 100
                 slots.append((x, y, Slot(persistent=False)))
-        
-        slots.append((460, 100 + w / 2, Slot(canInput=False)))
 
-        super().__init__(slots)
+        super().__init__(slots, 0)
     
     def postClick(self, app, slotIdx):
         craftingGuiPostClick(self, app, slotIdx)
@@ -947,7 +977,7 @@ class CraftingTableGui(ContainerGui):
         
         slots.append((app.width // 2 + w * 2, 70 + w, Slot(canInput=False)))
 
-        super().__init__(slots)
+        super().__init__(slots, app.world.registry.encode('minecraft:menu', 'minecraft:crafting'))
     
     def postClick(self, app, slotIdx):
         craftingGuiPostClick(self, app, slotIdx)
@@ -972,7 +1002,13 @@ class InventoryGui(ContainerGui):
             slot = player.inventory[i]
             slots.append((x, y, slot))
         
-        super().__init__(slots)
+        super().__init__(slots, 0)
+    
+    def getMcSlot(self, idx: int) -> int:
+        if idx <= 9:
+            return idx + 36
+        else:
+            return idx
 
 class InventoryMode(Mode):
     submode: PlayingMode
@@ -999,7 +1035,7 @@ class InventoryMode(Mode):
             raise Exception(f"unknown gui {name}")
         
     def timerFired(self, app):
-        tick.tick(app)
+        self.submode.timerFired(app)
 
     def redrawAll(self, app, window, canvas):
         self.submode.redrawAll(app, window, canvas)
