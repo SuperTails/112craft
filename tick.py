@@ -211,7 +211,7 @@ def clientTick(client: ClientState, instData):
         if entChunkPos not in client.world.chunks or not client.world.chunks[entChunkPos].isTicking:
             continue
     
-        collide(client, entity)
+        #collide(client, entity)
 
     endTime = time.time()
     client.tickTimes[client.tickTimeIdx] = (endTime - startTime)
@@ -337,6 +337,8 @@ def syncClient(app):
 def doMobDespawning(app):
     player = app.mode.player
 
+    toDelete = []
+
     idx = 0
     while idx < len(app.entities):
         [x, y, z] = app.entities[idx].pos
@@ -345,9 +347,12 @@ def doMobDespawning(app):
         maxDist = 128.0
 
         if dist > maxDist or app.entities[idx].health <= 0.0:
+            toDelete.append(app.entities[idx].entityId)
             app.entities.pop(idx)
         else:
             idx += 1
+    
+    network.s2cQueue.put(network.DestroyEntitiesS2C(toDelete))
 
 def doMobSpawning(app):
     mobCap = len(app.world.chunks) / 4

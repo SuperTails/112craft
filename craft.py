@@ -455,12 +455,33 @@ def submitChat(app, text: str):
     else:
         print(f"CHAT: {text}")
 
+def drawChatHistory(app, client: ClientState, canvas, useAge=True):
+    for i, (sendTime, msg) in enumerate(client.chat[::-1]):
+        if (useAge and time.time() - sendTime > 5.0) or i > 10:
+            return
+        else:
+            y = app.height * 2/3 - 20 * (i+1)
+
+            canvas.create_rectangle(0, y - 10, app.width, y + 10, fill='#333333')
+
+            msgStr: str = msg.to_string()
+
+            if msgStr.startswith('chat.type.announcement'):
+                msgStr = msgStr.removeprefix('chat.type.announcement')[1:-1]
+                name, text = msgStr.split(', ')
+                msgStr = f'[{name}] {text}'
+            elif msgStr.startswith('chat.type.text'):
+                msgStr = msgStr.removeprefix('chat.type.text')[1:-1]
+                name, text = msgStr.split(', ')
+                msgStr = f'<{name}> {text}'
+
+            canvas.create_text(0, y, text=msgStr, anchor='w')
+
 class ChatMode(Mode):
     text: str
 
     def __init__(self, app, submode, text):
         self.submode = submode
-        self.player = self.submode.player
         self.text = text
     
     def keyPressed(self, app, event):
@@ -469,7 +490,8 @@ class ChatMode(Mode):
             app.mode = self.submode
         elif key == 'ENTER':
             app.mode = self.submode
-            submitChat(app, self.text)
+            if not self.text.isspace():
+                submitChat(app, self.text)
         elif key == 'BACKSPACE':
             if self.text != '':
                 self.text = self.text[:-1]
@@ -480,6 +502,8 @@ class ChatMode(Mode):
         
     def redrawAll(self, app, window, canvas):
         self.submode.redrawAll(app, window, canvas)
+        
+        drawChatHistory(app, app.client, canvas, useAge=False)
 
         canvas.create_rectangle(0, app.height * 2 / 3 - 10, app.width, app.height * 2 / 3 + 10, fill='#333333')
 
@@ -539,6 +563,8 @@ class PlayingMode(Mode):
         doDrawHud = app.doDrawHud and self.overlay is None
 
         render.redrawAll(app.client, canvas, doDrawHud)
+
+        drawChatHistory(app, app.client, canvas)
 
         if self.overlay is not None:
             self.overlay.redrawAll(app, window, canvas)
@@ -668,6 +694,7 @@ class PlayingMode(Mode):
         if len(key) == 1 and key.isdigit():
             keyNum = int(key)
             if keyNum != 0:
+                player.hotbarIdx = keyNum - 1
                 sendHeldItemChange(app, keyNum - 1)
         elif key == 'W':
             client.w = True
@@ -683,6 +710,9 @@ class PlayingMode(Mode):
         elif key == 'Q':
             stack = player.inventory[player.hotbarIdx].stack
             if not stack.isEmpty():
+                sendPlayerDigging(app, network.DiggingAction.DROP_ITEM, BlockPos(0, 0, 0), 0)
+
+                '''
                 ent = entity.Entity(app, 'item', player.pos[0], player.pos[1] + player.height - 0.5, player.pos[2])
                 ent.extra.stack = Stack(stack.item, 1)
 
@@ -695,6 +725,7 @@ class PlayingMode(Mode):
                     stack.amount -= 1
                 
                 app.entities.append(ent)
+                '''
 
         elif key == 'SPACE' or key == ' ':
             client.space = True
@@ -770,6 +801,8 @@ def handleS2CPackets(mode, app, client: ClientState):
             if kind is None:
                 print(f'Ignoring entity kind {packet.kind}')
             else:
+                print(f'Adding entity {kind} with ID {packet.entityId}')
+
                 # TODO: remove `app`, UUID
                 ent = Entity(app, kind, packet.x, packet.y, packet.z)
                 ent.velocity[0] = packet.xVel / 8000
@@ -837,7 +870,7 @@ def handleS2CPackets(mode, app, client: ClientState):
         elif isinstance(packet, network.EntityMetadataS2C):
             for ent in entities:
                 if ent.entityId == packet.entityId:
-                    print(packet.metadata)
+                    print(packet)
                     for (ty, idx), value in packet.metadata.items():
                         if idx == 7 and ent.kind.name == 'item':
                             if value['item'] is None:
@@ -899,10 +932,10 @@ def handleS2CPackets(mode, app, client: ClientState):
             print(f'Opening window {windowName} with ID {packet.windowId}')
 
             app.mode.overlay = InventoryMode(app, packet.windowId, windowName)
+        elif isinstance(packet, network.ChatMessageS2C):
+            app.client.chat.append((time.time(), packet.data))
         elif packet is None:
             raise Exception("Disconnected")
-
-
 
 
 class ContainerGui:
@@ -1245,6 +1278,8 @@ def appStarted(app):
     client.tickTimeIdx = 0
 
     client.gravity = app.gravity
+
+    client.chat = []
 
     client.vpDist = 0.25
     client.vpWidth = 3.0 / 4.0

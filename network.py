@@ -172,6 +172,20 @@ class UseItemC2S:
         pro.send_packet('use_item', pro.buff_type.pack_varint(self.hand))
 
 @dataclass
+class ChatMessageS2C:
+    data: Any
+    position: int
+    sender: Message
+
+    @classmethod
+    def fromBuf(cls, buf):
+        data = buf.unpack_chat()
+        position = buf.unpack('b')
+        sender = buf.unpack_uuid()
+
+        return cls(data, position, sender)
+
+@dataclass
 class OpenWindowS2C:
     windowId: int
     kind: int
@@ -515,6 +529,8 @@ class SpawnPlayerS2C:
 
         return cls(entityId, playerUUID, x-0.5, y-0.5, -(z+0.5), yaw, pitch)
 
+printI = 0
+
 class MinecraftProtocol(ClientProtocol):
     def connection_lost(self, reason):
         print(f'Connection lost: {reason}')
@@ -530,6 +546,10 @@ class MinecraftProtocol(ClientProtocol):
         def doTick():
             while not c2sQueue.empty():
                 packet = c2sQueue.get()
+                global printI
+                if printI < 20:
+                    printI += 1
+                    print(f'sending {packet}')
                 if packet is None:
                     print('Stopping reactor!')
                     pro.ticker.stop()
@@ -621,18 +641,8 @@ class MinecraftProtocol(ClientProtocol):
         buf.discard()
     
     def packet_chat_message(self, buf):
-        p_text = buf.unpack_chat().to_string()
-        p_position = 0
-        p_sender = None
-
-        if self.protocol_version >= 47:
-            p_position = buf.unpack('B')
-
-        if self.protocol_version >= 736:
-            p_sender = buf.unpack_uuid()
-        
-        if p_position in (0, 1) and p_text.strip():
-            print(p_text)
+        s2cQueue.put(ChatMessageS2C.fromBuf(buf))
+        buf.discard()
 
     def packet_sound_effect(self, buf):
         buf.discard()
