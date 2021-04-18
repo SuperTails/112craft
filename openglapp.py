@@ -122,6 +122,8 @@ class App:
             keyName = 'Enter'
         elif key == glfw.KEY_SPACE:
             keyName = ' '
+        elif key == glfw.KEY_PERIOD:
+            keyName = '.'
         elif key == glfw.KEY_BACKSPACE:
             keyName = 'Backspace'
         else:

@@ -327,7 +327,7 @@ def serverTick(app, server: ServerState):
         if entChunkPos not in server.world.chunks or not server.world.chunks[entChunkPos].isTicking:
             continue
 
-        againstWall = collide(server, entity)
+        againstWall = collide(server, entity) #type:ignore
 
         if againstWall and entity.onGround:
             entity.velocity[1] = 0.40
