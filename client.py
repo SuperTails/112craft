@@ -72,6 +72,8 @@ class ClientState:
 
     gravity: float
 
+    cinematic: bool
+
     w: bool
     a: bool
     s: bool
@@ -223,3 +225,23 @@ def lookedAtEntity(client: ClientState) -> Optional[int]:
             return None
         else:
             return inter[0]
+
+def getLookVector(client: ClientState) -> Tuple[float, float, float]:
+    lookX = cos(client.cameraPitch)*sin(-client.cameraYaw)
+    lookY = sin(client.cameraPitch)
+    lookZ = cos(client.cameraPitch)*cos(-client.cameraYaw)
+
+    if lookX == 0.0:
+        lookX = 1e-6
+    if lookY == 0.0:
+        lookY = 1e-6
+    if lookZ == 0.0:
+        lookZ = 1e-6
+
+    mag = math.sqrt(lookX**2 + lookY**2 + lookZ**2)
+    lookX /= mag
+    lookY /= mag
+    lookZ /= mag
+
+    return (lookX, lookY, lookZ)
+

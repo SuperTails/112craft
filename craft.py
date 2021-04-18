@@ -52,8 +52,9 @@ from tick import *
 import tick
 import server
 from queue import SimpleQueue
-from client import ClientState, lookedAtBlock, lookedAtEntity
+from client import ClientState, lookedAtBlock, lookedAtEntity, getLookVector
 from util import ChunkPos, BlockPos
+import util
 from button import Button, ButtonManager, createSizedBackground
 from world import Chunk, World
 from typing import List, Optional, Tuple, Any
@@ -114,45 +115,62 @@ class WorldLoadMode(Mode):
         if seed is None:
             seed = random.random()
 
-        app.world = World(worldName, seed, importPath=importPath)
-        app.world.local = local
-
         app.client.local = local
 
         if local:
+            server = ServerState()
+
+            server.world = World(worldName, seed, importPath=importPath)
+            app.client.world = server.world
+
             try:
-                path = app.world.saveFolderPath() + '/entities.dat'
+                path = server.world.saveFolderPath() + '/entities.dat'
 
                 nbtfile = nbt.NBTFile(path)
 
-                self.player = Player(app, tag=nbtfile["Entities"][0])
+                player = Player(app, tag=nbtfile["Entities"][0])
+                # FIXME:
+                player.entityId = 10_000
 
-                app.entities = [entity.Entity(app, nbt=tag) for tag in nbtfile["Entities"][1:]]
+                self.centerPos = player.pos
+
+                server.players = [player]
+                server.localPlayer = player.entityId
+
+                server.entities = [entity.Entity(app, nbt=tag) for tag in nbtfile["Entities"][1:]]
             except FileNotFoundError:
-                self.player = Player(app)
-                self.player.pos[1] = 75.0
-                app.entities = [entity.Entity(app, 'skeleton', 0.0, 71.0, 1.0), entity.Entity(app, 'fox', 5.0, 72.0, 3.0)]
+                player = Player(app)
+                player.pos[1] = 75.0
+                player.entityId = 10_000
 
-            cx = math.floor(self.player.pos[0] / 16)
-            cy = math.floor(self.player.pos[1] / world.CHUNK_HEIGHT)
-            cz = math.floor(self.player.pos[2] / 16)
+                self.centerPos = player.pos
 
-            app.world.loadChunk((app.textures, app.cube, app.textureIndices), ChunkPos(cx, cy, cz))
+                server.players = [player]
+                server.localPlayer = player.entityId
 
+                server.entities = [entity.Entity(app, 'skeleton', 0.0, 71.0, 1.0), entity.Entity(app, 'fox', 5.0, 72.0, 3.0)]
+
+            cx = math.floor(player.pos[0] / 16)
+            cy = math.floor(player.pos[1] / world.CHUNK_HEIGHT)
+            cz = math.floor(player.pos[2] / 16)
+
+            server.world.loadChunk((app.textures, app.cube, app.textureIndices), ChunkPos(cx, cy, cz))
+
+            app.server = server
         else:
-            self.player = Player(app)
-            app.entities = []
-        
+            self.centerPos = [0.0, 0.0, 0.0]
+
             network.host = worldName
         
     def timerFired(self, app):
+        loader = app.server if app.client.local else app.client
+
         if self.loadStage < 10:
-            app.world.loadUnloadChunks(self.player.pos, (app.textures, app.cube, app.textureIndices))
+            loader.world.loadUnloadChunks(self.centerPos, (app.textures, app.cube, app.textureIndices))
         elif self.loadStage < 20:
-            app.world.addChunkDetails((app.textures, app.cube, app.textureIndices), maxTime=5.0)
+            loader.world.addChunkDetails((app.textures, app.cube, app.textureIndices), maxTime=5.0)
         else:
-            tick.syncClient(app)
-            app.mode = self.nextMode(app, self.player)
+            app.mode = self.nextMode(app, Player(app))
             
         self.loadStage += 1
     
@@ -355,7 +373,7 @@ class TitleMode(Mode):
         self.buttons.addButton('play', playButton)
 
     def timerFired(self, app):
-        app.cameraYaw += 0.01
+        app.client.cameraYaw += 0.01
 
     def mousePressed(self, app, event):
         self.buttons.onPress(app, event.x, event.y)
@@ -425,7 +443,7 @@ def submitChat(app, text: str):
         elif parts[0] == 'show':
             app.doDrawHud = True
         elif parts[0] == 'cinematic':
-            app.cinematic = not app.cinematic
+            app.client.cinematic = not app.client.cinematic
         elif parts[0] == 'time':
             if parts[1] == 'set':
                 if parts[2] == 'day':
@@ -549,9 +567,6 @@ class PlayingMode(Mode):
     overlay: Optional['InventoryMode']
 
     def __init__(self, app, player: Player):
-        app.world.local = False
-        app.world.registry = resources.getRegistry()
-
         app.timerDelay = 100
         setMouseCapture(app, True)
 
@@ -576,10 +591,10 @@ class PlayingMode(Mode):
 
         player = app.client.getPlayer()
 
-        if app.cinematic:
+        if app.client.cinematic:
             # TODO: Use framerate instead
-            app.cameraPitch += app.pitchSpeed * 0.05
-            app.cameraYaw += app.yawSpeed * 0.05
+            app.client.cameraPitch += app.pitchSpeed * 0.05
+            app.client.cameraYaw += app.yawSpeed * 0.05
 
             app.pitchSpeed *= 0.95
             app.yawSpeed *= 0.95
@@ -603,6 +618,8 @@ class PlayingMode(Mode):
 
         tick.clientTick(app.client, (app.textures, app.cube, app.textureIndices))
 
+        tick.serverTick(app, app.server)
+
         if player.health <= 0.0:
             app.mode = GameOverMode(app)
 
@@ -617,7 +634,7 @@ class PlayingMode(Mode):
 
         idx = lookedAtEntity(app.client)
         if idx is not None:
-            entity = app.entities[idx]
+            entity = app.client.entities[idx]
 
             knockback = [entity.pos[0] - player.pos[0], entity.pos[2] - player.pos[2]]
             mag = math.sqrt(knockback[0]**2 + knockback[1]**2)
@@ -718,7 +735,7 @@ class PlayingMode(Mode):
                 ent = entity.Entity(app, 'item', player.pos[0], player.pos[1] + player.height - 0.5, player.pos[2])
                 ent.extra.stack = Stack(stack.item, 1)
 
-                look = world.getLookVector(app)
+                look = getLookVector(app.client)
                 ent.velocity[0] = look[0] * 0.5
                 ent.velocity[1] = look[1] * 0.3 + 0.2
                 ent.velocity[2] = look[2] * 0.5
@@ -816,7 +833,7 @@ def handleS2CPackets(mode, app, client: ClientState):
 
                 entities.append(ent)
         elif isinstance(packet, network.SpawnMobS2C):
-            kind = app.world.registry.decode('minecraft:entity_type', packet.kind).removeprefix('minecraft:')
+            kind = util.REGISTRY.decode('minecraft:entity_type', packet.kind).removeprefix('minecraft:')
             if kind in ['zombie', 'creeper', 'fox', 'skeleton']:
                 ent = Entity(app, kind, packet.x, packet.y, packet.z)
                 ent.velocity[0] = packet.xVel / 8000
@@ -895,7 +912,7 @@ def handleS2CPackets(mode, app, client: ClientState):
                                 # TODO: ????
                                 pass
                             else:
-                                itemId = app.world.registry.decode('minecraft:item', value['item']).removeprefix('minecraft:')
+                                itemId = util.REGISTRY.decode('minecraft:item', value['item']).removeprefix('minecraft:')
                                 print(itemId)
                                 ent.extra.stack = Stack(itemId, value['count'])
                         else:
@@ -909,7 +926,7 @@ def handleS2CPackets(mode, app, client: ClientState):
                 stack = Stack('', 0)
             else:
                 stack = Stack(
-                    app.world.registry.decode('minecraft:item', packet.itemId).removeprefix('minecraft:'),
+                    util.REGISTRY.decode('minecraft:item', packet.itemId).removeprefix('minecraft:'),
                     packet.count)
 
             if packet.windowId == 0:
@@ -934,7 +951,7 @@ def handleS2CPackets(mode, app, client: ClientState):
                 else:
                     entIdx += 1
         elif isinstance(packet, network.BlockChangeS2C):
-            blockId = app.world.registry.decode_block(packet.blockId)
+            blockId = util.REGISTRY.decode_block(packet.blockId)
             blockId = blockId['name'].removeprefix('minecraft:')
             blockId = world.convertBlock(blockId, (app.textures, app.cube, app.textureIndices))
 
@@ -946,7 +963,7 @@ def handleS2CPackets(mode, app, client: ClientState):
         elif isinstance(packet, network.WindowConfirmationS2C):
             print(packet)
         elif isinstance(packet, network.OpenWindowS2C):
-            windowName = app.world.registry.decode('minecraft:menu', packet.kind).removeprefix('minecraft:')
+            windowName = util.REGISTRY.decode('minecraft:menu', packet.kind).removeprefix('minecraft:')
 
             print(f'Opening window {windowName} with ID {packet.windowId}')
 
@@ -988,7 +1005,7 @@ class ContainerGui:
                     item = None
                     count = 0
                 else:
-                    item = app.world.registry.encode('minecraft:item', 'minecraft:' + stack.item)
+                    item = util.REGISTRY.encode('minecraft:item', 'minecraft:' + stack.item)
                     count = stack.amount
 
                 sendClickWindow(app, windowId, self.getMcSlot(i), button, self.actionNum, mode, item, count)
@@ -1250,15 +1267,11 @@ def appStarted(app):
     app.btnBg = createSizedBackground(app, 200, 40)
 
     app.doDrawHud = True
-    app.cinematic = False
 
     app.time = 0
 
     app.yawSpeed = 0.0
     app.pitchSpeed = 0.0
-
-    app.tickTimes = [0.0] * 10
-    app.tickTimeIdx = 0
 
     # ----------------
     # Player variables
@@ -1268,9 +1281,6 @@ def appStarted(app):
     app.newBreakingBlockPos = world.BlockPos(0, 0, 0)
 
     app.gravity = 0.10
-
-    app.cameraYaw = 0
-    app.cameraPitch = 0
 
     if world.CHUNK_HEIGHT == 256: #type:ignore
         app.cameraPos = [2.0, 72, 4.0]
@@ -1285,6 +1295,8 @@ def appStarted(app):
 
     client.height = app.height
     client.width = app.width
+
+    client.cinematic = False
 
     client.tickTimes = [0.0] * 10
     client.tickTimeIdx = 0
@@ -1306,6 +1318,10 @@ def appStarted(app):
     client.cameraPos = [0.0, 0.0, 0.0]
     client.cameraYaw = 0.0
     client.cameraPitch = 0.0
+    
+    client.time = 0
+
+    client.entities = []
 
     client.horizFov = math.atan(client.vpWidth / client.vpDist)
     client.vertFov = math.atan(client.vpHeight / client.vpDist)
@@ -1320,7 +1336,7 @@ def appStarted(app):
 
     #app.mode = WorldLoadMode(app, 'world', TitleMode)
     def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
+    app.mode = WorldLoadMode(app, 'servertest', True, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     # ---------------
@@ -1451,7 +1467,7 @@ def mouseMovedOrDragged(app, event):
     
         client: ClientState = app.client
 
-        if not app.cinematic:
+        if not client.cinematic:
             client.cameraPitch += yChange * 0.01
             client.cameraYaw += xChange * 0.01
         

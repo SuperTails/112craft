@@ -5,14 +5,14 @@ This also creates the texture atlas used for rendering chunks.
 """
 
 import numpy as np
-import world
 import render
 import config
 import copy
 import entity
 import os
 from client import CLIENT_DATA
-from util import Color, BlockId
+from util import Color, BlockId, ItemId
+import util
 from sound import Sound
 from shader import ShaderProgram
 from PIL import Image
@@ -26,10 +26,10 @@ import random
 from quarry.types.registry import LookupRegistry
 
 class Recipe:
-    inputs: List[List[Optional[world.ItemId]]]
+    inputs: List[List[Optional[ItemId]]]
     outputs: Stack
 
-    def __init__(self, grid: List[str], outputs: Stack, maps: dict[str, world.ItemId]):
+    def __init__(self, grid: List[str], outputs: Stack, maps: dict[str, ItemId]):
         self.inputs = []
         for row in grid:
             newRow = []
@@ -41,7 +41,7 @@ class Recipe:
             self.inputs.append(newRow)
         self.outputs = outputs
 
-    def isCraftedBy(self, ingredients: List[List[Optional[world.ItemId]]]):
+    def isCraftedBy(self, ingredients: List[List[Optional[ItemId]]]):
         dim = len(ingredients)
 
         rowOffset = 0
@@ -788,12 +788,14 @@ def loadSounds(app):
 
 def loadResources(app):
     app.rePack = ResourcePack('assets/Vanilla_Resource_Pack_1.16.220')
-    
+
     loadSounds(app)
 
     app.furnaceRecipes = {
         'iron_ore': 'iron_ingot'
     }
+
+    util.REGISTRY = getRegistry()
 
     app.hardnesses = {}
 
@@ -804,7 +806,7 @@ def loadResources(app):
         'coal_ore': { 'all': 'coal_ore' },
         'iron_ore': { 'all': 'iron_ore' },
         'cobblestone': { 'all': 'cobblestone' },
-        'leaves': { 'all': 'leaves_oak_opaque' },
+        'oak_leaves': { 'all': 'leaves_oak_opaque' },
         'oak_log': { 'side': 'log_oak', 'up': 'log_oak_top', 'down': 'log_oak_top' },
         'bedrock': { 'all': 'bedrock' },
         'oak_planks': { 'all': 'planks_oak' },
@@ -837,7 +839,7 @@ def loadResources(app):
         'coal_ore': ('pickaxe', 6.0),
         'iron_ore': ('pickaxe', 6.0),
         'cobblestone': ('pickaxe', 6.0),
-        'leaves': (None, 0.5),
+        'oak_leaves': (None, 0.5),
         'oak_log': ('axe', 2.0),
         'oak_planks': ('axe', 2.0),
         'crafting_table': ('axe', 2.0),
@@ -857,7 +859,7 @@ def loadResources(app):
         'iron_ore': { '': None, 'pickaxe': 'iron_ore' },
         'cobblestone': { '': 'cobblestone' },
         'furnace': { 'pickaxe': 'furnace' },
-        'leaves': { '': None },
+        'oak_leaves': { '': None },
         'oak_log': { '': 'oak_log' },
         'oak_planks': { '': 'oak_planks' },
         'crafting_table': { '': 'crafting_table' },
@@ -1063,7 +1065,7 @@ def loadResources(app):
     else:
         CLIENT_DATA.itemTextures = app.tkItemTextures
     
-def getBlockDrop(app, block: world.BlockId, tool: world.ItemId) -> world.ItemId:
+def getBlockDrop(app, block: BlockId, tool: ItemId) -> ItemId:
     drops = app.blockDrops[block]
 
     pickaxes = { 'wooden_pickaxe': 0.5, 'stone_pickaxe': 0.25 }
@@ -1086,7 +1088,7 @@ def getBlockDrop(app, block: world.BlockId, tool: world.ItemId) -> world.ItemId:
 
 HARDNESSES = {}
 
-def getHardnessAgainst(block: world.BlockId, tool: world.ItemId) -> float:
+def getHardnessAgainst(block: BlockId, tool: ItemId) -> float:
     (goodTool, base) = HARDNESSES[block]
 
     pickaxes = { 'wooden_pickaxe': 0.5, 'stone_pickaxe': 0.25 }

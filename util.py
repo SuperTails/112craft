@@ -6,6 +6,9 @@ Very important are BlockPos, ChunkPos, BlockId, and ItemId.
 import decimal
 import math
 from typing import NamedTuple, Tuple, Optional
+from quarry.types.registry import LookupRegistry
+
+REGISTRY: LookupRegistry
 
 def getSkylightFactor(gameTime: float) -> float: 
     dayFrac = ((gameTime % 24000) / 24000.0) - 0.75;

@@ -62,7 +62,7 @@ def generateTree(world: 'World', instData, basePos: BlockPos, doUpdates=True):
     world.setBlock(instData, basePos, 'oak_log', doUpdateLight=l, doUpdateBuried=b)
     y += 1
     world.setBlock(instData, BlockPos(x, y, z), 'oak_log', doUpdateLight=l, doUpdateBuried=b)
-    # Place log and leaves around it
+    # Place log and oak_leaves around it
     for _ in range(2):
         y += 1
         world.setBlock(instData, BlockPos(x, y, z), 'oak_log', doUpdateLight=l, doUpdateBuried=b)
@@ -71,23 +71,23 @@ def generateTree(world: 'World', instData, basePos: BlockPos, doUpdates=True):
                 if abs(xOffset) == 2 and abs(zOffset) == 2: continue
                 if xOffset == 0 and zOffset == 0: continue
 
-                world.setBlock(instData, BlockPos(x + xOffset, y, z + zOffset), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+                world.setBlock(instData, BlockPos(x + xOffset, y, z + zOffset), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
     
     # Narrower top part
     y += 1
-    world.setBlock(instData, BlockPos(x - 1, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
-    world.setBlock(instData, BlockPos(x + 1, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
-    world.setBlock(instData, BlockPos(x, y, z - 1), 'leaves', doUpdateLight=l, doUpdateBuried=b)
-    world.setBlock(instData, BlockPos(x, y, z + 1), 'leaves', doUpdateLight=l, doUpdateBuried=b)
-    world.setBlock(instData, BlockPos(x, y, z), 'log', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x - 1, y, z), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x + 1, y, z), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x, y, z - 1), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x, y, z + 1), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x, y, z), 'oak_log', doUpdateLight=l, doUpdateBuried=b)
 
-    # Top cap of just leaves
+    # Top cap of just oak_leaves
     y += 1
-    world.setBlock(instData, BlockPos(x - 1, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
-    world.setBlock(instData, BlockPos(x + 1, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
-    world.setBlock(instData, BlockPos(x, y, z - 1), 'leaves', doUpdateLight=l, doUpdateBuried=b)
-    world.setBlock(instData, BlockPos(x, y, z + 1), 'leaves', doUpdateLight=l, doUpdateBuried=b)
-    world.setBlock(instData, BlockPos(x, y, z), 'leaves', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x - 1, y, z), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x + 1, y, z), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x, y, z - 1), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x, y, z + 1), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
+    world.setBlock(instData, BlockPos(x, y, z), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
 
 
 class WorldgenStage(IntEnum):
@@ -404,8 +404,8 @@ def convertBlock(block, instData):
         block = 'stone'
     elif block in ['mossy_cobblestone']:
         block = 'cobblestone'
-    elif block in ['oak_leaves', 'birch_leaves']:
-        block = 'leaves'
+    elif block in ['birch_leaves', 'spruce_leaves', 'jungle_leaves']:
+        block = 'oak_leaves'
     elif block in ['birch_log', 'jungle_wood']:
         block = 'oak_log'
     elif block in ['dandelion', 'poppy', 'fern', 'grass', 'brown_mushroom', 'red_mushroom']:
@@ -490,12 +490,12 @@ class Chunk:
         )
     
     @timed()
-    def loadFromPacket(self, world: 'World', instData, registry, packet: ChunkDataS2C):
+    def loadFromPacket(self, world: 'World', instData, packet: ChunkDataS2C):
         for (idx, section) in enumerate(packet.sections):
             if section is None:
                 self.blocks[:, (idx*16):(idx*16)+1, :] = 'air'
             else:
-                section[0].registry = registry
+                section[0].registry = REGISTRY
                 for (blockIdx, block) in enumerate(section[0]):
                     blockId = block['name'].removeprefix('minecraft:')
                     blockId = convertBlock(blockId, instData)
@@ -1377,7 +1377,7 @@ class World:
             self.chunks[pos] = self.createChunk(instData, pos)
         else:
             self.chunks[pos] = Chunk(pos)
-            self.chunks[pos].loadFromPacket(self, instData, self.registry, self.serverChunks[pos]) #type:ignore
+            self.chunks[pos].loadFromPacket(self, instData, self.serverChunks[pos]) #type:ignore
     
     def unloadChunk(self, pos: ChunkPos):
         print(f"Unloading chunk at {pos}")
@@ -1797,23 +1797,4 @@ def adjacentBlockPos(blockPos: BlockPos, faceIdx: int) -> BlockPos:
     z += c
 
     return BlockPos(x, y, z)
-
-def getLookVector(app) -> Tuple[float, float, float]:
-    lookX = cos(app.cameraPitch)*sin(-app.cameraYaw)
-    lookY = sin(app.cameraPitch)
-    lookZ = cos(app.cameraPitch)*cos(-app.cameraYaw)
-
-    if lookX == 0.0:
-        lookX = 1e-6
-    if lookY == 0.0:
-        lookY = 1e-6
-    if lookZ == 0.0:
-        lookZ = 1e-6
-
-    mag = math.sqrt(lookX**2 + lookY**2 + lookZ**2)
-    lookX /= mag
-    lookY /= mag
-    lookZ /= mag
-
-    return (lookX, lookY, lookZ)
 

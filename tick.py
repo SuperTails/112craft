@@ -9,6 +9,7 @@ from player import Player
 from client import ClientState
 from server import ServerState
 from util import BlockPos, roundHalfUp, ChunkPos
+import util
 import world
 import time
 import math
@@ -20,34 +21,39 @@ import network
 import resources
 from inventory import Stack
 from typing import Optional
+from quarry.types.uuid import UUID
 
 def sendPlayerDigging(app, action: network.DiggingAction, location: BlockPos, face: int):
-    if action == network.DiggingAction.START_DIGGING:
-        app.breakingBlock = 0.0
-        app.breakingBlockPos = location
-    elif action == network.DiggingAction.CANCEL_DIGGING:
-        app.breakingBlock = 0.0
-    elif action == network.DiggingAction.FINISH_DIGGING:
-        app.breakingBlock = 1000.0
-    else:
-        # TODO:
-        print(f"Ignoring other action {action}")
+    if hasattr(app, 'server'):
+        server: ServerState = app.server
+        if action == network.DiggingAction.START_DIGGING:
+            server.breakingBlock = 0.0
+            server.breakingBlockPos = location
+        elif action == network.DiggingAction.CANCEL_DIGGING:
+            server.breakingBlock = 0.0
+        elif action == network.DiggingAction.FINISH_DIGGING:
+            server.breakingBlock = 1000.0
+        else:
+            print(f"Ignoring other action {action}")
 
     network.c2sQueue.put(network.PlayerDiggingC2S(action, location, face))
 
 def sendPlayerLook(app, yaw: float, pitch: float, onGround: bool):
-    app.cameraYaw = yaw
-    app.cameraPitch = pitch
+    if hasattr(app, 'server'):
+        player = app.server.getLocalPlayer()
 
-    # TODO:
-    #app.mode.player.onGround = onGround
+        player.headYaw = yaw
+        player.headPitch = pitch
+        player.onGround = onGround
 
     network.c2sQueue.put(network.PlayerLookC2S(yaw, pitch, onGround))
 
 def sendPlayerPosition(app, x, y, z, onGround):
-    # TODO:
-    #app.mode.player.pos = [x, y, z]
-    #app.mode.player.onGround = onGround
+    if hasattr(app, 'server'):
+        player = app.server.getLocalPlayer()
+
+        player.pos = [x, y, z]
+        player.onGround = onGround
 
     network.c2sQueue.put(network.PlayerPositionC2S(x, y, z, onGround))
 
@@ -59,6 +65,8 @@ def sendClickWindow(app, windowId: int, slotIdx: int, button: int, actionNum: in
     network.c2sQueue.put(network.ClickWindowC2S(windowId, slotIdx, button, actionNum, mode, item, count))
 
 def sendCloseWindow(app, windowId: int):
+    # TODO:
+
     network.c2sQueue.put(network.CloseWindowC2S(windowId))
 
 def sendUseItem(app, hand: int):
@@ -77,6 +85,31 @@ def sendPlayerPlacement(app, hand: int, location: BlockPos, face: int, cx: float
     network.c2sQueue.put(network.PlayerPlacementC2S(hand, location, face, cx, cy, cz, insideBlock))
 
 def sendClientStatus(app, status: int):
+    # TODO: This isn't *really* a player joining packet, buuuut...
+
+    if hasattr(app, 'server'):
+        server: ServerState = app.server
+        player = server.getLocalPlayer()
+
+        network.s2cQueue.put(network.PlayerPositionAndLookS2C(
+            player.pos[0], player.pos[1], player.pos[2], 0.0, 0.0,
+            False, False, False, True, True, server.teleportId
+        ))
+
+        server.teleportId += 1
+
+        '''
+        for ent in server.entities:
+            # TODO:
+            uuid = UUID.random()
+
+            kind = util.REGISTRY.encode('minecraft:entity_type', entity.)
+
+            network.s2cQueue.put(network.SpawnMobS2C(
+                ent.entityId, uuid, 
+            ))
+        '''
+
     network.c2sQueue.put(network.ClientStatusC2S(status))
 
 def sendHeldItemChange(app, newSlot: int):
@@ -86,17 +119,17 @@ def sendHeldItemChange(app, newSlot: int):
     network.c2sQueue.put(network.HeldItemChangeC2S(newSlot))
 
 def updateBlockBreaking(app, server: ServerState):
-    # TODO:
-    return
-
     pos = server.breakingBlockPos
 
-    if app.breakingBlock == 0.0:
+    if server.breakingBlock == 0.0:
         return
 
     blockId = server.world.getBlock(pos)
 
-    toolStack = app.mode.player.inventory[app.mode.player.hotbarIdx].stack
+    # HACK:
+    player = server.getLocalPlayer()
+
+    toolStack = player.inventory[player.hotbarIdx].stack
     if toolStack.isEmpty():
         tool = ''
     else:
@@ -106,8 +139,8 @@ def updateBlockBreaking(app, server: ServerState):
 
     # TODO: Sound effect packets
 
-    if app.breakingBlock >= hardness:
-        mcBlockId = app.world.registry.encode_block({ 'name': 'minecraft:' + blockId })
+    if server.breakingBlock >= hardness:
+        mcBlockId = util.REGISTRY.encode_block({ 'name': 'minecraft:' + blockId })
 
         network.s2cQueue.put(network.AckPlayerDiggingS2C(
             pos,
@@ -120,9 +153,9 @@ def updateBlockBreaking(app, server: ServerState):
 
         resources.getDigSound(app, blockId).play()
 
-        world.removeBlock(app, pos)
+        server.world.setBlock((app.textures, app.cube, app.textureIndices), pos, 'air')
 
-        app.breakingBlock = 0.0
+        server.breakingBlock = 0.0
 
         if droppedItem is not None:
             stack = Stack(droppedItem, 1)
@@ -138,7 +171,7 @@ def updateBlockBreaking(app, server: ServerState):
                 pos.x, pos.y, pos.z, 0.0, 0.0, 1,
                 int(xVel * 8000), int(yVel * 8000), int(zVel * 8000)))
 
-            itemId = app.world.registry.encode('minecraft:item', 'minecraft:' + stack.item)
+            itemId = util.REGISTRY.encode('minecraft:item', 'minecraft:' + stack.item)
 
             network.s2cQueue.put(network.EntityMetadataS2C(
                 entityId, { (6, 7): { 'item': itemId, 'count': stack.amount } }
@@ -147,7 +180,7 @@ def updateBlockBreaking(app, server: ServerState):
             ent = Entity(app, 'item', pos.x, pos.y, pos.z)
             ent.extra.stack = stack
             ent.velocity = [xVel, yVel, zVel]
-            app.entities.append(ent)
+            server.entities.append(ent)
 
 entityIdNum = 10_000
 
@@ -218,7 +251,6 @@ def clientTick(client: ClientState, instData):
     client.tickTimeIdx += 1
     client.tickTimeIdx %= len(client.tickTimes)
 
-
 def serverTick(app, server: ServerState):
     startTime = time.time()
 
@@ -248,66 +280,49 @@ def serverTick(app, server: ServerState):
     # Likewise for side to side movement
     x = float(app.client.d) - float(app.client.a)
 
-    player: Player = app.mode.player
+    # FIXME:
+    player: Player = server.getLocalPlayer()
 
     playerChunkPos = world.toChunkLocal(player.getBlockPos())[0]
     playerChunkPos = ChunkPos(playerChunkPos.x, 0, playerChunkPos.z)
 
-    if playerChunkPos in app.world.chunks and app.world.chunks[playerChunkPos].isTicking:
-        if x != 0.0 or z != 0.0:
-            mag = math.sqrt(x*x + z*z)
-            x /= mag
-            z /= mag
+    player.tick(app, server.world, server.entities, 0.0, 0.0)
+    
+    '''
+    collideY(app, player)
+    if player.onGround:
+        player.velocity[0] = x
+        player.velocity[2] = z
+    else:
+        player.velocity[0] += x / 10.0
+        player.velocity[2] += z / 10.0
+    collideXZ(app, player)
+    '''
 
-            newX = math.cos(app.cameraYaw) * x - math.sin(app.cameraYaw) * z
-            newZ = math.sin(app.cameraYaw) * x + math.cos(app.cameraYaw) * z
+    # FIXME: types???
+    entities = server.entities + server.players #type:ignore
 
-            x, z = newX, newZ
-
-            x *= player.walkSpeed 
-            z *= player.walkSpeed
-
-        player.tick(app, app.world, app.entities, 0.0, 0.0)
-        
-        #player.pos = copy.copy(app.cameraPos)
-        #player.pos[1] -= player.height
-
-        collideY(app, player)
-        if player.onGround:
-            player.velocity[0] = x
-            player.velocity[2] = z
-        else:
-            player.velocity[0] += x / 10.0
-            player.velocity[2] += z / 10.0
-        collideXZ(app, player)
-
-    app.cameraPos = copy.copy(player.pos)
-    app.cameraPos[1] += player.height
-
-    entities = app.entities + [player]
-
-    for entity in app.entities:
+    for entity in server.entities:
         entChunkPos = world.toChunkLocal(entity.getBlockPos())[0]
         entChunkPos = ChunkPos(entChunkPos.x, 0, entChunkPos.z)
 
-        if entChunkPos not in server.world.chunks or not app.world.chunks[entChunkPos].isTicking:
+        if entChunkPos not in server.world.chunks or not server.world.chunks[entChunkPos].isTicking:
             continue
 
-        againstWall = collide(app, entity)
+        againstWall = collide(server, entity)
 
         if againstWall and entity.onGround:
             entity.velocity[1] = 0.40
         
-        entity.tick(app, app.world, entities, player.pos[0], player.pos[2])
+        entity.tick(app, server.world, entities, player.pos[0], player.pos[2])
 
-        if not config.UGLY_HACK:
-            if entity.kind.name == 'item':
-                dx = (player.pos[0] - entity.pos[0])**2
-                dy = (player.pos[1] - entity.pos[1])**2
-                dz = (player.pos[2] - entity.pos[2])**2
-                if math.sqrt(dx + dy + dz) < 2.0 and entity.extra.pickupDelay == 0:
-                    player.pickUpItem(app, entity.extra.stack)
-                    entity.health = 0.0
+        if entity.kind.name == 'item':
+            dx = (player.pos[0] - entity.pos[0])**2
+            dy = (player.pos[1] - entity.pos[1])**2
+            dz = (player.pos[2] - entity.pos[2])**2
+            if math.sqrt(dx + dy + dz) < 2.0 and entity.extra.pickupDelay == 0:
+                player.pickUpItem(app, entity.extra.stack)
+                entity.health = 0.0
             
         if entity.pos[1] < -64.0:
             entity.hit(app, 10.0, (0.0, 0.0))
@@ -315,12 +330,14 @@ def serverTick(app, server: ServerState):
     if player.pos[1] < -64.0:
         player.hit(app, 10.0, (0.0, 0.0))
     
-    syncClient(app)
+    # HACK:
+    app.client.entities = copy.deepcopy(server.entities)
+    app.client.player.inventory = copy.deepcopy(server.getLocalPlayer().inventory)
     
     endTime = time.time()
-    app.tickTimes[app.tickTimeIdx] = (endTime - startTime)
-    app.tickTimeIdx += 1
-    app.tickTimeIdx %= len(app.tickTimes)
+    server.tickTimes[server.tickTimeIdx] = (endTime - startTime)
+    server.tickTimeIdx += 1
+    server.tickTimeIdx %= len(server.tickTimes)
 
 def syncClient(app):
     # TODO: Copy
@@ -347,9 +364,9 @@ def doMobDespawning(app, server: ServerState):
 
         maxDist = 128.0
 
-        if dist > maxDist or app.entities[idx].health <= 0.0:
-            toDelete.append(app.entities[idx].entityId)
-            app.entities.pop(idx)
+        if dist > maxDist or server.entities[idx].health <= 0.0:
+            toDelete.append(server.entities[idx].entityId)
+            server.entities.pop(idx)
         else:
             idx += 1
     
@@ -393,15 +410,17 @@ def doMobSpawning(app, server: ServerState):
                     server.entities.append(Entity(app, mob, x, y, z))
 
 def isValidSpawnLocation(app, pos: BlockPos):
+    server: ServerState = app.server
+
     floor = BlockPos(pos.x, pos.y - 1, pos.z)
     feet = pos
     head = BlockPos(pos.x, pos.y + 1, pos.z)
 
-    light = app.world.getTotalLight(app.time, pos)
+    light = server.world.getTotalLight(app.time, pos)
 
-    isOk = (app.world.coordsOccupied(floor)
-        and not app.world.coordsOccupied(feet)
-        and not app.world.coordsOccupied(head)
+    isOk = (server.world.coordsOccupied(floor)
+        and not server.world.coordsOccupied(feet)
+        and not server.world.coordsOccupied(head)
         and light < 3)
     
     return isOk
