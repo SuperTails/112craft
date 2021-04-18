@@ -52,6 +52,13 @@ def convertAnchor(anchor):
 
     return horiz2 + vert2
 
+def getCachedMask(image: Image.Image) -> Image.Image:
+    if not hasattr(image, '_cachedMask'):
+        cachedMask = image.getchannel('A')
+        image._cachedMask = cachedMask #type:ignore
+
+    return image._cachedMask #type:ignore
+
 ALPHA_COLOR = (0xFE, 0xFE, 0xFE)
 
 class Canvas:
@@ -131,7 +138,9 @@ class Canvas:
             print(anchor)
             assert(False)
 
-        self.image.paste(image, box=(int(x), int(y)))
+        mask = getCachedMask(image)
+
+        self.image.paste(image, box=(int(x), int(y)), mask=mask)
 
     def _createGlSurface(self):
         vertices = numpy.array([
