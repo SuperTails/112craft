@@ -158,6 +158,9 @@ class WorldLoadMode(Mode):
 
             app.server = server
         else:
+            app.client.world = World('', 0)
+            app.client.world.local = False
+
             self.centerPos = [0.0, 0.0, 0.0]
 
             network.host = worldName
@@ -618,7 +621,8 @@ class PlayingMode(Mode):
 
         tick.clientTick(app.client, (app.textures, app.cube, app.textureIndices))
 
-        tick.serverTick(app, app.server)
+        if hasattr(app, 'server'):
+            tick.serverTick(app, app.server)
 
         if player.health <= 0.0:
             app.mode = GameOverMode(app)
@@ -665,9 +669,9 @@ class PlayingMode(Mode):
 
             mcFace = { 'bottom': 0, 'top': 1, 'back': 2, 'front': 3, 'left': 4, 'right': 5 }[face]
 
-            if not app.world.coordsInBounds(pos2): return
+            if not app.client.world.coordsInBounds(pos2): return
 
-            blockId = app.world.getBlock(pos)
+            blockId = app.client.world.getBlock(pos)
 
             if blockId in ['crafting_table', 'furnace']:
                 mcFace = 2*(mcFace // 2) + (1-(mcFace%2))
@@ -686,9 +690,9 @@ class PlayingMode(Mode):
                 sendPlayerPlacement(app, 0, pos2, mcFace, 0.5, 0.5, 0.5, False)
                 
                 if config.UGLY_HACK:
-                    world.addBlock(app, pos2, stack.item)
+                    app.client.world.setBlock((app.textures, app.cube, app.textureIndices), pos2, stack.item)
 
-                resources.getDigSound(app, app.world.getBlock(pos2)).play()
+                resources.getDigSound(app, app.client.world.getBlock(pos2)).play()
     
     def mouseReleased(self, app, event):
         if self.overlay is not None:
@@ -957,7 +961,7 @@ def handleS2CPackets(mode, app, client: ClientState):
 
             try:
                 if not app.client.local:
-                    world.setBlock(app, packet.location, blockId)
+                    app.client.world.setBlock((app.textures, app.cube, app.textureIndices), packet.location, blockId)
             except KeyError:
                 pass
         elif isinstance(packet, network.WindowConfirmationS2C):
@@ -1336,7 +1340,7 @@ def appStarted(app):
 
     #app.mode = WorldLoadMode(app, 'world', TitleMode)
     def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'servertest', True, makePlayingMode, seed=random.randint(0, 2**31))
+    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     # ---------------
@@ -1403,13 +1407,13 @@ def updateBlockBreaking(app, mode: PlayingMode):
 
         hardness = getHardnessAgainst(blockId, tool)
 
-        if client.breakingBlock >= hardness * 2.0:
+        if client.breakingBlock >= hardness:
             sendPlayerDigging(app, network.DiggingAction.FINISH_DIGGING, pos, face)
 
             resources.getDigSound(app, blockId).play()
 
             if not app.client.local:
-                app.world.setBlock((app.textures, app.cube, app.textureIndices), pos, 'air')
+                app.client.world.setBlock((app.textures, app.cube, app.textureIndices), pos, 'air')
     else:
         if app.breakingBlock > 0.0:
             # FIXME: Face

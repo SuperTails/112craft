@@ -43,6 +43,7 @@ from enum import IntEnum
 from math import cos, sin
 from numpy import ndarray
 from typing import NamedTuple, List, Any, Tuple, Optional, Union
+import util
 from util import *
 from OpenGL.GL import * #type:ignore
 from network import ChunkDataS2C
@@ -495,7 +496,7 @@ class Chunk:
             if section is None:
                 self.blocks[:, (idx*16):(idx*16)+1, :] = 'air'
             else:
-                section[0].registry = REGISTRY
+                section[0].registry = util.REGISTRY
                 for (blockIdx, block) in enumerate(section[0]):
                     blockId = block['name'].removeprefix('minecraft:')
                     blockId = convertBlock(blockId, instData)
