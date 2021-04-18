@@ -35,8 +35,8 @@ def sendPlayerDigging(app, action: network.DiggingAction, location: BlockPos, fa
             server.breakingBlock = 1000.0
         else:
             print(f"Ignoring other action {action}")
-
-    network.c2sQueue.put(network.PlayerDiggingC2S(action, location, face))
+    else:
+        network.c2sQueue.put(network.PlayerDiggingC2S(action, location, face))
 
 def sendPlayerLook(app, yaw: float, pitch: float, onGround: bool):
     if hasattr(app, 'server'):
@@ -45,8 +45,8 @@ def sendPlayerLook(app, yaw: float, pitch: float, onGround: bool):
         player.headYaw = yaw
         player.headPitch = pitch
         player.onGround = onGround
-
-    network.c2sQueue.put(network.PlayerLookC2S(yaw, pitch, onGround))
+    else:
+        network.c2sQueue.put(network.PlayerLookC2S(yaw, pitch, onGround))
 
 def sendPlayerPosition(app, x, y, z, onGround):
     if hasattr(app, 'server'):
@@ -54,35 +54,51 @@ def sendPlayerPosition(app, x, y, z, onGround):
 
         player.pos = [x, y, z]
         player.onGround = onGround
-
-    network.c2sQueue.put(network.PlayerPositionC2S(x, y, z, onGround))
+    else:
+        network.c2sQueue.put(network.PlayerPositionC2S(x, y, z, onGround))
 
 def sendClickWindow(app, windowId: int, slotIdx: int, button: int, actionNum: int, mode: int, item, count):
-    # TODO:
-
     print(f'Sending window ID {windowId} and slot {slotIdx}, action {actionNum}')
 
-    network.c2sQueue.put(network.ClickWindowC2S(windowId, slotIdx, button, actionNum, mode, item, count))
+    if hasattr(app, 'server'):
+        # TODO:
+        pass
+    else:
+        network.c2sQueue.put(network.ClickWindowC2S(windowId, slotIdx, button, actionNum, mode, item, count))
 
 def sendCloseWindow(app, windowId: int):
-    # TODO:
-
-    network.c2sQueue.put(network.CloseWindowC2S(windowId))
+    if hasattr(app, 'server'):
+        # TODO:
+        pass
+    else:
+        network.c2sQueue.put(network.CloseWindowC2S(windowId))
 
 def sendUseItem(app, hand: int):
-    network.c2sQueue.put(network.UseItemC2S(hand))
+    if hasattr(app, 'server'):
+        # TODO:
+        pass
+    else:
+        network.c2sQueue.put(network.UseItemC2S(hand))
 
 def sendTeleportConfirm(app, teleportId: int):
-    network.c2sQueue.put(network.TeleportConfirmC2S(teleportId))
+    if hasattr(app, 'server'):
+        pass
+    else:
+        network.c2sQueue.put(network.TeleportConfirmC2S(teleportId))
 
 def sendPlayerMovement(app, onGround: bool):
-    # TODO:
-    #app.mode.player.onGround = onGround
-
-    network.c2sQueue.put(network.PlayerMovementC2S(onGround))
+    if hasattr(app, 'server'):
+        player = app.server.getLocalPlayer()
+        player.onGround = True
+    else:
+        network.c2sQueue.put(network.PlayerMovementC2S(onGround))
 
 def sendPlayerPlacement(app, hand: int, location: BlockPos, face: int, cx: float, cy: float, cz: float, insideBlock: bool):
-    network.c2sQueue.put(network.PlayerPlacementC2S(hand, location, face, cx, cy, cz, insideBlock))
+    if hasattr(app, 'server'):
+        # TODO:
+        pass
+    else:
+        network.c2sQueue.put(network.PlayerPlacementC2S(hand, location, face, cx, cy, cz, insideBlock))
 
 def sendClientStatus(app, status: int):
     # TODO: This isn't *really* a player joining packet, buuuut...
@@ -109,14 +125,15 @@ def sendClientStatus(app, status: int):
                 ent.entityId, uuid, 
             ))
         '''
-
-    network.c2sQueue.put(network.ClientStatusC2S(status))
+    else:
+        network.c2sQueue.put(network.ClientStatusC2S(status))
 
 def sendHeldItemChange(app, newSlot: int):
-    # TODO:
-    #app.mode.player.hotbarIdx = newSlot
-
-    network.c2sQueue.put(network.HeldItemChangeC2S(newSlot))
+    if hasattr(app, 'server'):
+        player = app.server.getLocalPlayer()
+        player.hotbarIdx = newSlot
+    else:
+        network.c2sQueue.put(network.HeldItemChangeC2S(newSlot))
 
 def updateBlockBreaking(app, server: ServerState):
     pos = server.breakingBlockPos
@@ -188,7 +205,6 @@ def getNextEntityId() -> int:
     global entityIdNum
     entityIdNum += 1
     return entityIdNum
-
 
 def clientTick(client: ClientState, instData):
     startTime = time.time()

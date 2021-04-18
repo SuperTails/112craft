@@ -163,7 +163,7 @@ class WorldLoadMode(Mode):
 
             self.centerPos = [0.0, 0.0, 0.0]
 
-            network.c2sQueue.put(('localhost', 25565))
+            network.c2sQueue.put((worldName, 25565))
         
     def timerFired(self, app):
         loader = app.server if app.client.local else app.client
@@ -344,7 +344,8 @@ class CreateWorldMode(Mode):
             if (btn == 'playSurvival' or btn == 'playCreative') and self.worldName != '':
                 # FIXME: CHECK FOR DUPLICATE WORLD NAMES
                 isCreative = btn == 'playCreative'
-                makePlayingMode = lambda app: PlayingMode(app, Player(app, isCreative))
+
+                def makePlayingMode(app, player): return PlayingMode(app, player)
 
                 if self.worldSource == 'imported':
                     importPath = self.importPath
@@ -1340,9 +1341,10 @@ def appStarted(app):
 
     app.client = client
 
-    #app.mode = WorldLoadMode(app, 'world', TitleMode)
-    def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
+    def makeTitleMode(app, _player): return TitleMode(app)
+    app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
+    #def makePlayingMode(app, player): return PlayingMode(app, player)
+    #app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     # ---------------
@@ -1362,16 +1364,8 @@ def appStarted(app):
     setMouseCapture(app, False)
 
 def appStopped(app):
-    # FIXME:
-    if hasattr(app, 'world') and app.world.local:
-        app.world.save()
-
-        path = app.world.saveFolderPath() + '/entities.dat'
-
-        nbtfile = nbt.NBTFile()
-        nbtfile.name = "Entities"
-        nbtfile.tags.append(entity.toNbt([app.client.getPlayer()] + app.entities))
-        nbtfile.write_file(path)
+    if hasattr(app, 'server'):
+        app.server.save()
 
 def updateBlockBreaking(app, mode: PlayingMode):
     client: ClientState = app.client
@@ -1528,10 +1522,16 @@ def redrawAll(app, *args):
     app.mode.redrawAll(app, window, canvas)
 
 def main():
-    if config.USE_OPENGL_BACKEND:
-        openglapp.runApp(width=600, height=400)
-    else:
-        cmu_112_graphics.runApp(width=600, height=400)
+    try:
+        if config.USE_OPENGL_BACKEND:
+            openglapp.runApp(width=600, height=400)
+        else:
+            cmu_112_graphics.runApp(width=600, height=400)
+    except Exception as e:
+        import traceback
+
+        # https://stackoverflow.com/questions/35498555/formatting-exceptions-as-python-does
+        traceback.print_exception(type(e), e, e.__traceback__)
     
     network.c2sQueue.put(None)
 

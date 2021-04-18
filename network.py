@@ -735,6 +735,8 @@ def main(hostname, port):
 
 def go():
     startPacket = c2sQueue.get(block=True)
+    if startPacket is None:
+        return
     (hostname, port) = startPacket
 
     main(hostname, port)

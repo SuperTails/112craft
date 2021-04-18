@@ -1,8 +1,10 @@
 from typing import List, Any
 from world import World
+import entity
 from entity import Entity
 from player import Player
 from util import BlockPos
+from nbt import nbt
 
 class ServerState:
     world: World
@@ -42,3 +44,20 @@ class ServerState:
             if player.entityId == self.localPlayer:
                 return player
         raise Exception("No local player")
+    
+    def save(self):
+        self.world.save()
+
+        path = self.world.saveFolderPath() + '/entities.dat'
+
+        nbtfile = nbt.NBTFile()
+        nbtfile.name = "Entities"
+        # FIXME:
+        nbtfile.tags.append(entity.toNbt([self.getLocalPlayer()] + self.entities)) #type:ignore
+        nbtfile.write_file(path)
+    
+    @classmethod
+    def open(cls, folderPath, worldName, seed, importPath):
+        server = cls()
+
+        server.world = World(worldName, seed, importPath=importPath)

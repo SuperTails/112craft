@@ -368,23 +368,26 @@ def renderInstancesGl(client: ClientState, canvas):
     
     breakingBlockAmount = 0.0
 
-    player = client.getPlayer()
-    if client.breakingBlock != 0.0 and player is not None:
-        toolStack = player.inventory[player.hotbarIdx].stack
-        if toolStack.isEmpty():
-            tool = ''
-        else:
-            tool = toolStack.item
+    if hasattr(client, 'player'):
+        player = client.getPlayer()
+        if client.breakingBlock != 0.0 and player is not None:
+            toolStack = player.inventory[player.hotbarIdx].stack
+            if toolStack.isEmpty():
+                tool = ''
+            else:
+                tool = toolStack.item
 
-        blockId = client.world.getBlock(client.breakingBlockPos)
+            blockId = client.world.getBlock(client.breakingBlockPos)
 
-        if blockId != 'air':
-            hardness = getHardnessAgainst(blockId, tool)
+            if blockId != 'air':
+                hardness = getHardnessAgainst(blockId, tool)
 
-            breakingBlockAmount = client.breakingBlock / hardness
+                breakingBlockAmount = client.breakingBlock / hardness
 
-    b = math.floor(breakingBlockAmount * 10.0)
-    b = min(b, len(CLIENT_DATA.breakTextures) - 1)
+        b = math.floor(breakingBlockAmount * 10.0)
+        b = min(b, len(CLIENT_DATA.breakTextures) - 1)
+    else:
+        b = 0
 
     CLIENT_DATA.chunkProgram.useProgram()
     glUniformMatrix4fv(CLIENT_DATA.chunkProgram.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
