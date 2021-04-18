@@ -13,8 +13,6 @@ from quarry.types.buffer import BufferUnderrun
 from quarry.types.chat import Message
 import math
 
-host = None
-
 c2sQueue = SimpleQueue()
 s2cQueue = SimpleQueue()
 
@@ -567,12 +565,19 @@ class SpawnPlayerS2C:
 printI = 0
 
 class MinecraftProtocol(ClientProtocol):
+    stopped: bool = True
+
     def connection_lost(self, reason):
         print(f'Connection lost: {reason}')
         s2cQueue.put(None)
-        reactor.stop() #type:ignore
+        
+        if not self.stopped:
+            reactor.stop() #type:ignore
+            self.stopped = True
 
     def player_joined(self):
+        self.stopped = False
+
         print("hewwo")
         self.ticker.interval = 0.1
 
@@ -589,6 +594,7 @@ class MinecraftProtocol(ClientProtocol):
                     print('Stopping reactor!')
                     pro.ticker.stop()
                     reactor.stop() #type:ignore
+                    self.stopped = True
                     break
                 else:
                     packet.send(pro)
@@ -714,7 +720,7 @@ class MinecraftFactory(ClientFactory):
     protocol = MinecraftProtocol
 
 @defer.inlineCallbacks
-def main():
+def main(hostname, port):
     with open('creds.txt', 'r') as f:
         [username, password] = f.readlines()[:2]
     
@@ -725,8 +731,12 @@ def main():
 
     factory = MinecraftFactory(profile)
 
-    factory.connect(host, 25565)
+    factory.connect(hostname, port)
 
 def go():
-    main()
+    startPacket = c2sQueue.get(block=True)
+    (hostname, port) = startPacket
+
+    main(hostname, port)
+        
     reactor.run() #type:ignore

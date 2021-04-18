@@ -163,7 +163,7 @@ class WorldLoadMode(Mode):
 
             self.centerPos = [0.0, 0.0, 0.0]
 
-            network.host = worldName
+            network.c2sQueue.put(('localhost', 25565))
         
     def timerFired(self, app):
         loader = app.server if app.client.local else app.client
@@ -1542,9 +1542,6 @@ from time import sleep
 if __name__ == '__main__':
     gameThread = threading.Thread(target=main)
     gameThread.start()
-
-    while network.host is None:
-        sleep(0.1)
 
     network.go()
     print("Waiting for game thread to close...")
