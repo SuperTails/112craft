@@ -17,6 +17,7 @@ class ServerState:
     localPlayer: int
 
     teleportId: int
+    nextEntityId: int
 
     time: int
 
@@ -31,6 +32,7 @@ class ServerState:
 
     def __init__(self):
         self.teleportId = 1
+        self.nextEntityId = 2
         self.breakingBlock = 0.0
         self.breakingBlockPos = BlockPos(0, 0, 0)
 

@@ -169,6 +169,60 @@ class UseItemC2S:
     def send(self, pro):
         pro.send_packet('use_item', pro.buff_type.pack_varint(self.hand))
 
+class InteractKind(Enum):
+    INTERACT = 0,
+    ATTACK = 1,
+    INTERACT_AT = 2,
+
+@dataclass
+class InteractEntityC2S:
+    entityId: int
+    kind: InteractKind
+    x: Optional[float]
+    y: Optional[float]
+    z: Optional[float]
+    hand: Optional[int]
+    sneaking: bool
+
+    def __init__(self, entityId: int, kind: InteractKind, *,
+        x: Optional[float] = None, y: Optional[float] = None, z: Optional[float] = None,
+        hand: Optional[int] = None, sneaking: bool):
+        self.entityId = entityId
+        self.kind = kind
+        self.x = x
+        self.y = y
+        self.z = z
+        self.hand = hand
+        self.sneaking = sneaking
+
+    def send(self, pro):
+        data = (pro.buff_type.pack_varint(self.entityId) +
+            pro.buff_type.pack_varint(self.kind.value[0]))
+
+        if self.kind == InteractKind.INTERACT_AT:
+            assert(self.x is not None)
+            assert(self.y is not None)
+            assert(self.z is not None)
+
+            data += pro.buff_type.pack('fff', self.x+0.5, self.y+0.5, -(self.z+0.5))
+        else:
+            assert(self.x is None)
+            assert(self.y is None)
+            assert(self.z is None)
+        
+        if self.kind in (InteractKind.INTERACT, InteractKind.INTERACT_AT):
+            assert(self.hand is not None)
+
+            data += pro.buff_type.pack_varint(self.hand)
+        else:
+            assert(self.hand is None)
+
+        data += pro.buff_type.pack('?', self.sneaking)
+
+        print(self)
+
+        pro.send_packet('use_entity', data)
+
 @dataclass
 class ChatMessageS2C:
     data: Any

@@ -137,7 +137,8 @@ class WorldLoadMode(Mode):
                 server.players = [player]
                 server.localPlayer = player.entityId
 
-                server.entities = [entity.Entity(app, nbt=tag) for tag in nbtfile["Entities"][1:]]
+                # FIXME: IDs
+                server.entities = [entity.Entity(app, 1, nbt=tag) for tag in nbtfile["Entities"][1:]]
             except FileNotFoundError:
                 player = Player(app)
                 player.pos[1] = 75.0
@@ -148,7 +149,8 @@ class WorldLoadMode(Mode):
                 server.players = [player]
                 server.localPlayer = player.entityId
 
-                server.entities = [entity.Entity(app, 'skeleton', 0.0, 71.0, 1.0), entity.Entity(app, 'fox', 5.0, 72.0, 3.0)]
+                # FIXME: IDs
+                server.entities = [entity.Entity(app, 1, 'skeleton', 0.0, 71.0, 1.0), entity.Entity(app, 2, 'fox', 5.0, 72.0, 3.0)]
 
             cx = math.floor(player.pos[0] / 16)
             cy = math.floor(player.pos[1] / world.CHUNK_HEIGHT)
@@ -691,21 +693,12 @@ class PlayingMode(Mode):
 
         idx = lookedAtEntity(app.client)
         if idx is not None:
-            entity = app.client.entities[idx]
+            ent = app.client.entities[idx]
 
-            knockback = [entity.pos[0] - player.pos[0], entity.pos[2] - player.pos[2]]
-            mag = math.sqrt(knockback[0]**2 + knockback[1]**2)
-            knockback[0] /= mag
-            knockback[1] /= mag
+            # TODO: Sneaking
 
-            slot = player.inventory[player.hotbarIdx]
-            
-            if slot.isEmpty():
-                dmg = 1.0
-            else:
-                dmg = 1.0 + getAttackDamage(app, slot.stack.item)
-
-            entity.hit(app, dmg, knockback)
+            sendInteractEntity(app, ent.entityId, network.InteractKind.ATTACK,
+                sneaking=False)
 
     def rightMousePressed(self, app, event):
         if self.overlay is not None:
@@ -880,19 +873,18 @@ def handleS2CPackets(mode, app, client: ClientState):
                 print(f'Adding entity {kind} with ID {packet.entityId}')
 
                 # TODO: remove `app`, UUID
-                ent = Entity(app, kind, packet.x, packet.y, packet.z)
+                ent = Entity(app, packet.entityId, kind, packet.x, packet.y, packet.z)
                 ent.velocity[0] = packet.xVel / 8000
                 ent.velocity[1] = packet.yVel / 8000
                 ent.velocity[2] = packet.zVel / 8000
                 ent.headYaw = packet.yaw
                 ent.headPitch = packet.pitch
-                ent.entityId = packet.entityId
 
                 entities.append(ent)
         elif isinstance(packet, network.SpawnMobS2C):
             kind = util.REGISTRY.decode('minecraft:entity_type', packet.kind).removeprefix('minecraft:')
             if kind in ['zombie', 'creeper', 'fox', 'skeleton']:
-                ent = Entity(app, kind, packet.x, packet.y, packet.z)
+                ent = Entity(app, packet.entityId, kind, packet.x, packet.y, packet.z)
                 ent.velocity[0] = packet.xVel / 8000
                 ent.velocity[1] = packet.yVel / 8000
                 ent.velocity[2] = packet.zVel / 8000

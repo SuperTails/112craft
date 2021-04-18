@@ -135,6 +135,38 @@ def sendHeldItemChange(app, newSlot: int):
     else:
         network.c2sQueue.put(network.HeldItemChangeC2S(newSlot))
 
+def sendInteractEntity(app, entityId, kind, *, x=None, y=None, z=None, hand=None, sneaking):
+    if hasattr(app, 'server'):
+        server: ServerState = app.server
+        player = server.getLocalPlayer()
+
+        for ent in server.entities:
+            if ent.entityId == entityId:
+                if kind == network.InteractKind.ATTACK:
+                    knockX = ent.pos[0] - player.pos[0]
+                    knockZ = ent.pos[2] - player.pos[2]
+                    mag = math.sqrt(knockX**2 + knockZ**2)
+                    knockX /= mag
+                    knockZ /= mag
+
+                    slot = player.inventory[player.hotbarIdx]
+                    
+                    if slot.isEmpty():
+                        dmg = 1.0
+                    else:
+                        dmg = 1.0 + resources.getAttackDamage(app, slot.stack.item)
+
+                    ent.hit(app, dmg, (knockX, knockZ))
+                    break
+                else:
+                    # TODO:
+                    pass
+    else:
+        network.c2sQueue.put(network.InteractEntityC2S(
+            entityId, kind, x=x, y=y, z=z, hand=hand, sneaking=sneaking
+        ))
+
+
 def updateBlockBreaking(app, server: ServerState):
     pos = server.breakingBlockPos
 
@@ -194,7 +226,8 @@ def updateBlockBreaking(app, server: ServerState):
                 entityId, { (6, 7): { 'item': itemId, 'count': stack.amount } }
             ))
             
-            ent = Entity(app, 'item', pos.x, pos.y, pos.z)
+            # FIXME: IDs
+            ent = Entity(app, 1, 'item', pos.x, pos.y, pos.z)
             ent.extra.stack = stack
             ent.velocity = [xVel, yVel, zVel]
             server.entities.append(ent)
@@ -425,7 +458,8 @@ def doMobSpawning(app, server: ServerState):
                 x += random.randint(-2, 2)
                 z += random.randint(-2, 2)
                 if isValidSpawnLocation(app, BlockPos(x, y, z)):
-                    server.entities.append(Entity(app, mob, x, y, z))
+                    # FIXME: IDs
+                    server.entities.append(Entity(app, 1, mob, x, y, z))
 
 def isValidSpawnLocation(app, pos: BlockPos):
     server: ServerState = app.server

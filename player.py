@@ -29,7 +29,8 @@ class Player(Entity):
     inventory: List[Slot]
 
     def __init__(self, app, creative: bool = False, tag: Optional[nbt.TAG_Compound] = None):
-        super().__init__(app, 'player', 0.0, 0.0, 0.0, nbt=tag)
+        # FIXME: ID
+        super().__init__(app, 1, 'player', 0.0, 0.0, 0.0, nbt=tag)
 
         self.reach = 4.0
 

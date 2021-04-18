@@ -477,20 +477,19 @@ class Entity:
 
     entityId: int
 
-    def __init__(self, app, kind: str = '', x: float = 0.0, y: float = 0.0, z: float = 0.0, nbt: Optional[nbt.TAG_Compound] = None):
+    def __init__(self, app, entityId: int, kind: str = '', x: float = 0.0, y: float = 0.0, z: float = 0.0, nbt: Optional[nbt.TAG_Compound] = None):
         if nbt is None:
             self.pos = [x, y, z]
             self.velocity = [0.0, 0.0, 0.0]
             self.onGround = False
+
+            self.entityId = entityId
 
             self.bodyAngle = 0.0
             self.headPitch = 0.0
             self.headYaw = 0.0
 
             self.immunity = 0
-
-            # TODO:
-            self.entityId = 0
 
             self.path = []
 
@@ -513,12 +512,12 @@ class Entity:
             self.ai = copy.deepcopy(self.kind.ai)
             self.extra = copy.deepcopy(self.kind.extraData)
         else:
-            self.fromNbt(app, nbt)
+            self.fromNbt(app, entityId, nbt)
     
-    def fromNbt(self, app, data: nbt.TAG_Compound):
+    def fromNbt(self, entityId: int, app, data: nbt.TAG_Compound):
         kind = data["id"].value.removeprefix("minecraft:")
 
-        Entity.__init__(self, app, kind=kind)
+        Entity.__init__(self, entityId, app, kind=kind)
         
         self.pos = [tag.value for tag in data["Pos"].tags]
         self.velocity = [tag.value for tag in data["Motion"].tags]
