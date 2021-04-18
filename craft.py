@@ -158,6 +158,8 @@ class WorldLoadMode(Mode):
 
             app.server = server
         else:
+            delattr(app, 'server')
+
             app.client.world = World('', 0)
             app.client.world.local = False
 
@@ -246,6 +248,51 @@ class WorldListMode(Mode):
 def posInBox(x, y, bounds) -> bool:
     (x0, y0, x1, y1) = bounds
     return x0 <= x and x <= x1 and y0 <= y and y <= y1
+
+class DirectConnectMode(Mode):
+    buttons: ButtonManager
+
+    ip: str
+
+    def __init__(self, app):
+        self.ip = ''
+        self.buttons = ButtonManager()
+
+        connectButton = Button(app, 0.5, 0.6, 200, 40, 'Connect')
+        self.buttons.addButton('connect', connectButton)
+    
+    def ipBoxBounds(self, app):
+        return (app.width * 0.5 - 100, app.height * 0.25 - 15,
+                app.width * 0.5 + 100, app.height * 0.25 + 15)
+    
+    def redrawAll(self, app, window, canvas):
+        self.buttons.draw(app, canvas)
+
+        (x0, y0, x1, y1) = self.ipBoxBounds(app)
+        canvas.create_rectangle(x0, y0, x1, y1)
+
+        x = (x1 + x0) / 2
+        canvas.create_text(x, y0 - 5, text='Server Address:', anchor='s')
+
+        canvas.create_text(app.width * 0.5, app.height * 0.25, text=self.ip)
+    
+    def keyPressed(self, app, event):
+        key = event.key.lower()
+        # FIXME: CHECK IF BACKSPACE IS CORRECT FOR TKINTER TOO
+        if key == 'backspace' and len(self.ip) > 0:
+            self.ip = self.ip[:-1]
+        elif len(key) == 1 and len(self.ip) < 30:
+            self.ip += key
+    
+    def mousePressed(self, app, event):
+        self.buttons.onPress(app, event.x, event.y)
+
+    def mouseReleased(self, app, event):
+        btn = self.buttons.onRelease(app, event.x, event.y)
+        if btn == 'connect':
+            def makePlayingMode(app, player): return PlayingMode(app, player)
+            app.mode = WorldLoadMode(app, self.ip, False, makePlayingMode)
+
 
 class CreateWorldMode(Mode):
     buttons: ButtonManager
@@ -373,8 +420,11 @@ class TitleMode(Mode):
             self.titleText = app.loadImage('assets/TitleText.png')
             self.titleText = app.scaleImage(self.titleText, 3)
 
-        playButton = Button(app, 0.5, 0.4, 200, 40, "Play")
-        self.buttons.addButton('play', playButton)
+        singleButton = Button(app, 0.5, 0.4, 200, 40, "Singleplayer")
+        multiButton = Button(app, 0.5, 0.6, 200, 40, "Multiplayer")
+
+        self.buttons.addButton('singleplayer', singleButton)
+        self.buttons.addButton('multiplayer', multiButton)
 
     def timerFired(self, app):
         app.client.cameraYaw += 0.01
@@ -384,13 +434,15 @@ class TitleMode(Mode):
     
     def mouseReleased(self, app, event):
         btn = self.buttons.onRelease(app, event.x, event.y)
-        if btn is not None:
+        if btn == 'singleplayer':
             print(f"Pressed {btn}")
             worldNames = getWorldNames()
             if worldNames == []:
                 app.mode = CreateWorldMode(app)
             else:
                 app.mode = WorldListMode(app)
+        elif btn == 'multiplayer':
+            app.mode = DirectConnectMode(app)
 
     def redrawAll(self, app, window, canvas):
         render.redrawAll(app.client, canvas, doDrawHud=False)
