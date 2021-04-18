@@ -570,7 +570,7 @@ class PlayingMode(Mode):
     overlay: Optional['InventoryMode']
 
     def __init__(self, app, player: Player):
-        app.timerDelay = 100
+        app.timerDelay = 50
         setMouseCapture(app, True)
 
         app.client.player = player
@@ -1304,6 +1304,8 @@ def appStarted(app):
 
     client.tickTimes = [0.0] * 10
     client.tickTimeIdx = 0
+
+    client.lastTickTime = time.time()
 
     client.gravity = app.gravity
 

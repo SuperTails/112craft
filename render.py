@@ -450,6 +450,9 @@ def drawEntities(client: ClientState, view, projection):
 
     glActiveTexture(GL_TEXTURE0)
 
+    frameTime = time.time()
+    alpha = (frameTime - client.lastTickTime) / 0.05
+
     for entity in client.entities:
         model = CLIENT_DATA.entityModels[entity.kind.model]
 
@@ -467,11 +470,17 @@ def drawEntities(client: ClientState, view, projection):
 
         sca = 0.25 if entity.kind.name == 'item' else 1.0
 
+        pos = [
+            entity.pos[0] + entity.velocity[0] * alpha,
+            entity.pos[1] + entity.velocity[1] * alpha,
+            entity.pos[2] + entity.velocity[2] * alpha,
+        ]
+
         modelMat = np.array([
             sca, 0.0, 0.0, 0.0,
             0.0, sca, 0.0, 0.0,
             0.0, 0.0, sca, 0.0,
-            entity.pos[0], entity.pos[1], entity.pos[2], 1.0
+            pos[0], pos[1], pos[2], 1.0
         ], dtype='float32')
 
         glUniformMatrix4fv(modelPos, 1, GL_FALSE, modelMat) #type:ignore

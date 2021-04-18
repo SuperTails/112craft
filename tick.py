@@ -251,6 +251,8 @@ def clientTick(client: ClientState, instData):
     client.tickTimeIdx += 1
     client.tickTimeIdx %= len(client.tickTimes)
 
+    client.lastTickTime = endTime
+
 def serverTick(app, server: ServerState):
     startTime = time.time()
 
