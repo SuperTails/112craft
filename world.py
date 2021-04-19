@@ -841,7 +841,6 @@ class Chunk:
         if not any(self.meshDirtyFlags):
             self.worldgenStage = WorldgenStage.COMPLETE
     
-    @timed(count=1)
     def createOneMeshUncached(self, meshIdx: int, world: 'World', instData):
         self.meshDirtyFlags[meshIdx] = False
 
@@ -1033,19 +1032,36 @@ class Chunk:
 
         self.tileEntities = {}
 
-        for ((x, y, z), block) in np.ndenumerate(self.blocks):
-            blockPos = BlockPos(x, y, z)
-            idx = self._coordsToIdx(blockPos)
-            if block == 'air':
-                self.instances[idx] = None
-            else:
-                texture = textures[block]
-                [modelX, modelY, modelZ] = blockToWorld(self._globalBlockPos(blockPos))
-                self.instances[idx] = [render.Instance(cube, np.array([[modelX], [modelY], [modelZ]]), texture), True]
-                #self.instances[idx] = [render.Instance(None, None, texture), True]
-                #self.instances[idx][0].visibleFaces = [True] * 12
-                if block == 'furnace':
-                    self.tileEntities[blockPos] = Furnace(blockPos)
+        if config.USE_OPENGL_BACKEND:
+            for ((x, y, z), block) in np.ndenumerate(self.blocks):
+                blockPos = BlockPos(x, y, z)
+                idx = self._coordsToIdx(blockPos)
+                if block == 'air':
+                    self.instances[idx] = None
+                else:
+                    texture = textures[block]
+
+                    #[modelX, modelY, modelZ] = blockToWorld(self._globalBlockPos(blockPos))
+                    #self.instances[idx] = [render.Instance(cube, np.array([[modelX], [modelY], [modelZ]]), texture), True]
+                    self.instances[idx] = [render.Instance(None, None, texture), True]
+                    self.instances[idx][0].visibleFaces = [True] * 12
+                    if block == 'furnace':
+                        self.tileEntities[blockPos] = Furnace(blockPos)
+        else:
+            for ((x, y, z), block) in np.ndenumerate(self.blocks):
+                blockPos = BlockPos(x, y, z)
+                idx = self._coordsToIdx(blockPos)
+                if block == 'air':
+                    self.instances[idx] = None
+                else:
+                    texture = textures[block]
+                    [modelX, modelY, modelZ] = blockToWorld(self._globalBlockPos(blockPos))
+                    self.instances[idx] = [render.Instance(cube, np.array([[modelX], [modelY], [modelZ]]), texture), True]
+                    #self.instances[idx] = [render.Instance(None, None, texture), True]
+                    #self.instances[idx][0].visibleFaces = [True] * 12
+                    if block == 'furnace':
+                        self.tileEntities[blockPos] = Furnace(blockPos)
+
 
     def setBlock(self, world, instData, blockPos: BlockPos, id: BlockId, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False):
         meshIdx = blockPos.y // MESH_HEIGHT
@@ -1258,8 +1274,6 @@ class World:
         (x, _, z) = chunkPos
 
         chunkLoadDistance = math.ceil(config.CHUNK_LOAD_DISTANCE / 16)
-
-        print(centerPos, chunkLoadDistance)
 
         # Unload chunks
         shouldUnload = []

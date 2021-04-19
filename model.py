@@ -77,9 +77,10 @@ class Instance:
         self.trans = trans
         self.texture = texture
 
-        if not config.USE_OPENGL_BACKEND:
-            self._worldSpaceVertices = [toHomogenous(v) for v in self.worldSpaceVerticesUncached()]
-        self.visibleFaces = [True] * len(model.faces)
+        if model is not None:
+            if not config.USE_OPENGL_BACKEND:
+                self._worldSpaceVertices = [toHomogenous(v) for v in self.worldSpaceVerticesUncached()]
+            self.visibleFaces = [True] * len(model.faces)
 
     def worldSpaceVertices(self) -> List[ndarray]:
         return self._worldSpaceVertices
