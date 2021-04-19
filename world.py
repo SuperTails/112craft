@@ -1040,10 +1040,9 @@ class Chunk:
                     self.instances[idx] = None
                 else:
                     texture = textures[block]
-
                     #[modelX, modelY, modelZ] = blockToWorld(self._globalBlockPos(blockPos))
                     #self.instances[idx] = [render.Instance(cube, np.array([[modelX], [modelY], [modelZ]]), texture), True]
-                    self.instances[idx] = [render.Instance(None, None, texture), True]
+                    self.instances[idx] = [render.Instance(None, None, texture), True] #type:ignore
                     self.instances[idx][0].visibleFaces = [True] * 12
                     if block == 'furnace':
                         self.tileEntities[blockPos] = Furnace(blockPos)

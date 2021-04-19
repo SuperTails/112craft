@@ -477,7 +477,9 @@ class ResourcePack:
             if 'grass_top' in path or 'leaves' in path:
                 #im = tint(im, '#79C05A')
                 im = tint(im, '#7CBD6B')
-
+            
+            im = im.convert('RGBA')
+            
             self.imageCache[path] = im
             return self.imageCache[path]
     

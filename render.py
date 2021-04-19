@@ -443,6 +443,12 @@ def renderInstancesGl(client: ClientState, canvas):
     glDepthFunc(GL_LESS)
 
 def drawEntities(client: ClientState, view, projection):
+    check1 = makeFrustrumCullCheck(client, client.cameraPitch, client.cameraYaw)
+    check2 = makeFrustrumCullCheck(client, client.cameraPitch, client.cameraYaw + (client.horizFov / 2))
+    check3 = makeFrustrumCullCheck(client, client.cameraPitch, client.cameraYaw - (client.horizFov / 2))
+    check4 = makeFrustrumCullCheck(client, client.cameraPitch - (client.vertFov / 2), client.cameraYaw)
+    check5 = makeFrustrumCullCheck(client, client.cameraPitch + (client.vertFov / 2), client.cameraYaw)
+
     CLIENT_DATA.entityProgram.useProgram()
     glUniform1i(CLIENT_DATA.entityProgram.getUniformLocation("skin"), 0)
     glUniformMatrix4fv(CLIENT_DATA.entityProgram.getUniformLocation("view"), 1, GL_FALSE, view) #type:ignore
@@ -457,6 +463,14 @@ def drawEntities(client: ClientState, view, projection):
     alpha = (frameTime - client.lastTickTime) / 0.05
 
     for entity in client.entities:
+        pos = world.nearestBlockPos(entity.pos[0], entity.pos[1], entity.pos[2])
+
+        if not check1(pos): continue
+        if not check2(pos): continue
+        if not check3(pos): continue
+        if not check4(pos): continue
+        if not check5(pos): continue
+
         model = CLIENT_DATA.entityModels[entity.kind.model]
 
         if entity.kind.name == 'item':
