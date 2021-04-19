@@ -604,6 +604,11 @@ class Entity:
         else:
             raise Exception(self.kind)
         
+        if self.kind.name == 'zombie':
+            self.variables['tcos0'] = molang.evalString("(Math.cos(query.modified_distance_moved * 38.17) * query.modified_move_speed / variable.gliding_speed_value) * 57.3", self)
+        elif self.kind.name == 'creeper':
+            self.variables['leg_rot'] = molang.evalString("Math.cos(query.modified_distance_moved * 38.17326) * 80.22 * query.modified_move_speed", self)
+        
         #if anim is not None:
         #    print(boneName)
 
@@ -679,11 +684,6 @@ class Entity:
             self.bodyAngle += change
         
         self.distanceMoved += math.sqrt(self.velocity[0]**2 + self.velocity[2]**2)
-        
-        if self.kind.name == 'zombie':
-            self.variables['tcos0'] = molang.evalString("(Math.cos(query.modified_distance_moved * 38.17) * query.modified_move_speed / variable.gliding_speed_value) * 57.3", self)
-        elif self.kind.name == 'creeper':
-            self.variables['leg_rot'] = molang.evalString("Math.cos(query.modified_distance_moved * 38.17326) * 80.22 * query.modified_move_speed", self)
         
         if self.immunity > 0:
             self.immunity -= 1

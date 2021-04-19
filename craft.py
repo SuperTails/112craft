@@ -895,8 +895,6 @@ def handleS2CPackets(mode, app, client: ClientState):
                 entities.append(ent)
             else:
                 print(f'Ignoring unknown mob kind {kind}')
-
-
         elif isinstance(packet, network.SpawnPlayerS2C):
             ent = Player(app)
             ent.entityId = packet.entityId
@@ -987,11 +985,30 @@ def handleS2CPackets(mode, app, client: ClientState):
                     print(f'Other slot: {packet.slotIdx}')
             elif hasattr(mode.overlay, 'heldItem') and packet.windowId == -1 and packet.slotIdx == -1:
                 mode.overlay.heldItem = stack
-            elif hasattr(mode.overlay, 'slots') and packet.windowId == mode.windowId:
-                mode.overlay.slots[packet.slotIdx][2].stack
+            elif mode.overlay is not None and hasattr(mode.overlay.gui, 'slots') and packet.windowId == mode.overlay.windowId:
+                mode.overlay.gui.slots[packet.slotIdx][2].stack = stack
             else:
                 # TODO:
                 print(f'window ID: {packet.windowId}, stack: {stack}')
+        elif isinstance(packet, network.WindowPropertyS2C):
+            if mode.overlay is not None:
+                if packet.windowId == mode.overlay.windowId:
+                    if hasattr(mode.overlay.gui, 'fuelLeft'):
+                        if packet.property == 0:
+                            mode.overlay.gui.fuelLeft = packet.value
+                        elif packet.property == 1:
+                            mode.overlay.gui.maxFuelLeft = packet.value
+                        elif packet.property == 2:
+                            mode.overlay.gui.progress = packet.value
+                        elif packet.property == 3:
+                            mode.overlay.gui.maxProgress = packet.value
+                        else:
+                            raise Exception(packet)
+                    else:
+                        print(f'TODO: {packet}')
+                else:
+                    # TODO:
+                    print(f'window ID: {packet.windowId}')
         elif isinstance(packet, network.DestroyEntitiesS2C):
             entIdx = 0
             while entIdx < len(entities):
@@ -1072,18 +1089,33 @@ class ContainerGui:
             render.drawSlot(app, canvas, x, y, slot)
 
 class FurnaceGui(ContainerGui):
-    furnace: world.Furnace
+    fuelLeft: int
+    maxFuelLeft: int
+    progress: int
+    maxProgress: int
 
-    def __init__(self, app, furnace: world.Furnace):
-        self.furnace = furnace
+    def __init__(self, app):
+        self.fuelLeft = 0
+        self.maxFuelLeft = 1
+        self.progress = 0
+        self.maxProgress = 200
 
         slots = [
-            (app.width / 2 - 50, app.height / 4 - 30, self.furnace.inputSlot),
-            (app.width / 2 - 50, app.height / 4 + 30, self.furnace.fuelSlot),
-            (app.width / 2 + 50, app.height / 4, self.furnace.outputSlot),
+            (app.width / 2 - 50, app.height / 4 - 30, Slot()),
+            (app.width / 2 - 50, app.height / 4 + 30, Slot()),
+            (app.width / 2 + 50, app.height / 4, Slot(canInput=False)),
         ]
 
         super().__init__(slots)
+    
+    def redrawAll(self, app, canvas):
+        super().redrawAll(app, canvas)
+
+        fuelText = str(round(self.fuelLeft / self.maxFuelLeft * 100)) + '%'
+        canvas.create_text(app.width / 2 - 50, app.height / 4, text=fuelText)
+
+        progressText = str(round(self.progress / self.maxProgress * 100)) + '%'
+        canvas.create_text(app.width / 2, app.height / 4, text=progressText)
 
 def craftingGuiPostClick(gui, app, slotIdx):
     if isinstance(gui, CraftingTableGui):
@@ -1211,7 +1243,7 @@ class InventoryMode(Mode):
         elif name == 'crafting':
             self.gui = CraftingTableGui(app)
         elif name == 'furnace':
-            self.gui = FurnaceGui(app, extra)
+            self.gui = FurnaceGui(app)
         else:
             raise Exception(f"unknown gui {name}")
         

@@ -778,7 +778,7 @@ def loadSounds(app):
         'dirt': 'gravel',
         'cobblestone': 'stone',
         'stone': 'stone',
-        'furnace': 's tone',
+        'furnace': 'stone',
         'coal_ore': 'stone',
         'iron_ore': 'stone',
         'oak_log': 'wood',

@@ -593,6 +593,18 @@ class SetSlotS2C:
         return cls(windowId, slotIdx, itemId, count)
 
 @dataclass
+class WindowPropertyS2C:
+    windowId: int
+    property: int
+    value: int
+
+    @classmethod
+    def fromBuf(cls, buf):
+        windowId, property, value = buf.unpack('Bhh')
+
+        return cls(windowId, property, value)
+
+@dataclass
 class SpawnPlayerS2C:
     entityId: int
     playerUUID: Any
@@ -683,6 +695,10 @@ class MinecraftProtocol(ClientProtocol):
     
     def packet_set_slot(self, buf):
         s2cQueue.put(SetSlotS2C.fromBuf(buf))
+        buf.discard()
+    
+    def packet_window_property(self, buf):
+        s2cQueue.put(WindowPropertyS2C.fromBuf(buf))
         buf.discard()
     
     def packet_acknowledge_player_digging(self, buf):
