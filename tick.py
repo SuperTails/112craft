@@ -100,6 +100,66 @@ def sendPlayerPlacement(app, hand: int, location: BlockPos, face: int, cx: float
     else:
         network.c2sQueue.put(network.PlayerPlacementC2S(hand, location, face, cx, cy, cz, insideBlock))
 
+def sendChatMessage(app, text: str):
+    if hasattr(app, 'server'):
+        if text.startswith('/'):
+            text = text.removeprefix('/')
+
+            parts = text.split()
+
+            server: ServerState = app.server
+
+            print(f"COMMAND {text}")
+
+            if parts[0] == 'pathfind':
+                player: Player = server.getLocalPlayer()
+                target = player.getBlockPos()
+                for ent in server.entities:
+                    ent.updatePath(server.world, target)
+            elif parts[0] == 'give':
+                itemId = parts[1]
+                if len(parts) == 3:
+                    amount = int(parts[2])
+                else:
+                    amount = 1
+                server.getLocalPlayer().pickUpItem(app, Stack(itemId, amount))
+            elif parts[0] == 'time':
+                if parts[1] == 'set':
+                    if parts[2] == 'day':
+                        server.time = 1000
+                    elif parts[2] == 'night':
+                        server.time = 13000
+                    elif parts[2] == 'midnight':
+                        server.time = 18000
+                    else:
+                        server.time = int(parts[2])
+                elif parts[1] == 'add':
+                    server.time += int(parts[2])
+            elif parts[0] == 'gamemode':
+                # TODO:
+                '''
+                if parts[1] == 'creative':
+                    server.getLocalPlayer().creative = True
+                elif parts[1] == 'survival':
+                    app.mode.player.creative = False
+                '''
+            elif parts[0] == 'summon':
+                player = server.getLocalPlayer()
+                ent = Entity(app, server.getEntityId(), parts[1],
+                    player.pos[0]+0.5, player.pos[1]+0.5, player.pos[2]+0.5)
+                app.entities.append(ent)
+            elif parts[0] == 'tp':
+                # TODO:
+                '''
+                player = server.getLocalPlayer()
+                player.pos[0] = float(parts[1])
+                player.pos[1] = float(parts[2])
+                player.pos[2] = float(parts[3])
+                '''
+    else:
+        network.c2sQueue.put(network.ChatMessageC2S(text))
+
+
 def sendClientStatus(app, status: int):
     # TODO: This isn't *really* a player joining packet, buuuut...
 
@@ -244,8 +304,9 @@ def clientTick(client: ClientState, instData):
 
     client.time += 1
 
-    client.world.loadUnloadChunks(client.cameraPos, instData)
-    client.world.addChunkDetails(instData)
+    if not client.local:
+        client.world.loadUnloadChunks(client.player.pos, instData)
+        client.world.addChunkDetails(instData)
 
     player: Player = client.player
 
@@ -309,7 +370,7 @@ def serverTick(app, server: ServerState):
 
     instData = (app.textures, app.cube, app.textureIndices)
 
-    server.world.loadUnloadChunks(app.cameraPos, (app.textures, app.cube, app.textureIndices))
+    server.world.loadUnloadChunks(server.getLocalPlayer().pos, (app.textures, app.cube, app.textureIndices))
     server.world.addChunkDetails(instData)
     server.world.tickChunks((app.textures, app.cube, app.textureIndices))
 

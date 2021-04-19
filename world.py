@@ -1173,6 +1173,9 @@ class World:
         os.makedirs(f'saves/{self.name}', exist_ok=True)
 
         if seed is not None:
+            if not isinstance(seed, int):
+                seed = hash(seed)
+
             self.seed = seed
 
         try:
@@ -1266,6 +1269,8 @@ class World:
 
         chunkLoadDistance = math.ceil(config.CHUNK_LOAD_DISTANCE / 16)
 
+        print(centerPos, chunkLoadDistance)
+
         # Unload chunks
         shouldUnload = []
         for unloadChunkPos in self.chunks:
@@ -1287,7 +1292,7 @@ class World:
                 (ux, _, uz) = loadChunkPos
                 dist = max(abs(ux - x), abs(uz - z))
 
-                urgent = dist <= 1
+                urgent = dist <= 2
 
                 if (urgent or (loadedChunks < 1)) and self.canLoadChunk(loadChunkPos):
                     #queuedForLoad.append((app.world, (app.textures, app.cube), loadChunkPos))

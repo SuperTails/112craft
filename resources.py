@@ -481,6 +481,9 @@ class ResourcePack:
             self.imageCache[path] = im
             return self.imageCache[path]
     
+    def getItemTex(self, name: str) -> Image.Image:
+        return self.getImg(f'textures/items/{name}.png')
+    
     def getBlockTex(self, name: str) -> Image.Image:
         return self.getImg(f'textures/blocks/{name}.png')
 
@@ -806,6 +809,7 @@ def loadResources(app):
         'stone': { 'all': 'stone' },
         'coal_ore': { 'all': 'coal_ore' },
         'iron_ore': { 'all': 'iron_ore' },
+        'diamond_ore': { 'all': 'diamond_ore' },
         'cobblestone': { 'all': 'cobblestone' },
         'oak_leaves': { 'all': 'leaves_oak_opaque' },
         'oak_log': { 'side': 'log_oak', 'up': 'log_oak_top', 'down': 'log_oak_top' },
@@ -839,6 +843,7 @@ def loadResources(app):
         'glowstone': ('pickaxe', 2.0),
         'coal_ore': ('pickaxe', 6.0),
         'iron_ore': ('pickaxe', 6.0),
+        'diamond_ore': ('pickaxe', 6.0),
         'cobblestone': ('pickaxe', 6.0),
         'oak_leaves': (None, 0.5),
         'oak_log': ('axe', 2.0),
@@ -858,6 +863,7 @@ def loadResources(app):
         'stone': { '': None, 'pickaxe': 'cobblestone' },
         'coal_ore': { '': None, 'pickaxe': 'coal' },
         'iron_ore': { '': None, 'pickaxe': 'iron_ore' },
+        'diamond_ore': { '': None, 'pickaxe': 'diamond' },
         'cobblestone': { '': 'cobblestone' },
         'furnace': { 'pickaxe': 'furnace' },
         'oak_leaves': { '': None },
@@ -1033,16 +1039,20 @@ def loadResources(app):
 
     commonItemTextures = {
         'air': Image.open('assets/AirItem.png'),
-        'stick': Image.open('assets/Stick.png'),
-        'coal': Image.open('assets/coal.png'),
-        'wooden_pickaxe': Image.open('assets/WoodenPickaxe.png'),
-        'stone_pickaxe': Image.open('assets/StonePickaxe.png'),
-        'wooden_axe': Image.open('assets/WoodenAxe.png'),
-        'wooden_shovel': Image.open('assets/WoodenShovel.png'),
-        'iron_sword': Image.open('assets/Vanilla_Resource_Pack_1.16.220/textures/items/iron_sword.png'),
-        'stone_sword': Image.open('assets/Vanilla_Resource_Pack_1.16.220/textures/items/stone_sword.png'),
-        'wooden_sword': Image.open('assets/Vanilla_Resource_Pack_1.16.220/textures/items/wood_sword.png'),
-        'iron_ingot': Image.open('assets/Vanilla_Resource_Pack_1.16.220/textures/items/iron_ingot.png'),
+        'stick': app.rePack.getItemTex('stick'),
+        'coal': app.rePack.getItemTex('coal'),
+        'iron_ingot': app.rePack.getItemTex('iron_ingot'),
+        'diamond': app.rePack.getItemTex('diamond'),
+        'wooden_sword': app.rePack.getItemTex('wood_sword'),
+        'wooden_pickaxe': app.rePack.getItemTex('wood_pickaxe'),
+        'wooden_axe': app.rePack.getItemTex('wood_axe'),
+        'wooden_shovel': app.rePack.getItemTex('wood_shovel'),
+        'stone_sword': app.rePack.getItemTex('stone_sword'),
+        'stone_pickaxe': app.rePack.getItemTex('stone_pickaxe'),
+        'stone_shovel': app.rePack.getItemTex('stone_shovel'),
+        'iron_sword': app.rePack.getItemTex('iron_sword'),
+        'iron_pickaxe': app.rePack.getItemTex('iron_pickaxe'),
+        'iron_shovel': app.rePack.getItemTex('iron_shovel'),
         'torch': Image.open('assets/Vanilla_Resource_Pack_1.16.220/textures/blocks/torch_on.png'),
     }
 

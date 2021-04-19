@@ -40,6 +40,10 @@ class ServerState:
         self.tickTimeIdx = 0
 
         self.gravity = 0.10
+    
+    def getEntityId(self):
+        self.nextEntityId += 1
+        return self.nextEntityId
 
     def getLocalPlayer(self) -> Player:
         for player in self.players:

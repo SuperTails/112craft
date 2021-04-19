@@ -107,7 +107,7 @@ def worldToFolderName(name: str) -> str:
 class WorldLoadMode(Mode):
     loadStage: int = 0
 
-    def __init__(self, app, worldName, local: bool, nextMode, seed=None, importPath=''):
+    def __init__(self, app, worldName, local: bool, nextMode, seed: Optional[Any] = None, importPath=''):
         self.nextMode = nextMode
 
         app.timerDelay = 10
@@ -471,68 +471,6 @@ def setMouseCapture(app, value: bool) -> None:
         else:
             glfw.set_input_mode(app.window, glfw.CURSOR, glfw.CURSOR_NORMAL)
 
-def submitChat(app, text: str):
-    network.c2sQueue.put(network.ChatMessageC2S(text))
-
-    if text.startswith('/'):
-        # TODO: 
-        raise Exception("todo")
-
-        text = text.removeprefix('/')
-
-        parts = text.split()
-
-        print(f"COMMAND {text}")
-
-        if parts[0] == 'pathfind':
-            player: Player = app.mode.player
-            target = player.getBlockPos()
-            for ent in app.entities:
-                ent.updatePath(app.world, target)
-        elif parts[0] == 'give':
-            itemId = parts[1]
-            if len(parts) == 3:
-                amount = int(parts[2])
-            else:
-                amount = 1
-            app.mode.player.pickUpItem(app, Stack(itemId, amount))
-        elif parts[0] == 'hide':
-            app.doDrawHud = False
-        elif parts[0] == 'show':
-            app.doDrawHud = True
-        elif parts[0] == 'cinematic':
-            app.client.cinematic = not app.client.cinematic
-        elif parts[0] == 'time':
-            if parts[1] == 'set':
-                if parts[2] == 'day':
-                    app.time = 1000
-                elif parts[2] == 'night':
-                    app.time = 13000
-                elif parts[2] == 'midnight':
-                    app.time = 18000
-                else:
-                    app.time = int(parts[2])
-            elif parts[1] == 'add':
-                app.time += int(parts[2])
-        elif parts[0] == 'gamemode':
-            if parts[1] == 'creative':
-                app.mode.player.creative = True
-            elif parts[1] == 'survival':
-                app.mode.player.creative = False
-        elif parts[0] == 'summon':
-            player = app.mode.player
-            ent = entity.Entity(app, parts[1],
-                player.pos[0]+0.5, player.pos[1]+0.5, player.pos[2]+0.5)
-            app.entities.append(ent)
-        elif parts[0] == 'tp':
-            player = app.mode.player
-            player.pos[0] = float(parts[1])
-            player.pos[1] = float(parts[2])
-            player.pos[2] = float(parts[3])
-
-    else:
-        print(f"CHAT: {text}")
-
 def drawChatHistory(app, client: ClientState, canvas, useAge=True):
     for i, (sendTime, msg) in enumerate(client.chat[::-1]):
         if (useAge and time.time() - sendTime > 5.0) or i > 10:
@@ -569,7 +507,7 @@ class ChatMode(Mode):
         elif key == 'ENTER':
             app.mode = self.submode
             if not self.text.isspace():
-                submitChat(app, self.text)
+                sendChatMessage(app, self.text)
         elif key == 'BACKSPACE':
             if self.text != '':
                 self.text = self.text[:-1]
@@ -806,6 +744,10 @@ class PlayingMode(Mode):
             client.shift = True
         elif key == 'ESCAPE':
             setMouseCapture(app, not app.captureMouse)
+        elif key == 'H':
+            app.doDrawHud = not app.doDrawHud
+        elif key == 'J':
+            app.client.cinematic = not app.client.cinematic
         elif key == 'T':
             app.mode = ChatMode(app, self, '')
         elif key == '/':
