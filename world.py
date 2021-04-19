@@ -713,7 +713,7 @@ class Chunk:
 
             for xIdx in range(16):
                 for zIdx in range(16):
-                    if self.blocks[xIdx, yIdx, zIdx] != 'air':
+                    if self.coordsOccupied(BlockPos(xIdx, yIdx, zIdx), isOpaque):
                         lightLevel = 0
                     elif yIdx == highestBlock:
                         lightLevel = 7
@@ -802,18 +802,11 @@ class Chunk:
         
         for y in range(CHUNK_HEIGHT):
             for foo in range(16):
-                updateBuriedStateAt(world, self._globalBlockPos(BlockPos(0, y, foo)))
-                updateBuriedStateAt(world, self._globalBlockPos(BlockPos(15, y, foo)))
+                self.updateBuriedStateAt(world, BlockPos(0, y, foo))
+                self.updateBuriedStateAt(world, BlockPos(15, y, foo))
 
-                updateBuriedStateAt(world, self._globalBlockPos(BlockPos(foo, y, 0)))
-                updateBuriedStateAt(world, self._globalBlockPos(BlockPos(foo, y, 15)))
-    '''
-    def updateAllBuried(self, app):
-        for xIdx in range(16):
-            for yIdx in range(CHUNK_HEIGHT):
-                for zIdx in range(16):
-                    self.updateBuriedStateAt(app.world, BlockPos(xIdx, yIdx, zIdx))
-    '''
+                self.updateBuriedStateAt(world, BlockPos(foo, y, 0))
+                self.updateBuriedStateAt(world, BlockPos(foo, y, 15))
     
     @timed()
     def lightAndOptimize(self, world: 'World'):
@@ -848,7 +841,7 @@ class Chunk:
         if not any(self.meshDirtyFlags):
             self.worldgenStage = WorldgenStage.COMPLETE
     
-    #@timed(count=1)
+    @timed(count=1)
     def createOneMeshUncached(self, meshIdx: int, world: 'World', instData):
         self.meshDirtyFlags[meshIdx] = False
 
@@ -874,7 +867,8 @@ class Chunk:
             for faceIdx in range(0, 12, 2):
                 if not inst.visibleFaces[faceIdx]: continue
 
-                faceVertices = [] 
+                faceVertices = np.zeros((6, 9))
+
                 for l in range(6):
                     vert = CUBE_MESH_VERTICES[((faceIdx // 2) * 6 + l) * 5:][:5]
 
@@ -886,14 +880,9 @@ class Chunk:
                             uSize, vSize = 2/16, 2/16
                             uOffset, vOffset = 7/16, 8/16
                         vert = (vert * [2/16, 10/16, 2/16, uSize, vSize]) + [0.0, -3/16, 0.0, uOffset, vOffset]
+                    
+                    faceVertices[l, :5] = vert
 
-                    faceVertices += list(vert)
-
-                    faceVertices.append(0.0)
-                    faceVertices.append(0.0)
-                    faceVertices.append(0.0)
-                    faceVertices.append(0.0)
-                
                 adjBlockPos = adjacentBlockPos(BlockPos(bx, by, bz), faceIdx)
                 (ckPos, ckLocal) = toChunkLocal(self._globalBlockPos(adjBlockPos))
                 if self.pos == ckPos:
@@ -907,22 +896,21 @@ class Chunk:
                         lightLevel = 7
                         blockLightLevel = 0
 
-                #faceVertices = list(vertices[(faceIdx // 2) * 6 * 5:((faceIdx // 2) + 1) * 6 * 5])
-                for idx2 in range(6):
-                    faceVertices[idx2 * 9 + 0] += bx + self.pos.x * 16
-                    faceVertices[idx2 * 9 + 1] += by + self.pos.y * CHUNK_HEIGHT
-                    faceVertices[idx2 * 9 + 2] += bz + self.pos.z * 16
-
-                    faceVertices[idx2 * 9 + 5] = lightLevel
-                    faceVertices[idx2 * 9 + 6] = blockLightLevel
-
+                offsetArr = [
+                    bx + self.pos.x * 16, by + self.pos.y * CHUNK_HEIGHT, bz + self.pos.z * 16,
+                    0.0, 0.0,
+                    lightLevel, blockLightLevel,
                     # Block index
-                    faceVertices[idx2 * 9 + 7] = bx * 16 * MESH_HEIGHT + (by % MESH_HEIGHT) * 16 + bz
-                    
+                    bx * 16 * MESH_HEIGHT + (by % MESH_HEIGHT) * 16 + bz,
                     # Texture atlas index
-                    faceVertices[idx2 * 9 + 8] = instData[2][blockId][faceIdx // 2]
+                    instData[2][blockId][faceIdx // 2]
+                ]
 
-                usedVertices += faceVertices
+                faceVertices += offsetArr
+
+                faceVertices.shape = (faceVertices.size, )
+
+                usedVertices += list(faceVertices)
         
         usedVertices = np.array(usedVertices, dtype='float32')
 
@@ -1054,6 +1042,8 @@ class Chunk:
                 texture = textures[block]
                 [modelX, modelY, modelZ] = blockToWorld(self._globalBlockPos(blockPos))
                 self.instances[idx] = [render.Instance(cube, np.array([[modelX], [modelY], [modelZ]]), texture), True]
+                #self.instances[idx] = [render.Instance(None, None, texture), True]
+                #self.instances[idx][0].visibleFaces = [True] * 12
                 if block == 'furnace':
                     self.tileEntities[blockPos] = Furnace(blockPos)
 
