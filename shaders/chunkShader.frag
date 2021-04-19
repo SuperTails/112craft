@@ -38,7 +38,7 @@ void main() {
     vec3 baseColor = c - (d.rgb * d.a * breakColor);
     //vec3 baseColor = d.rgb;
 
-    float light2 = 0.18 + pow(totalLight / 8.0, 1.5);
+    float light2 = 0.18 + pow(totalLight / 16.0, 1.5);
 
     FragColor = vec4(baseColor * light2, 1.0);
 

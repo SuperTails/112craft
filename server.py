@@ -39,6 +39,8 @@ class ServerState:
         self.tickTimes = [0.0] * 10
         self.tickTimeIdx = 0
 
+        self.time = 0
+
         self.gravity = 0.10
     
     def getEntityId(self):

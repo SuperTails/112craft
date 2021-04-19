@@ -76,7 +76,7 @@ def blockFaceLight(client: ClientState, blockPos: BlockPos, faceIdx: int) -> int
         (chunk, (x, y, z)) = client.world.getChunk(pos)
         return chunk.lightLevels[x, y, z]
     else:
-        return 7
+        return 15
 
 def isBackBlockFace(client: ClientState, blockPos: BlockPos, faceIdx: int) -> bool:
     """Returns True if the given face of the block is facing away from the camera"""
@@ -198,7 +198,7 @@ def cullInstance(client: ClientState, toCamMat: ndarray, inst: Instance, blockPo
             g = int(color[3:5], base=16)
             b = int(color[5:7], base=16)
 
-            brightness = (light + 1) / 8
+            brightness = (light + 1) / 16
             r *= brightness
             g *= brightness
             b *= brightness

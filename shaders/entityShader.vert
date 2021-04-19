@@ -48,16 +48,6 @@ void main() {
         sin(rotY), 0.0,  cos(rotY)
     );
 
-
-
-    /*
-    mat3 rotMat2 = mat3(
-        1.0, 0.0, 0.0,
-        0.0, cos(rot2), -sin(rot2),
-        0.0, sin(rot2), cos(rot2)
-    );
-    */
-
     vec3 pivot2 = pivot / 16.0;
 
     vec3 pivoted = (rotMatZ * rotMatY * rotMatX * (aPos / 16.0 - pivot2)) + pivot2;

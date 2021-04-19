@@ -234,6 +234,7 @@ def updateBlockBreaking(app, server: ServerState):
         return
 
     blockId = server.world.getBlock(pos)
+    blockState = server.world.getBlockState(pos)
 
     # HACK:
     player = server.getLocalPlayer()
@@ -249,7 +250,7 @@ def updateBlockBreaking(app, server: ServerState):
     # TODO: Sound effect packets
 
     if server.breakingBlock >= hardness:
-        mcBlockId = util.REGISTRY.encode_block({ 'name': 'minecraft:' + blockId })
+        mcBlockId = util.REGISTRY.encode_block({ 'name': 'minecraft:' + blockId } | blockState)
 
         network.s2cQueue.put(network.AckPlayerDiggingS2C(
             pos,
@@ -366,7 +367,7 @@ def clientTick(client: ClientState, instData):
 def serverTick(app, server: ServerState):
     startTime = time.time()
 
-    app.time += 1
+    server.time += 1
 
     instData = (app.textures, app.cube, app.textureIndices)
 
@@ -441,6 +442,8 @@ def serverTick(app, server: ServerState):
     
     if player.pos[1] < -64.0:
         player.hit(app, 10.0, (0.0, 0.0))
+    
+    network.s2cQueue.put(network.TimeUpdateS2C(0, server.time))
     
     # HACK:
     app.client.entities = copy.deepcopy(server.entities)
@@ -534,7 +537,7 @@ def isValidSpawnLocation(app, pos: BlockPos):
     isOk = (server.world.coordsOccupied(floor)
         and not server.world.coordsOccupied(feet)
         and not server.world.coordsOccupied(head)
-        and light < 3)
+        and light < 8)
     
     return isOk
 

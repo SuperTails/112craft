@@ -433,6 +433,7 @@ def convertBlock(block, instData):
 class Chunk:
     pos: ChunkPos
     blocks: ndarray
+    blockStates: ndarray
     lightLevels: ndarray
     blockLightLevels: ndarray
     instances: List[Any]
@@ -455,6 +456,9 @@ class Chunk:
         self.pos = pos
 
         self.blocks = np.full((16, CHUNK_HEIGHT, 16), 'air', dtype=object)
+        self.blockStates = np.full((16, CHUNK_HEIGHT, 16), None, dtype=object)
+        for (x, y, z) in np.ndindex(16, CHUNK_HEIGHT, 16):
+            self.blockStates[x, y, z] = {}
         self.lightLevels = np.full((16, CHUNK_HEIGHT, 16), 0)
         self.blockLightLevels = np.full((16, CHUNK_HEIGHT, 16), 0)
         self.instances = [None] * self.blocks.size
@@ -486,6 +490,7 @@ class Chunk:
 
         np.savez(path,
             blocks=self.blocks,
+            blockStates=self.blockStates,
             lightLevels=self.lightLevels,
             blockLightLevels=self.blockLightLevels,
         )
@@ -495,10 +500,11 @@ class Chunk:
         for (idx, section) in enumerate(packet.sections):
             if section is None:
                 self.blocks[:, (idx*16):(idx*16)+1, :] = 'air'
+                self.blockStates[:, (idx*16):(idx*16)+1, :] = [{} for _ in range(16*16)]
             else:
                 section[0].registry = util.REGISTRY
                 for (blockIdx, block) in enumerate(section[0]):
-                    blockId = block['name'].removeprefix('minecraft:')
+                    blockId = block.pop('name').removeprefix('minecraft:')
                     blockId = convertBlock(blockId, instData)
 
                     y = blockIdx // 256 + 16 * idx
@@ -506,6 +512,7 @@ class Chunk:
                     x = blockIdx % 16
 
                     self.blocks[x, y, z] = blockId
+                    self.blockStates[x, y, z] = block
 
         self.setAllBlocks(world, instData)
 
@@ -571,6 +578,7 @@ class Chunk:
         # TODO: See if I can serialize strings some other way
         with np.load(path, allow_pickle=True) as npz:
             self.blocks = npz['blocks']
+            self.blockStates = npz['blockStates']
             self.lightLevels = npz['lightLevels']
             self.blockLightLevels = npz['blockLightLevels']
             self.setAllBlocks(world, instData)
@@ -662,6 +670,7 @@ class Chunk:
 
         self.disperseOre(world, instData, seed, 'coal_ore', 20, CHUNK_HEIGHT // 2)
         self.disperseOre(world, instData, seed, 'iron_ore', 20, CHUNK_HEIGHT // 4)
+        self.disperseOre(world, instData, seed, 'diamond_ore', 1, CHUNK_HEIGHT // 16)
 
         treePos = []
 
@@ -702,7 +711,7 @@ class Chunk:
                     if self.blocks[xIdx, yIdx, zIdx] != 'air':
                         isEmpty = False
                     else:
-                        self.lightLevels[xIdx, yIdx, zIdx] = 7
+                        self.lightLevels[xIdx, yIdx, zIdx] = 15
             highestBlock = yIdx
             if not isEmpty:
                 break
@@ -716,11 +725,11 @@ class Chunk:
                     if self.coordsOccupied(BlockPos(xIdx, yIdx, zIdx), isOpaque):
                         lightLevel = 0
                     elif yIdx == highestBlock:
-                        lightLevel = 7
+                        lightLevel = 15
                     else:
                         lightAbove = self.lightLevels[xIdx, yIdx + 1, zIdx]
-                        if lightAbove == 7:
-                            lightLevel = 7
+                        if lightAbove == 15:
+                            lightLevel = 15
                         else:
                             lightLevel = max(lightAbove - 1, 0)
                     
@@ -892,7 +901,7 @@ class Chunk:
                         lightLevel = world.chunks[ckPos].lightLevels[ckLocal.x, ckLocal.y, ckLocal.z]
                         blockLightLevel = world.chunks[ckPos].blockLightLevels[ckLocal.x, ckLocal.y, ckLocal.z]
                     else:
-                        lightLevel = 7
+                        lightLevel = 15
                         blockLightLevel = 0
 
                 offsetArr = [
@@ -1062,18 +1071,19 @@ class Chunk:
                         self.tileEntities[blockPos] = Furnace(blockPos)
 
 
-    def setBlock(self, world, instData, blockPos: BlockPos, id: BlockId, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False):
+    def setBlock(self, world, instData, blockPos: BlockPos, blockId: BlockId, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False):
         meshIdx = blockPos.y // MESH_HEIGHT
         self.meshDirtyFlags[meshIdx] = True
 
         (textures, cube, _) = instData
         (x, y, z) = blockPos
-        self.blocks[x, y, z] = id
+        self.blocks[x, y, z] = blockId
+        self.blockStates[x, y, z] = {}
         idx = self._coordsToIdx(blockPos)
-        if id == 'air':
+        if blockId == 'air':
             self.instances[idx] = None
         else:
-            texture = textures[id]
+            texture = textures[blockId]
 
             [modelX, modelY, modelZ] = blockToWorld(self._globalBlockPos(blockPos))
 
@@ -1084,7 +1094,7 @@ class Chunk:
         if blockPos in self.tileEntities:
             self.tileEntities.pop(blockPos)
         
-        if id == 'furnace':
+        if blockId == 'furnace':
             self.tileEntities[blockPos] = Furnace(blockPos)
         
         '''
@@ -1215,6 +1225,10 @@ class World:
     def getBlock(self, blockPos: BlockPos) -> str:
         (chunkPos, localPos) = toChunkLocal(blockPos)
         return self.chunks[chunkPos].blocks[localPos.x, localPos.y, localPos.z]
+    
+    def getBlockState(self, blockPos: BlockPos) -> dict[str, Any]:
+        (chunkPos, localPos) = toChunkLocal(blockPos)
+        return self.chunks[chunkPos].blockStates[localPos.x, localPos.y, localPos.z]
     
     def hasBlockBeneath(self, entity):
         [xPos, yPos, zPos] = entity.pos
@@ -1535,7 +1549,7 @@ class World:
                     if chunk.coordsOccupied(checkPos):
                         break
 
-                    heapq.heappush(exSources, (-7, BlockPos(blockPos.x, y, blockPos.z)))
+                    heapq.heappush(exSources, (-15, BlockPos(blockPos.x, y, blockPos.z)))
                 
             for faceIdx in range(0, 12, 2):
                 gPos = adjacentBlockPos(blockPos, faceIdx)
@@ -1612,7 +1626,7 @@ class World:
                     if chunk.coordsOccupied(checkPos):
                         break
 
-                    heapq.heappush(queue, (-7, BlockPos(blockPos.x, y, blockPos.z)))
+                    heapq.heappush(queue, (-15, BlockPos(blockPos.x, y, blockPos.z)))
             
             for faceIdx in range(0, 12, 2):
                 gPos = adjacentBlockPos(blockPos, faceIdx)
@@ -1643,8 +1657,8 @@ class World:
                 self.setBlockLightLevel(pos, light)
 
             for faceIdx in range(0, 12, 2):
-                if isSky and faceIdx == 8 and light == 7:
-                    nextLight = 7
+                if isSky and faceIdx == 8 and light == 15:
+                    nextLight = 15
                 else:
                     nextLight = max(light - 1, 0)
                 nextPos = adjacentBlockPos(pos, faceIdx)
@@ -1668,9 +1682,9 @@ def isOpaque(block: BlockId):
 
 def getLuminance(block: BlockId):
     if block == 'glowstone':
-        return 7
+        return 15
     elif block == 'torch':
-        return 7
+        return 14
     else:
         return 0
 
