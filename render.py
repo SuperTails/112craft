@@ -462,6 +462,11 @@ def drawEntities(client: ClientState, view, projection):
     frameTime = time.time()
     alpha = (frameTime - client.lastTickTime) / 0.05
 
+    rotXLoc = CLIENT_DATA.entityProgram.getUniformLocation("rotX")
+    rotYLoc = CLIENT_DATA.entityProgram.getUniformLocation("rotY")
+    rotZLoc = CLIENT_DATA.entityProgram.getUniformLocation("rotZ")
+    immunityLoc = CLIENT_DATA.entityProgram.getUniformLocation("immunity")
+
     for entity in client.entities:
         pos = world.nearestBlockPos(entity.pos[0], entity.pos[1], entity.pos[2])
 
@@ -503,26 +508,23 @@ def drawEntities(client: ClientState, view, projection):
         glUniformMatrix4fv(modelPos, 1, GL_FALSE, modelMat) #type:ignore
         glUniform1f(rotPos, entity.bodyAngle)
 
-        i = 0
+        rotations = entity.getRotations(CLIENT_DATA.entityModels, CLIENT_DATA.entityAnimations)
 
-        for (vao, num) in model.vaos:
+        for i, (rot, (vao, num)) in enumerate(zip(rotations, model.vaos)):
             if vao == 0: 
-                i += 1
                 continue
 
-            (x, y, z) = entity.getRotation(CLIENT_DATA.entityModels, CLIENT_DATA.entityAnimations, i)
+            (x, y, z) = rot
 
-            glUniform1f(CLIENT_DATA.entityProgram.getUniformLocation("rotX"), x)
-            glUniform1f(CLIENT_DATA.entityProgram.getUniformLocation("rotY"), y)
-            glUniform1f(CLIENT_DATA.entityProgram.getUniformLocation("rotZ"), z)
+            glUniform1f(rotXLoc, x)
+            glUniform1f(rotYLoc, y)
+            glUniform1f(rotZLoc, z)
 
             immunity = 1.0 if entity.immunity > 0 else 0.0
-            glUniform1f(CLIENT_DATA.entityProgram.getUniformLocation("immunity"), immunity)
+            glUniform1f(immunityLoc, immunity)
 
             glBindVertexArray(vao)
             glDrawArrays(GL_TRIANGLES, 0, num * 5)
-
-            i += 1
 
 def makeFrustrumCullCheck(client: ClientState, pitch, yaw):
     lookX = cos(pitch)*sin(-yaw)

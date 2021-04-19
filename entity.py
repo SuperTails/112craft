@@ -584,6 +584,60 @@ class Entity:
         bz = roundHalfUp(self.pos[2])
         return BlockPos(bx, by, bz)
     
+    def getRotations(self, entityModels, entityAnimations):
+        if self.kind.name == 'zombie':
+            self.variables['tcos0'] = molang.evalString("(Math.cos(query.modified_distance_moved * 38.17) * query.modified_move_speed / variable.gliding_speed_value) * 57.3", self)
+        elif self.kind.name == 'creeper':
+            self.variables['leg_rot'] = molang.evalString("Math.cos(query.modified_distance_moved * 38.17326) * 80.22 * query.modified_move_speed", self)
+
+        if self.kind.name == 'creeper':
+            anim = entityAnimations['animation.creeper.legs']
+        elif self.kind.name == 'fox':
+            anim = entityAnimations['animation.quadruped.walk']
+        elif self.kind.name == 'zombie':
+            anim = entityAnimations['animation.humanoid.move']
+        elif self.kind.name == 'player':
+            anim = entityAnimations['animation.humanoid.move']
+        elif self.kind.name == 'skeleton':
+            anim = entityAnimations['animation.humanoid.bow_and_arrow']
+        elif self.kind.name == 'item':
+            anim = None
+        else:
+            raise Exception(self.kind)
+        
+        model = entityModels[self.kind.model]
+
+        result = []
+        
+        for bone in model.bones:
+            boneName = bone.name
+            boneRot = bone.bind_pose_rotation
+            
+            #if anim is not None:
+            #    print(boneName)
+
+            if self.kind.name == 'item':
+                rot = [0.0, self.lifeTime * 3.0, 0.0]
+            elif boneName == 'head':
+                rot = [math.degrees(self.headPitch), math.degrees(self.headYaw - self.bodyAngle), 0.0]
+            elif anim is not None and boneName in anim.bones:
+                (x, y, z) = anim.bones[boneName].rotation
+                rot = [self.calc(x), self.calc(y), self.calc(z)]
+            else:
+                rot = [0.0, 0.0, 0.0]
+
+            rot[0] += boneRot[0]
+            rot[1] += boneRot[1]
+            rot[2] += boneRot[2]
+
+            rot[0] = math.radians(rot[0])
+            rot[1] = math.radians(rot[1])
+            rot[2] = math.radians(rot[2])
+
+            result.append(rot)
+
+        return result
+    
     def getRotation(self, entityModels, entityAnimations, i):
         bone = entityModels[self.kind.model].bones[i]
         boneName = bone.name

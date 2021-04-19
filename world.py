@@ -500,7 +500,9 @@ class Chunk:
         for (idx, section) in enumerate(packet.sections):
             if section is None:
                 self.blocks[:, (idx*16):(idx*16)+1, :] = 'air'
-                self.blockStates[:, (idx*16):(idx*16)+1, :] = [{} for _ in range(16*16)]
+
+                for (x, y, z) in np.ndindex(16, 16, 16):
+                    self.blockStates[x, y+(idx*16), z] = {}
             else:
                 section[0].registry = util.REGISTRY
                 for (blockIdx, block) in enumerate(section[0]):
