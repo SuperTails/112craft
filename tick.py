@@ -355,6 +355,8 @@ def clientTick(client: ClientState, instData):
         if entChunkPos not in client.world.chunks or not client.world.chunks[entChunkPos].isTicking:
             continue
     
+        entity.clientTick()
+    
         #collide(client, entity)
 
     endTime = time.time()

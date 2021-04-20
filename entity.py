@@ -932,10 +932,10 @@ class Entity:
         elif name == 'vertical_speed':
             return self.velocity[1]
         elif name == 'life_time':
-            return self.lifeTime
+            return self.lifeTime / 20
         elif name == 'anim_time':
             # TODO:
-            return self.lifeTime
+            return self.lifeTime / 20
         elif name == 'swell_amount':
             return 0.0
         elif name == 'is_on_ground':
@@ -969,6 +969,11 @@ class Entity:
                 assert(lhs.startswith('variable.'))
                 lhs = lhs.removeprefix('variable.').lower()
                 self.variables[lhs] = molang.evalString(rhs, self)
+    
+    def clientTick(self):
+        self.distanceMoved += math.sqrt(self.velocity[0]**2 + self.velocity[2]**2)
+        
+        self.lifeTime += 1
         
     def tick(self, app, world, entities: List['Entity'], playerX, playerZ):
         #self.headYaw = math.atan2(playerX - self.pos[0], playerZ - self.pos[2])
@@ -988,11 +993,11 @@ class Entity:
                 change = diff
 
             self.bodyAngle += change
-        
-        #self.distanceMoved += math.sqrt(self.velocity[0]**2 + self.velocity[2]**2)
     
         if self.immunity > 0:
             self.immunity -= 1
+
+        self.distanceMoved += math.sqrt(self.velocity[0]**2 + self.velocity[2]**2)
         
         self.lifeTime += 1
         
