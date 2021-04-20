@@ -469,6 +469,11 @@ def drawEntities(client: ClientState, view, projection):
     texHeightLoc = CLIENT_DATA.entityProgram.getUniformLocation("texHeight")
 
     for entity in client.entities:
+        dt = time.time() - entity.lastRender
+        entity.lastRender = time.time()
+        entity.lifeTime += dt
+        #entity.distanceMoved += entity.modifMoveSpeed * dt / 0.05 / 5.0
+
         pos = world.nearestBlockPos(entity.pos[0], entity.pos[1], entity.pos[2])
 
         if not check1(pos): continue
@@ -496,11 +501,28 @@ def drawEntities(client: ClientState, view, projection):
 
         sca = 0.25 if entity.kind.name == 'item' else 1.0
 
+        '''
         pos = [
             entity.pos[0] + entity.velocity[0] * alpha,
-            entity.pos[1] + entity.velocity[1] * alpha,
+            entity.pos[1], #+ entity.velocity[1] * alpha,
             entity.pos[2] + entity.velocity[2] * alpha,
         ]
+        '''
+
+        pos = [
+            entity.pos[0] + entity.velocity[0] * alpha,
+            entity.pos[1], #+ entity.velocity[1] * alpha,
+            entity.pos[2] + entity.velocity[2] * alpha,
+        ]
+
+        '''
+        pos = [
+            entity.lastPos[0] + (entity.pos[0] - entity.lastPos[0] + entity.velocity[0]) * alpha,
+            entity.pos[1], #+ entity.velocity[1] * alpha,
+            entity.lastPos[2] + (entity.pos[2] - entity.lastPos[2] + entity.velocity[2]) * alpha,
+        ]
+        '''
+
 
         modelMat = np.array([
             sca, 0.0, 0.0, 0.0,

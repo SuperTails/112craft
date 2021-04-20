@@ -150,7 +150,7 @@ class WorldLoadMode(Mode):
                 server.localPlayer = player.entityId
 
                 # FIXME: IDs
-                server.entities = [entity.Entity(app, 1, 'skeleton', 0.0, 71.0, 1.0), entity.Entity(app, 2, 'fox', 5.0, 72.0, 3.0)]
+                server.entities = [entity.Entity(app, 2, 'fox', 5.0, 72.0, 3.0)]
 
             cx = math.floor(player.pos[0] / 16)
             cy = math.floor(player.pos[1] / world.CHUNK_HEIGHT)
@@ -163,7 +163,7 @@ class WorldLoadMode(Mode):
             if hasattr(app, 'server'):
                 delattr(app, 'server')
 
-            app.client.world = World('', 0)
+            app.client.world = World('temp', 0)
             app.client.world.local = False
 
             self.centerPos = [0.0, 0.0, 0.0]
@@ -1360,10 +1360,10 @@ def appStarted(app):
 
     app.client = client
 
-    #def makeTitleMode(app, _player): return TitleMode(app)
-    #app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
-    def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
+    def makeTitleMode(app, _player): return TitleMode(app)
+    app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
+    #def makePlayingMode(app, player): return PlayingMode(app, player)
+    #app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     # ---------------

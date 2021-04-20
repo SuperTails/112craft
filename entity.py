@@ -633,8 +633,9 @@ class Entity:
     headYaw: float
     headPitch: float
 
-    lifeTime: int
+    lifeTime: float
     distanceMoved: float
+    modifMoveSpeed: float
 
     path: List[BlockPos]
 
@@ -667,8 +668,11 @@ class Entity:
 
             self.variables = {}
 
+            self.lastClientTick = time.time()
+            self.lastRender = time.time()
             self.lifeTime = 0
             self.distanceMoved = 0.0
+            self.modifMoveSpeed = 0.0
 
             self.scriptsInit = False
 
@@ -926,16 +930,16 @@ class Entity:
         elif name == 'target_y_rotation':
             return math.degrees(self.headYaw - self.bodyAngle)
         elif name == 'modified_move_speed':
-            return math.sqrt(self.velocity[0]**2 + self.velocity[2]**2)
+            return self.modifMoveSpeed
         elif name == 'modified_distance_moved':
             return self.distanceMoved
         elif name == 'vertical_speed':
             return self.velocity[1]
         elif name == 'life_time':
-            return self.lifeTime / 20
+            return self.lifeTime
         elif name == 'anim_time':
             # TODO:
-            return self.lifeTime / 20
+            return self.lifeTime
         elif name == 'swell_amount':
             return 0.0
         elif name == 'is_on_ground':
@@ -971,9 +975,21 @@ class Entity:
                 self.variables[lhs] = molang.evalString(rhs, self)
     
     def clientTick(self):
-        self.distanceMoved += math.sqrt(self.velocity[0]**2 + self.velocity[2]**2)
-        
-        self.lifeTime += 1
+        dx = self.pos[0] - self.lastPos[0]
+        dz = self.pos[2] - self.lastPos[2]
+
+        dt = time.time() - self.lastClientTick
+        self.lastClientTick = time.time()
+
+        #newMoveSpeed = math.sqrt(dx**2 + dz**2) / (0.05 / dt)
+
+        #self.modifMoveSpeed = self.modifMoveSpeed * 0.5 + newMoveSpeed * 0.5
+
+        self.modifMoveSpeed = math.sqrt(dx**2 + dz**2)
+        self.distanceMoved += self.modifMoveSpeed
+        self.modifMoveSpeed /= 0.05 / dt
+
+        self.lastPos = copy.copy(self.pos)
         
     def tick(self, app, world, entities: List['Entity'], playerX, playerZ):
         #self.headYaw = math.atan2(playerX - self.pos[0], playerZ - self.pos[2])

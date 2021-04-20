@@ -348,7 +348,7 @@ def evalExpr(p, entity):
         if p not in entity.variables:
             print(f"UNKNOWN VARIABLE {p}")
             if p == 'gliding_speed_value':
-                entity.variables[p] = 0.10
+                entity.variables[p] = 1.0
             else:
                 entity.variables[p] = 0.0
         

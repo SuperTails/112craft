@@ -95,8 +95,11 @@ def sendPlayerMovement(app, onGround: bool):
 
 def sendPlayerPlacement(app, hand: int, location: BlockPos, face: int, cx: float, cy: float, cz: float, insideBlock: bool):
     if hasattr(app, 'server'):
-        # TODO:
-        pass
+        player: Player = app.server.getLocalPlayer()
+        if not player.creative:
+            stack = player.inventory[player.hotbarIdx].stack
+            if not stack.isInfinite():
+                stack.amount -= 1
     else:
         network.c2sQueue.put(network.PlayerPlacementC2S(hand, location, face, cx, cy, cz, insideBlock))
 
@@ -250,6 +253,8 @@ def updateBlockBreaking(app, server: ServerState):
     # TODO: Sound effect packets
 
     if server.breakingBlock >= hardness:
+        if blockId == 'oak_log':
+            blockState['axis'] = 'y'
         mcBlockId = util.REGISTRY.encode_block({ 'name': 'minecraft:' + blockId } | blockState)
 
         network.s2cQueue.put(network.AckPlayerDiggingS2C(
