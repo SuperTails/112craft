@@ -30,6 +30,10 @@ when the player right clicks on, for example, a furnace or a crafting table.
 This mode keeps a reference to what kind of GUI is opened.
 """
 
+import config
+import OpenGL
+OpenGL.ERROR_CHECKING = config.OPENGL_ERROR_CHECKING
+
 import openglapp
 from PIL import Image
 from PIL import ImageDraw
@@ -42,7 +46,6 @@ import render
 import world
 import copy
 import glfw
-import config
 import random
 import time
 import cmu_112_graphics
