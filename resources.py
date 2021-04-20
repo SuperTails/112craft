@@ -70,6 +70,14 @@ class Recipe:
 
         return True
 
+def loadEntityRenderData(app):
+    CLIENT_DATA.entityRenderData = {}
+
+    for path, _, files in os.walk('assets/Vanilla_Resource_Pack_1.16.220/entity'):
+        for file in files:
+            data = entity.openRenderData(path + '/' + file)
+            CLIENT_DATA.entityRenderData[data.identifier] = data
+
 def loadEntityModels(app):
     CLIENT_DATA.entityModels = dict()
 
@@ -78,16 +86,47 @@ def loadEntityModels(app):
             CLIENT_DATA.entityModels.update(entity.openModels(path + '/' + file, app))
     
     CLIENT_DATA.entityModels.update(entity.openModels('assets/block.geo.json', app))
+
+    toMerge = []
+
+    for name in CLIENT_DATA.entityModels:
+        if ':' in name:
+            toMerge.append(name)
+    
+    while len(toMerge) > 0:
+        nameIdx = 0
+        while nameIdx < len(toMerge):
+            name = toMerge[nameIdx]
+            name1, name2 = name.split(':')
+
+            canMerge = True
+            for i in range(len(toMerge)):
+                if i != nameIdx and name2 == toMerge[i].split(':')[0]:
+                    canMerge = False
+                    break
+                    
+            if canMerge:
+                override = CLIENT_DATA.entityModels.pop(name)
+                CLIENT_DATA.entityModels[name1] = entity.merge(app, override, CLIENT_DATA.entityModels[name2])
+                toMerge.pop(nameIdx)
+            else:
+                nameIdx += 1
+
+
     
 def loadEntityAnimations(app):
     CLIENT_DATA.entityAnimations = dict()
 
     for path, _, files in os.walk('assets/Vanilla_Resource_Pack_1.16.220/animations'):
         for file in files:
-            if 'bee' in file:
-                # Who in their right mind puts COMMENTS in a JSON file????
-                continue
             CLIENT_DATA.entityAnimations.update(entity.openAnimations(path + '/' + file))
+
+def loadEntityAnimControllers(app):
+    CLIENT_DATA.entityAnimControllers = {}
+
+    for path, _, files in os.walk('assets/Vanilla_Resource_Pack_1.16.220/animation_controllers'):
+        for file in files:
+            CLIENT_DATA.entityAnimControllers.update(entity.openAnimControllers(path + '/' + file))
 
 def loadEntityTextures(app):
     CLIENT_DATA.entityTextures = {}
@@ -95,10 +134,7 @@ def loadEntityTextures(app):
     CLIENT_DATA.entityTextures['fox'] = loadTexture('assets/fox.png')
     CLIENT_DATA.entityTextures['zombie'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/zombie/zombie.png')
     CLIENT_DATA.entityTextures['skeleton'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/skeleton/skeleton.png')
-
-    # TODO:
-    #CLIENT_DATA.entityTextures['player'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/steve.png')
-    CLIENT_DATA.entityTextures['player'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/zombie/zombie.png')
+    CLIENT_DATA.entityTextures['player'] = loadTexture('assets/Vanilla_Resource_Pack_1.16.220/textures/entity/steve.png')
 
 def imageToTexture(image: Image.Image, flip=True) -> int:
     if flip:
@@ -925,6 +961,8 @@ def loadResources(app):
         app.textureIndices = None
     
     loadEntityModels(app)
+    loadEntityRenderData(app)
+    loadEntityAnimControllers(app)
     
     entity.registerEntityKinds(app)
 

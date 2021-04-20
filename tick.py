@@ -583,6 +583,9 @@ def collideXZ(client: ClientState, entity: Entity):
     minY = roundHalfUp((entity.pos[1]))
     maxY = roundHalfUp((entity.pos[1] + entity.height))
 
+    lastX = entity.pos[0]
+    lastZ = entity.pos[2]
+
     entity.pos[0] += entity.velocity[0]
 
     for y in range(minY, maxY + 1):
@@ -620,6 +623,8 @@ def collideXZ(client: ClientState, entity: Entity):
                 zEdge = (loZBlockCoord + 0.5)
                 entity.pos[2] = zEdge + entity.radius
                 hitWall = True
+    
+    entity.distanceMoved = math.sqrt((entity.pos[0] - lastX)**2 + (entity.pos[2] - lastZ)**2)
     
     return hitWall
 

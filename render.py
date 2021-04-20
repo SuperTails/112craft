@@ -466,6 +466,7 @@ def drawEntities(client: ClientState, view, projection):
     rotYLoc = CLIENT_DATA.entityProgram.getUniformLocation("rotY")
     rotZLoc = CLIENT_DATA.entityProgram.getUniformLocation("rotZ")
     immunityLoc = CLIENT_DATA.entityProgram.getUniformLocation("immunity")
+    texHeightLoc = CLIENT_DATA.entityProgram.getUniformLocation("texHeight")
 
     for entity in client.entities:
         pos = world.nearestBlockPos(entity.pos[0], entity.pos[1], entity.pos[2])
@@ -476,7 +477,10 @@ def drawEntities(client: ClientState, view, projection):
         if not check4(pos): continue
         if not check5(pos): continue
 
-        model = CLIENT_DATA.entityModels[entity.kind.model]
+        if entity.kind.name == 'item':
+            model = CLIENT_DATA.entityModels['geometry.item']
+        else:
+            model = CLIENT_DATA.entityModels[CLIENT_DATA.entityRenderData[entity.kind.name].geometry['default']]
 
         if entity.kind.name == 'item':
             item = entity.extra.stack.item
@@ -508,7 +512,14 @@ def drawEntities(client: ClientState, view, projection):
         glUniformMatrix4fv(modelPos, 1, GL_FALSE, modelMat) #type:ignore
         glUniform1f(rotPos, entity.bodyAngle)
 
-        rotations = entity.getRotations(CLIENT_DATA.entityModels, CLIENT_DATA.entityAnimations)
+        if entity.kind.name == 'player':
+            texHeight = 64
+        else:
+            texHeight = 32
+        
+        glUniform1i(texHeightLoc, texHeight)
+
+        rotations = entity.getRotations(CLIENT_DATA)
 
         for i, (rot, (vao, num)) in enumerate(zip(rotations, model.vaos)):
             if vao == 0: 

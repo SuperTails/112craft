@@ -14,6 +14,7 @@ they do not have any other goals, they will occasionally move around.
 
 from typing import List, Tuple, Optional, Any
 import json
+from json import JSONDecoder
 import numpy as np
 import heapq
 import math
@@ -147,7 +148,8 @@ class Cube:
             vFrac = result[row, 4]
 
             result[row, 3] = self.uv[0] + uOffset + (1.0 - uFrac) * uSize
-            result[row, 4] = (32.0 - (self.uv[1] + self.size[1] + self.size[2])) + vOffset + vFrac * vSize
+            #result[row, 4] = (32.0 - (self.uv[1] + self.size[1] + self.size[2])) + vOffset + vFrac * vSize
+            result[row, 4] = (self.uv[1] + self.size[1] + self.size[2]) - (vOffset + vFrac * vSize)
         
         return result
 
@@ -210,31 +212,49 @@ class Bone:
 
 @dataclass
 class BoneAnimation:
-    rotation: List[Any]
+    rotation: Tuple[molang.Expr, molang.Expr, molang.Expr]
+
+    @classmethod
+    def fromJson(cls, j):
+        if 'rotation' in j:
+            rotation = j['rotation']
+        else:
+            rotation = [0.0, 0.0, 0.0]
+        
+        if isinstance(rotation, dict):
+            # TODO: Keyframes
+            rotation = [0.0, 0.0, 0.0]
+            '''
+            for i, v in rotation.items():
+                if isinstance(v, list):
+                    rotation = v
+                break
+            '''
+        
+        if isinstance(rotation[0], dict):
+            # TODO: I don't even know what these are
+            rotation = [0.0, 0.0, 0.0]
+        
+        x = molang.parseStr(str(rotation[0]))
+        y = molang.parseStr(str(rotation[1]))
+        z = molang.parseStr(str(rotation[2]))
+
+        return cls((x, y, z))
 
 @dataclass
 class Animation:
     loop: bool
     bones: dict[str, BoneAnimation]
 
-def parseBoneAnim(j) -> BoneAnimation:
-    if 'rotation' in j:
-        rotation = j['rotation']
-    else:
-        rotation = [0.0, 0.0, 0.0]
-
-    return BoneAnimation(rotation)
-
 def parseAnimation(j) -> Animation:
     loop = j['loop']
     bones = dict()
     for (name, bone) in j['bones'].items():
-        bones[name] = parseBoneAnim(bone)
+        bones[name] = BoneAnimation.fromJson(bone)
     return Animation(loop, bones)
 
 def openAnimations(path) -> dict[str, Animation]:
-    with open(path) as f:
-        j = json.load(f)
+    j = openCommentedJson(path)
     
     result = {}
     
@@ -243,6 +263,146 @@ def openAnimations(path) -> dict[str, Animation]:
             result[name] = parseAnimation(anim)
     
     return result
+
+@dataclass
+class AnimControlState:
+    animations: List[Tuple[str, str]]
+    '''A list of animation names and their scale factors'''
+
+    transitions: List[Tuple[str, str]]
+    '''A list of animation names and the conditions to change to them'''
+
+    @classmethod
+    def fromJson(cls, j):
+        animations = []
+
+        try:
+            for anim in j['animations']:
+                if isinstance(anim, str):
+                    animations.append((anim, 1))   
+                else:
+                    for anim, mod in anim.items():
+                        animations.append((anim, mod))
+        except KeyError:
+            pass
+        
+        transitions = []
+        
+        try:
+            for pair in j['transitions']:
+                for (name, cond) in pair.items():
+                    transitions.append((name, cond))
+        except KeyError:
+            pass
+        
+        return cls(animations, transitions)
+
+
+@dataclass
+class AnimController:
+    initialState: str
+    states: dict[str, AnimControlState]
+
+    @classmethod
+    def fromJson(cls, j):
+        initialState = j['initial_state']
+
+        states = {}
+        for name, state in j['states'].items():
+            states[name] = AnimControlState.fromJson(state)
+        
+        return cls(initialState, states)
+    
+def openAnimControllers(path) -> dict[str, AnimController]:
+    j = openCommentedJson(path)
+
+    result = {}
+
+    for name, val in j['animation_controllers'].items():
+        result[name] = AnimController.fromJson(val)
+    
+    return result
+    
+
+def openCommentedJson(path):
+    with open(path) as f:
+        s = f.read()
+        try:
+            while True:
+                start = s.index('//')
+                end = s.index('\n', start)
+
+                s = s[:start] + s[end:]
+        except ValueError:
+            return json.loads(s)
+
+
+@dataclass
+class EntityRenderData:
+    identifier: str
+
+    #materials: dict[str, str]
+    #'''Maps from state name -> material name'''
+
+    textures: dict[str, str]
+    '''Maps from state name -> texture path'''
+
+    geometry: dict[str, str]
+    '''Maps from state name -> geometry ID'''
+
+    # spawn_egg
+
+    scripts: dict[str, List[str]]
+    '''Maps from script time -> list of scripts'''
+
+    animations: dict[str, str]
+    '''Maps from local animation name -> global animation name'''
+
+    animationControllers: dict[str, str]
+    '''Maps from local animation name -> animation controller name'''
+
+    renderControllers: List[str]
+    '''List of render controller names'''
+
+    enableAttachables: bool
+
+def openRenderData(path) -> EntityRenderData:
+    j = openCommentedJson(path)
+    
+    desc = j['minecraft:client_entity']['description']
+
+    print(path)
+
+    identifier = desc['identifier'].removeprefix('minecraft:')
+    #materials = desc['materials']
+    textures = desc['textures']
+    geometry = desc['geometry']
+    try:
+        scripts = desc['scripts']
+    except KeyError:
+        scripts = {}
+    try:
+        animations = desc['animations']
+    except KeyError:
+        animations = {}
+    try:
+        animationControllers = {}
+        for pair in desc['animation_controllers']:
+            for name, val in pair.items():
+                animationControllers[name] = val
+    except KeyError:
+        animationControllers = {}
+    try:
+        renderControllers = desc['render_controllers']
+    except:
+        renderControllers = []
+    try:
+        enableAttachables = desc['enable_attachables']
+    except KeyError:
+        enableAttachables = False
+
+    return EntityRenderData(identifier, textures, geometry, scripts,
+        animations, animationControllers, renderControllers, enableAttachables)
 
 
 @dataclass
@@ -305,6 +465,15 @@ def parseModel(j, app) -> EntityModel:
         bones = list(map(parseBone, j['bones']))
     else:
         bones = []
+    return EntityModel(bones, app)
+
+def merge(app, model: EntityModel, base: EntityModel) -> EntityModel:
+    bones = model.bones
+
+    for bone in base.bones:
+        if bone.name not in [b.name for b in bones]:
+            bones.append(bone)
+    
     return EntityModel(bones, app)
 
 def openModels(path, app) -> dict[str, EntityModel]:
@@ -480,6 +649,7 @@ class Entity:
     def __init__(self, app, entityId: int, kind: str = '', x: float = 0.0, y: float = 0.0, z: float = 0.0, nbt: Optional[nbt.TAG_Compound] = None):
         if nbt is None:
             self.pos = [x, y, z]
+            self.lastPos = [x, y, z]
             self.velocity = [0.0, 0.0, 0.0]
             self.onGround = False
 
@@ -497,13 +667,10 @@ class Entity:
 
             self.variables = {}
 
-            if self.kind.name == 'zombie':
-                self.variables['gliding_speed_value'] = 1.0
-            elif self.kind.name == 'creeper':
-                self.variables['leg_rot'] = 0.0
-            
             self.lifeTime = 0
             self.distanceMoved = 0.0
+
+            self.scriptsInit = False
 
             self.radius = self.kind.radius
             self.height = self.kind.height
@@ -513,7 +680,7 @@ class Entity:
             self.extra = copy.deepcopy(self.kind.extraData)
         else:
             self.fromNbt(app, entityId, nbt)
-    
+        
     def fromNbt(self, entityId: int, app, data: nbt.TAG_Compound):
         kind = data["id"].value.removeprefix("minecraft:")
 
@@ -584,51 +751,56 @@ class Entity:
         bz = roundHalfUp(self.pos[2])
         return BlockPos(bx, by, bz)
     
-    def getRotations(self, entityModels, entityAnimations):
-        if self.kind.name == 'zombie':
+    def getRotations(self, data) -> List[List[float]]:
+        if self.kind.name == 'item':
+            return [[0.0, self.lifeTime / 10.0, 0.0]]
+        
+        renderData: EntityRenderData = data.entityRenderData[self.kind.name]
+
+        if not self.scriptsInit and 'initialize' in renderData.scripts:
+            for script in renderData.scripts['initialize']:
+                self.runScript(script)
+            self.scriptsInit = True
+
+        if self.kind.name == 'zombie' or self.kind.name == 'player':
             self.variables['tcos0'] = molang.evalString("(Math.cos(query.modified_distance_moved * 38.17) * query.modified_move_speed / variable.gliding_speed_value) * 57.3", self)
         elif self.kind.name == 'creeper':
             self.variables['leg_rot'] = molang.evalString("Math.cos(query.modified_distance_moved * 38.17326) * 80.22 * query.modified_move_speed", self)
+        
+        entityAnimations: dict[str, Animation] = data.entityAnimations
+
+        anims = [entityAnimations['animation.common.look_at_target']]
 
         if self.kind.name == 'creeper':
-            anim = entityAnimations['animation.creeper.legs']
+            anims.append(entityAnimations['animation.creeper.legs'])
         elif self.kind.name == 'fox':
-            anim = entityAnimations['animation.quadruped.walk']
+            anims.append(entityAnimations['animation.quadruped.walk'])
         elif self.kind.name == 'zombie':
-            anim = entityAnimations['animation.humanoid.move']
+            anims.append(entityAnimations['animation.humanoid.move'])
         elif self.kind.name == 'player':
-            anim = entityAnimations['animation.humanoid.move']
+            anims.append(entityAnimations['animation.humanoid.move'])
+            anims.append(entityAnimations['animation.humanoid.bob'])
         elif self.kind.name == 'skeleton':
-            anim = entityAnimations['animation.humanoid.bow_and_arrow']
-        elif self.kind.name == 'item':
-            anim = None
+            anims.append(entityAnimations['animation.humanoid.bow_and_arrow'])
         else:
             raise Exception(self.kind)
         
-        model = entityModels[self.kind.model]
+        model: EntityModel = data.entityModels[renderData.geometry['default']]
 
         result = []
         
         for bone in model.bones:
             boneName = bone.name
-            boneRot = bone.bind_pose_rotation
-            
-            #if anim is not None:
-            #    print(boneName)
 
-            if self.kind.name == 'item':
-                rot = [0.0, self.lifeTime * 3.0, 0.0]
-            elif boneName == 'head':
-                rot = [math.degrees(self.headPitch), math.degrees(self.headYaw - self.bodyAngle), 0.0]
-            elif anim is not None and boneName in anim.bones:
-                (x, y, z) = anim.bones[boneName].rotation
-                rot = [self.calc(x), self.calc(y), self.calc(z)]
-            else:
-                rot = [0.0, 0.0, 0.0]
+            rot = list(copy.copy(bone.bind_pose_rotation))
 
-            rot[0] += boneRot[0]
-            rot[1] += boneRot[1]
-            rot[2] += boneRot[2]
+            for anim in anims:
+                if boneName in anim.bones:
+                    rotExpr = anim.bones[boneName].rotation
+
+                    rot[0] += rotExpr[0].evalWith(self)
+                    rot[1] += rotExpr[1].evalWith(self)
+                    rot[2] += rotExpr[2].evalWith(self)
 
             rot[0] = math.radians(rot[0])
             rot[1] = math.radians(rot[1])
@@ -638,25 +810,72 @@ class Entity:
 
         return result
     
-    def getRotation(self, entityModels, entityAnimations, i):
-        bone = entityModels[self.kind.model].bones[i]
-        boneName = bone.name
-        boneRot = bone.bind_pose_rotation
+    '''
+    def getAnims(self, animName, data) -> List[str]:
+        renderData: EntityRenderData = data.entityRenderData[self.kind.name]
 
-        if self.kind.name == 'creeper':
-            anim = entityAnimations['animation.creeper.legs']
-        elif self.kind.name == 'fox':
-            anim = entityAnimations['animation.quadruped.walk']
-        elif self.kind.name == 'zombie':
-            anim = entityAnimations['animation.humanoid.move']
-        elif self.kind.name == 'player':
-            anim = entityAnimations['animation.humanoid.move']
-        elif self.kind.name == 'skeleton':
-            anim = entityAnimations['animation.humanoid.bow_and_arrow']
-        elif self.kind.name == 'item':
-            anim = None
+        if animName in renderData.animations:
+            realName = renderData.animations[animName]
+        else:
+            realName = renderData.animationControllers[animName]
+
+        if realName.startswith('controller'):
+            anim = data.entityAnimControllers[realName]
+
+            state: AnimControlState = anim.states[anim.initialState]
+
+            result = []
+
+            for a, _ in state.animations:
+                if 'first_person' in a: continue
+                result += self.getAnims(a, data)
+
+            return result
+        else:
+            # FIXME:
+            if 'first_person' in animName:
+                return []
+            else:
+                return [animName]
+    '''
+    
+    def _getRotation(self, data, i):
+        if self.kind.name == 'item':
+            return [0.0, self.lifeTime / 10.0, 0.0]
+
+        renderData: EntityRenderData = data.entityRenderData[self.kind.name]
+        model: EntityModel = data.entityModels[renderData.geometry['default']]
+
+        '''
+        if 'pre_animation' in renderData.scripts:
+            for script in renderData.scripts['pre_animation']:
+                self.runScript(script)
+        '''
+
+        bone = model.bones[i]
+        boneName = bone.name
+
+        (rotX, rotY, rotZ) = bone.bind_pose_rotation
+
+        #anims = [data.entityAnimations[animId] for animId in renderData.animations.values() if 'controller' not in animId]
+    
+        '''
+        if 'animate' in renderData.scripts:
+            for script in renderData.scripts['animate']:
+                if isinstance(script, str):
+                    for animId in self.getAnims(script, data):
+                        animId = renderData.animations[animId]
+
+                        anim = data.entityAnimations[animId]
+
+                        if boneName in anim.bones:
+                            (x, y, z) = anim.bones[boneName].rotation
+                            rotX += molang.evalExpr(x, self)
+                            rotY += molang.evalExpr(y, self)
+                            rotZ += molang.evalExpr(z, self)
         else:
             raise Exception(self.kind)
+        '''
         
         '''
         if self.kind.name == 'zombie':
@@ -665,9 +884,25 @@ class Entity:
             self.variables['leg_rot'] = molang.evalString("Math.cos(query.modified_distance_moved * 38.17326) * 80.22 * query.modified_move_speed", self)
         '''
         
+        '''
         #if anim is not None:
         #    print(boneName)
+            for ctrlName in renderData.animationControllers:
+                for animId in self.getAnims(ctrlName, data):
+                    animId = renderData.animations[animId]
 
+                    anim = data.entityAnimations[animId]
+
+                    if boneName in anim.bones:
+                        # FIXME:
+                        if not isinstance(anim.bones[boneName].rotation, dict):
+                            (x, y, z) = anim.bones[boneName].rotation
+                            rotX += molang.evalExpr(x, self)
+                            rotY += molang.evalExpr(y, self)
+                            rotZ += molang.evalExpr(z, self)
+        '''
+
+        '''
         if self.kind.name == 'item':
             rot = [0.0, self.lifeTime * 3.0, 0.0]
         elif boneName == 'head':
@@ -677,49 +912,64 @@ class Entity:
             rot = [self.calc(x), self.calc(y), self.calc(z)]
         else:
             rot = [0.0, 0.0, 0.0]
+        '''
 
-        rot[0] += boneRot[0]
-        rot[1] += boneRot[1]
-        rot[2] += boneRot[2]
+        rotX = math.radians(rotX)
+        rotY = math.radians(rotY)
+        rotZ = math.radians(rotZ)
 
-        rot[0] = math.radians(rot[0])
-        rot[1] = math.radians(rot[1])
-        rot[2] = math.radians(rot[2])
-
-        return rot
+        return (rotX, rotY, rotZ)
     
     def getQuery(self, name):
         if name == 'target_x_rotation':
-            # TODO:
-            return 0.0
+            return math.degrees(self.headPitch)
         elif name == 'target_y_rotation':
-            # TODO:
-            return 0.0
+            return math.degrees(self.headYaw - self.bodyAngle)
         elif name == 'modified_move_speed':
             return math.sqrt(self.velocity[0]**2 + self.velocity[2]**2)
         elif name == 'modified_distance_moved':
             return self.distanceMoved
+        elif name == 'vertical_speed':
+            return self.velocity[1]
         elif name == 'life_time':
             return self.lifeTime
         elif name == 'anim_time':
             # TODO:
             return self.lifeTime
+        elif name == 'swell_amount':
+            return 0.0
+        elif name == 'is_on_ground':
+            return 1.0 if self.onGround else 0.0
+        elif name == 'is_alive':
+            return 1.0 if self.health > 0.0 else 0.0
+        elif name == 'position_delta0':
+            # TODO:
+            return 0.0
+        elif name == 'position_delta1':
+            # TODO:
+            return 0.0
+        elif name == 'position_delta2':
+            # TODO:
+            return 0.0
+        elif name == 'main_hand_item_use_duration':
+            # TODO:
+            return 5.0
+        elif name == 'main_hand_item_max_duration':
+            # TODO:
+            return 10.0
         else:
             raise Exception(name)
-    
-    def calc(self, ex):
-        mag = math.sqrt(self.velocity[0]**2 + self.velocity[1]**2)
-        if isinstance(ex, float):
-            result = ex
-        else:
-            result = molang.evalString(ex, self)
-        #elif '-variable.leg_rot' in ex:
-        #    result = -30.0 * math.sin(time.time() * 3.0) * mag * 15.0
-        #elif 'variable.leg_rot' in ex:
-        #    result = 30.0 * math.sin(time.time() * 3.0) * mag * 15.0
         
-        return result
+    def runScript(self, s: str):
+        for line in s.split(';'):
+            if line != '' and not line.isspace():
+                lhs, rhs = line.split('=')
+                lhs = lhs.strip()
 
+                assert(lhs.startswith('variable.'))
+                lhs = lhs.removeprefix('variable.').lower()
+                self.variables[lhs] = molang.evalString(rhs, self)
+        
     def tick(self, app, world, entities: List['Entity'], playerX, playerZ):
         #self.headYaw = math.atan2(playerX - self.pos[0], playerZ - self.pos[2])
 
@@ -739,8 +989,8 @@ class Entity:
 
             self.bodyAngle += change
         
-        self.distanceMoved += math.sqrt(self.velocity[0]**2 + self.velocity[2]**2)
-        
+        #self.distanceMoved += math.sqrt(self.velocity[0]**2 + self.velocity[2]**2)
+    
         if self.immunity > 0:
             self.immunity -= 1
         

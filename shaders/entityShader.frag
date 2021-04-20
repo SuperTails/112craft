@@ -13,7 +13,7 @@ uniform float immunity;
 void main() {
     //FragColor = vec4(TexCoord.x, TexCoord.y, 0.5, 0.5);
 
-    vec2 newCoord = vec2(TexCoord.x / 64.0, TexCoord.y / 32.0);
+    vec2 newCoord = TexCoord;
 
     FragColor = texture(skin, newCoord);
 

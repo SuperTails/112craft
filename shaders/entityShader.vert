@@ -10,6 +10,8 @@ out vec3 bPos;
 
 uniform float rot;
 
+uniform int texHeight;
+
 uniform float rotX;
 uniform float rotY;
 uniform float rotZ;
@@ -53,5 +55,6 @@ void main() {
     vec3 pivoted = (rotMatZ * rotMatY * rotMatX * (aPos / 16.0 - pivot2)) + pivot2;
 
     gl_Position = projection * view * model * rotMat * vec4(pivoted, 1.0) ;
-    TexCoord = texCoord;
+
+    TexCoord = vec2(texCoord.x / 64.0, 1.0 - (texCoord.y / texHeight));
 }

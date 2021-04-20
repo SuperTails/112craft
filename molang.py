@@ -230,37 +230,63 @@ def printTree(p, indent=0):
             printTree(elem, indent+2)
     else:
         print(f"{' '*indent}{p}")
+    
+@dataclass
+class ComplexExpr:
+    exprs: List[Any]
 
-def parseStr(s: str) -> List[Any]:
-    if ';' in s:
-        result = []
-        for line in s.split(';')[:-1]:
-            result.append(parse(TokenIter(lex(line), 0)))
-        return result
-    else:
-        return [parse(TokenIter(lex(s), 0))]
+    @classmethod
+    def parse(cls, s: str):
+        exprs = []
+        for stmt in s.split(';')[:-1]:
+            exprs.append(parse(TokenIter(lex(stmt), 0)))
+        return cls(exprs)
 
-def evalString(s, entity):
-    try:
+    def evalWith(self, entity) -> float:
+        for expr in self.exprs[:-1]:
+            evalExpr(expr, entity)
+        e = evalExpr(self.exprs[-1], entity)
+        assert(isinstance(e, float))
+        return e
+
+@dataclass
+class SimpleExpr:
+    expr: Any
+
+    @classmethod
+    def parse(cls, s: str):
         assert(';' not in s)
-        parsed = parseStr(s)
-        result = evalOneExpr(parsed[0], entity)
-        assert(result is not None)
-        return result
+
+        try:
+            return cls(parse(TokenIter(lex(s), 0)))
+        except Exception as e:
+            print(s)
+            raise e
+
+    def evalWith(self, entity) -> float:
+        e = evalExpr(self.expr, entity)
+        assert(isinstance(e, float))
+        return e
+
+Expr = Union[ComplexExpr, SimpleExpr]
+
+def parseStr(s: str) -> Expr:
+    if ';' in s:
+        return ComplexExpr.parse(s)
+    else:
+        return SimpleExpr.parse(s)
+
+def evalString(s: str, entity):
+    try:
+        return parseStr(s).evalWith(entity)
     except Exception as e:
         print(s)
         print(lex(s))
         raise Exception((e, s))
     
 def evalExpr(p, entity):
-    for expr in p[:-1]:
-        evalOneExpr(expr, entity)
-    
-    return evalOneExpr(p[-1], entity)
-
-def evalOneExpr(p, entity):
     def evalApplied(p):
-        return evalOneExpr(p, entity)
+        return evalExpr(p, entity)
 
     if isinstance(p, tuple):
         (op, args) = p
@@ -322,7 +348,7 @@ def evalOneExpr(p, entity):
         if p not in entity.variables:
             print(f"UNKNOWN VARIABLE {p}")
             if p == 'gliding_speed_value':
-                entity.variables[p] = 1.0
+                entity.variables[p] = 0.10
             else:
                 entity.variables[p] = 0.0
         

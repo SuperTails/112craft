@@ -160,7 +160,8 @@ class WorldLoadMode(Mode):
 
             app.server = server
         else:
-            delattr(app, 'server')
+            if hasattr(app, 'server'):
+                delattr(app, 'server')
 
             app.client.world = World('', 0)
             app.client.world.local = False
@@ -1359,10 +1360,10 @@ def appStarted(app):
 
     app.client = client
 
-    def makeTitleMode(app, _player): return TitleMode(app)
-    app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
-    #def makePlayingMode(app, player): return PlayingMode(app, player)
-    #app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
+    #def makeTitleMode(app, _player): return TitleMode(app)
+    #app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
+    def makePlayingMode(app, player): return PlayingMode(app, player)
+    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     # ---------------

@@ -2,7 +2,7 @@ from typing import List, Any, Optional, Tuple
 import typing
 from shader import ShaderProgram
 from world import World, nearestBlockCoord
-from entity import Entity
+from entity import Entity, EntityModel, Animation, EntityRenderData, AnimController
 from player import Player
 from util import BlockPos, rayAABBIntersect
 import math
@@ -23,9 +23,11 @@ class ClientData:
     sunTex: Any
     skyboxVao: Any
 
-    entityModels: dict[Any, Any]
-    entityTextures: Any
-    entityAnimations: Any
+    entityRenderData: dict[str, EntityRenderData]
+    entityModels: dict[str, EntityModel]
+    entityTextures: dict[str, int]
+    entityAnimations: dict[str, Animation]
+    entityAnimControllers: dict[str, AnimController]
 
     glTextures: dict[Any, Any]
 
