@@ -874,6 +874,7 @@ class Chunk:
 
             blockId = self.blocks[bx, by, bz]
 
+            # left, right, near, far, bottom, top
             for faceIdx in range(0, 12, 2):
                 if not inst.visibleFaces[faceIdx]: continue
 

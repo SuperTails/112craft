@@ -410,11 +410,13 @@ class ChunkDataS2C:
 
     @classmethod
     def fromBuf(cls, buf):
+        # https://quarry.readthedocs.io/en/latest/data_types/chunks.html
+
         x, z, full = buf.unpack('ii?')
         bitmask = buf.unpack_varint()
         heightmap = buf.unpack_nbt()
         biomes = [buf.unpack_varint() for _ in range(buf.unpack_varint())]
-        sections_length = buf.unpack_varint()
+        sectionsLength = buf.unpack_varint()
         sections = buf.unpack_chunk(bitmask)
         blockEntities = [buf.unpack_nbt() for _ in range(buf.unpack_varint())]
 
@@ -771,12 +773,7 @@ class MinecraftProtocol(ClientProtocol):
         buf.discard()
     
     def packet_chunk_data(self, buf):
-        # https://quarry.readthedocs.io/en/latest/data_types/chunks.html
-        try:
-            s2cQueue.put(ChunkDataS2C.fromBuf(buf))
-        except:
-            pass
-
+        s2cQueue.put(ChunkDataS2C.fromBuf(buf))
         buf.discard()
     
     def packet_unhandled(self, buf, name):
