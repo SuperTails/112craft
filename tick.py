@@ -75,8 +75,42 @@ def sendCloseWindow(app, windowId: int):
 
 def sendUseItem(app, hand: int):
     if hasattr(app, 'server'):
-        # TODO:
-        pass
+        server: ServerState = app.server
+        player: Player = server.getLocalPlayer()
+        
+        heldSlot = player.inventory[player.hotbarIdx]
+        if heldSlot.stack.isEmpty():
+            return
+
+        # FIXME:
+        cameraPos = (player.pos[0], player.pos[1] + player.height, player.pos[2])
+
+        if heldSlot.stack.item == 'bucket':
+            block = server.world.lookedAtBlock(player.reach, cameraPos,
+                player.headPitch, player.headYaw, useFluids=True)
+
+            if block is not None:
+                (pos, _) = block
+
+                blockId = server.world.getBlock(pos)
+                blockState = server.world.getBlockState(pos)
+
+                if blockId in ['water', 'flowing_water'] and blockState['level'] == '0':
+                    server.world.setBlock((app.textures, app.cube, app.textureIndices), pos, 'air', {})
+
+                    heldSlot.stack.item = 'water_bucket'
+        elif heldSlot.stack.item == 'water_bucket':
+            block = server.world.lookedAtBlock(player.reach, cameraPos,
+                player.headPitch, player.headYaw, useFluids=False)
+            
+            if block is not None:
+                (pos, face) = block
+                faceIdx = ['left', 'right', 'back', 'front', 'bottom', 'top'].index(face) * 2
+                pos2 = world.adjacentBlockPos(pos, faceIdx)
+
+                server.world.setBlock((app.textures, app.cube, app.textureIndices), pos2, 'flowing_water', { 'level': '0' })
+
+                heldSlot.stack.item = 'bucket'
     else:
         network.c2sQueue.put(network.UseItemC2S(hand))
 
@@ -573,7 +607,7 @@ def collideY(client: ClientState, entity: Entity):
             for z in [entity.pos[2] - entity.radius * 0.99, entity.pos[2] + entity.radius * 0.99]:
                 hiYCoord = roundHalfUp(entity.pos[1] + entity.height)
 
-                if client.world.coordsOccupied(BlockPos(round(x), hiYCoord, round(z))):
+                if client.world.coordsOccupied(BlockPos(round(x), hiYCoord, round(z)), world.isSolid):
                     yEdge = hiYCoord - 0.55
                     entity.pos[1] = yEdge - entity.height
                     if entity.velocity[1] > 0.0:
@@ -602,12 +636,12 @@ def collideXZ(client: ClientState, entity: Entity):
             hiXBlockCoord = round((x + entity.radius))
             loXBlockCoord = round((x - entity.radius))
 
-            if client.world.coordsOccupied(BlockPos(hiXBlockCoord, y, round(z))):
+            if client.world.coordsOccupied(BlockPos(hiXBlockCoord, y, round(z)), world.isSolid):
                 # Collision on the right, so move to the left
                 xEdge = (hiXBlockCoord - 0.5)
                 entity.pos[0] = xEdge - entity.radius
                 hitWall = True
-            elif client.world.coordsOccupied(BlockPos(loXBlockCoord, y, round(z))):
+            elif client.world.coordsOccupied(BlockPos(loXBlockCoord, y, round(z)), world.isSolid):
                 # Collision on the left, so move to the right
                 xEdge = (loXBlockCoord + 0.5)
                 entity.pos[0] = xEdge + entity.radius
@@ -622,11 +656,11 @@ def collideXZ(client: ClientState, entity: Entity):
             hiZBlockCoord = round((z + entity.radius))
             loZBlockCoord = round((z - entity.radius))
 
-            if client.world.coordsOccupied(BlockPos(round(x), y, hiZBlockCoord)):
+            if client.world.coordsOccupied(BlockPos(round(x), y, hiZBlockCoord), world.isSolid):
                 zEdge = (hiZBlockCoord - 0.5)
                 entity.pos[2] = zEdge - entity.radius
                 hitWall = True
-            elif client.world.coordsOccupied(BlockPos(round(x), y, loZBlockCoord)):
+            elif client.world.coordsOccupied(BlockPos(round(x), y, loZBlockCoord), world.isSolid):
                 zEdge = (loZBlockCoord + 0.5)
                 entity.pos[2] = zEdge + entity.radius
                 hitWall = True

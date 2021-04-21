@@ -894,10 +894,9 @@ class Chunk:
                         vert = (vert * [2/16, 10/16, 2/16, uSize, vSize]) + [0.0, -3/16, 0.0, uOffset, vOffset]
                     elif blockId == 'water' or blockId == 'flowing_water':
                         level = int(blockState['level']) if 'level' in blockState else 0
-                        falling = blockState['falling'] if 'falling' in blockState else False
 
-                        if falling != False:
-                            print("FALLING")
+                        if level > 8:
+                            print(f'level: {level}')
 
                         if level < 8:
                             blockHeight = (8 - level) / 9
@@ -1690,6 +1689,99 @@ class World:
 
                 if nextLight > existingLight:
                     heapq.heappush(queue, (-nextLight, nextPos))
+
+    def lookedAtBlock(self, reach: float, cameraPos: Tuple[float, float, float], pitch: float, yaw: float, useFluids: bool = False) -> Optional[Tuple[BlockPos, str]]:
+        lookX = cos(pitch)*sin(-yaw)
+        lookY = sin(pitch)
+        lookZ = cos(pitch)*cos(-yaw)
+
+        if lookX == 0.0:
+            lookX = 1e-6
+        if lookY == 0.0:
+            lookY = 1e-6
+        if lookZ == 0.0:
+            lookZ = 1e-6
+
+        mag = math.sqrt(lookX**2 + lookY**2 + lookZ**2)
+        lookX /= mag
+        lookY /= mag
+        lookZ /= mag
+
+        # From the algorithm/code shown here:
+        # http://www.cse.yorku.ca/~amana/research/grid.pdf
+
+        x = nearestBlockCoord(cameraPos[0])
+        y = nearestBlockCoord(cameraPos[1])
+        z = nearestBlockCoord(cameraPos[2])
+
+        stepX = 1 if lookX > 0.0 else -1
+        stepY = 1 if lookY > 0.0 else -1
+        stepZ = 1 if lookZ > 0.0 else -1
+
+        tDeltaX = 1.0 / abs(lookX)
+        tDeltaY = 1.0 / abs(lookY)
+        tDeltaZ = 1.0 / abs(lookZ)
+
+        nextXWall = x + 0.5 if stepX == 1 else x - 0.5
+        nextYWall = y + 0.5 if stepY == 1 else y - 0.5
+        nextZWall = z + 0.5 if stepZ == 1 else z - 0.5
+
+        tMaxX = (nextXWall - cameraPos[0]) / lookX
+        tMaxY = (nextYWall - cameraPos[1]) / lookY
+        tMaxZ = (nextZWall - cameraPos[2]) / lookZ
+
+        blockPos = None
+        lastMaxVal = 0.0
+        
+        def blockFilter(blockId):
+            if blockId == 'water' or blockId == 'flowing_water':
+                return useFluids
+            else:
+                return blockId != 'air'
+
+        while 1:
+            if self.coordsOccupied(BlockPos(x, y, z), blockFilter):
+                blockPos = BlockPos(x, y, z)
+                break
+
+            minVal = min(tMaxX, tMaxY, tMaxZ)
+
+            if minVal == tMaxX:
+                x += stepX
+                # FIXME: if outside...
+                lastMaxVal = tMaxX
+                tMaxX += tDeltaX
+            elif minVal == tMaxY:
+                y += stepY
+                lastMaxVal = tMaxY
+                tMaxY += tDeltaY
+            else:
+                z += stepZ
+                lastMaxVal = tMaxZ
+                tMaxZ += tDeltaZ
+            
+            if lastMaxVal > reach:
+                break
+        
+        if blockPos is None:
+            return None
+        else:
+            pointX = cameraPos[0] + lastMaxVal * lookX
+            pointY = cameraPos[1] + lastMaxVal * lookY
+            pointZ = cameraPos[2] + lastMaxVal * lookZ
+
+            pointX -= blockPos.x
+            pointY -= blockPos.y
+            pointZ -= blockPos.z
+
+            if abs(pointX) > abs(pointY) and abs(pointX) > abs(pointZ):
+                face = 'right' if pointX > 0.0 else 'left'
+            elif abs(pointY) > abs(pointX) and abs(pointY) > abs(pointZ):
+                face = 'top' if pointY > 0.0 else 'bottom'
+            else:
+                face = 'front' if pointZ > 0.0 else 'back'
+            
+            return (blockPos, face)
 
 
     # app.instances[idx] = [Instance(app.cube, np.array([[modelX], [modelY], [modelZ]]), texture), False]

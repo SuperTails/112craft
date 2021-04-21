@@ -55,7 +55,7 @@ from tick import *
 import tick
 import server
 from queue import SimpleQueue
-from client import ClientState, lookedAtBlock, lookedAtEntity, getLookVector
+from client import ClientState, lookedAtEntity, getLookVector
 from util import ChunkPos, BlockPos
 import util
 from button import Button, ButtonManager, createSizedBackground
@@ -587,7 +587,7 @@ class PlayingMode(Mode):
             self.overlay.redrawAll(app, window, canvas)
     
     def timerFired(self, app):
-        self.lookedAtBlock = lookedAtBlock(app.client)
+        self.lookedAtBlock = app.client.lookedAtBlock()
 
         player = app.client.getPlayer()
 
@@ -653,7 +653,7 @@ class PlayingMode(Mode):
 
         useFluids = stack.item == 'bucket' and not stack.isEmpty()
 
-        block = lookedAtBlock(app.client, useFluids)
+        block = app.client.lookedAtBlock(useFluids)
         if block is not None:
             (pos, face) = block
             faceIdx = ['left', 'right', 'back', 'front', 'bottom', 'top'].index(face) * 2
@@ -1382,7 +1382,7 @@ def appStarted(app):
     #def makeTitleMode(app, _player): return TitleMode(app)
     #app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
     def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
+    app.mode = WorldLoadMode(app, 'world', True, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     # ---------------
