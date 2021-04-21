@@ -491,7 +491,7 @@ class Chunk:
     def requestScheduledTick(self, blockPos: BlockPos, delay: int):
         self.scheduledTicks.append((self.tickIdx + delay, blockPos))
     
-    def doBlockUpdate(self, world: 'World', blockPos: BlockPos):
+    def doBlockUpdate(self, instData, world: 'World', blockPos: BlockPos):
         blockId = self.blocks[blockPos.x, blockPos.y, blockPos.z]
         if blockId in ('water', 'flowing_water'):
             for (_, p) in self.scheduledTicks:
@@ -503,6 +503,18 @@ class Chunk:
             for (_, p) in self.scheduledTicks:
                 if p == blockPos:
                     return
+            
+            globalPos = self._globalBlockPos(blockPos)
+            for faceIdx in range(0, 12, 2):
+                adjPos = adjacentBlockPos(globalPos, faceIdx)
+                adjBlockId = world.getBlock(adjPos)
+                if adjBlockId in ('water', 'flowing_water'):
+                    blockState = self.blockStates[blockPos.x, blockPos.y, blockPos.z]
+                    if blockState['level'] == '0':
+                        self.setBlock(world, instData, blockPos, 'obsidian')
+                    else:
+                        self.setBlock(world, instData, blockPos, 'cobblestone')
+
             
             self.requestScheduledTick(blockPos, 30)
         
@@ -1208,14 +1220,14 @@ class Chunk:
             self.tileEntities[blockPos] = Furnace(blockPos)
 
         if doBlockUpdates:
-            self.doBlockUpdate(world, blockPos)
+            self.doBlockUpdate(instData, world, blockPos)
             
             globalPos = self._globalBlockPos(blockPos)
             for faceIdx in range(0, 12, 2):
                 adjPos = adjacentBlockPos(globalPos, faceIdx)
                 
                 (chunk, localPos) = world.getChunk(adjPos)
-                chunk.doBlockUpdate(world, localPos)
+                chunk.doBlockUpdate(instData, world, localPos)
         
         '''
         for faceIdx in range(0, 12, 2):

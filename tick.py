@@ -33,6 +33,12 @@ def sendPlayerDigging(app, action: network.DiggingAction, location: BlockPos, fa
             server.breakingBlock = 0.0
         elif action == network.DiggingAction.FINISH_DIGGING:
             server.breakingBlock = 1000.0
+        elif action == network.DiggingAction.DROP_ITEM:
+            # TODO: Spawn the item
+            player = server.getLocalPlayer()
+            slot = player.inventory[player.hotbarIdx]
+            if not slot.stack.isEmpty() and not slot.stack.isInfinite():
+                slot.stack.amount -= 1
         else:
             print(f"Ignoring other action {action}")
     else:
@@ -97,10 +103,12 @@ def sendUseItem(app, hand: int):
 
                 if blockId in ('water', 'flowing_water') and blockState['level'] == '0':
                     server.world.setBlock((app.textures, app.cube, app.textureIndices), pos, 'air', {})
-                    heldSlot.stack.item = 'water_bucket'
+                    if not player.creative:
+                        heldSlot.stack.item = 'water_bucket'
                 elif blockId in ('lava', 'flowing_lava') and blockState['level'] == '0':
                     server.world.setBlock((app.textures, app.cube, app.textureIndices), pos, 'air', {})
-                    heldSlot.stack.item = 'lava_bucket'
+                    if not player.creative:
+                        heldSlot.stack.item = 'lava_bucket'
         elif heldSlot.stack.item == 'water_bucket' or heldSlot.stack.item == 'lava_bucket':
             block = server.world.lookedAtBlock(player.reach, cameraPos,
                 player.headPitch, player.headYaw, useFluids=False)
@@ -117,7 +125,8 @@ def sendUseItem(app, hand: int):
 
                 server.world.setBlock((app.textures, app.cube, app.textureIndices), pos2, blockId, { 'level': '0' })
 
-                heldSlot.stack.item = 'bucket'
+                if not player.creative:
+                    heldSlot.stack.item = 'bucket'
     else:
         network.c2sQueue.put(network.UseItemC2S(hand))
 
@@ -180,13 +189,10 @@ def sendChatMessage(app, text: str):
                 elif parts[1] == 'add':
                     server.time += int(parts[2])
             elif parts[0] == 'gamemode':
-                # TODO:
-                '''
                 if parts[1] == 'creative':
                     server.getLocalPlayer().creative = True
                 elif parts[1] == 'survival':
-                    app.mode.player.creative = False
-                '''
+                    server.getLocalPlayer().creative = False
             elif parts[0] == 'summon':
                 player = server.getLocalPlayer()
                 ent = Entity(app, server.getEntityId(), parts[1],
