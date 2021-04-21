@@ -377,6 +377,45 @@ class SpawnMobS2C:
 
         return cls(entityId, uuid, kind, x-0.5, y-0.5, -(z+0.5), yaw, pitch, headPitch, xVel, yVel, -zVel)
 
+@dataclass
+class MultiBlockChangeS2C:
+    chunkX: int
+    chunkSectionY: int
+    chunkZ: int
+    noTrustEdges: bool
+
+    blocks: List[Tuple[int, BlockPos]]
+
+    @classmethod
+    def fromBuf(cls, buf):
+        # https://wiki.vg/Protocol#Multi_Block_Change
+
+        coord, noTrustEdges = buf.unpack('Q?')
+
+        chunkX = coord >> 42
+        if chunkX & (1 << 21) != 0:
+            chunkX = -((~chunkX + 1) & 0x3FFFFF)
+
+        chunkZ = (coord >> 20) & 0x3FFFFF
+        if chunkZ & (1 << 21) != 0:
+            chunkZ = -((~chunkZ + 1) & 0x3FFFFF)
+
+        chunkSectionY = coord & 0xFFFFF
+
+        blockArrSize = buf.unpack_varint()
+
+        blocks = [_decodeMultiBlockEntry(buf.unpack_varint(max_bits=64)) for _ in range(blockArrSize)]
+
+        return cls(chunkX, chunkSectionY, -(chunkZ+1), noTrustEdges, blocks)
+
+def _decodeMultiBlockEntry(long):
+    stateId = long >> 12
+    x = (long >> 8) & 0xF
+    z = (long >> 4) & 0xF
+    y = long & 0xF
+
+    return (stateId, BlockPos(x, y, 15-z))
+
 
 @dataclass
 class BlockChangeS2C:
@@ -669,6 +708,10 @@ class MinecraftProtocol(ClientProtocol):
             
         self.mainLoop = self.ticker.add_loop(1, doTick)
         self.ticker.start()
+    
+    def packet_multi_block_change(self, buf):
+        s2cQueue.put(MultiBlockChangeS2C.fromBuf(buf))
+        buf.discard()
     
     def packet_confirm_transaction(self, buf):
         s2cQueue.put(WindowConfirmationS2C.fromBuf(buf))

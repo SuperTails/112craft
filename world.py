@@ -419,11 +419,11 @@ def convertBlock(block, instData):
         block = 'crafting_table'
     elif 'piston' in block:
         block = 'crafting_table'
-    elif block == 'water':
+    elif block == 'cave_air':
         block = 'air'
     elif block != 'air' and block not in instData[0]:
         if block not in seen:
-            #print(f"UNKNOWN BLOCK {block}")
+            print(f"UNKNOWN BLOCK {block}")
             seen.add(block)
         block = 'bedrock'
     
@@ -873,6 +873,7 @@ class Chunk:
             bz = i % 16
 
             blockId = self.blocks[bx, by, bz]
+            blockState = self.blockStates[bx, by, bz]
 
             # left, right, near, far, bottom, top
             for faceIdx in range(0, 12, 2):
@@ -891,6 +892,11 @@ class Chunk:
                             uSize, vSize = 2/16, 2/16
                             uOffset, vOffset = 7/16, 8/16
                         vert = (vert * [2/16, 10/16, 2/16, uSize, vSize]) + [0.0, -3/16, 0.0, uOffset, vOffset]
+                    elif blockId == 'water':
+                        level = int(blockState['level']) if 'level' in blockState else 0
+                        falling = blockState['falling'] if 'falling' in blockState else False
+
+                        vert = (vert * [1.0, (7 - level) / 8, 1.0, 1.0, 1.0] - [0.0, (1 + level) / 16, 0.0, 0.0, 0.0])
                     
                     faceVertices[l, :5] = vert
 
@@ -1074,14 +1080,14 @@ class Chunk:
                         self.tileEntities[blockPos] = Furnace(blockPos)
 
 
-    def setBlock(self, world, instData, blockPos: BlockPos, blockId: BlockId, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False):
+    def setBlock(self, world, instData, blockPos: BlockPos, blockId: BlockId, blockState: Optional[BlockState] = None, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False):
         meshIdx = blockPos.y // MESH_HEIGHT
         self.meshDirtyFlags[meshIdx] = True
 
         (textures, cube, _) = instData
         (x, y, z) = blockPos
         self.blocks[x, y, z] = blockId
-        self.blockStates[x, y, z] = {}
+        self.blockStates[x, y, z] = {} if blockState is None else blockState
         idx = self._coordsToIdx(blockPos)
         if blockId == 'air':
             self.instances[idx] = None
@@ -1221,9 +1227,9 @@ class World:
             if self.importPath != '':
                 f.write(f"importPath={self.importPath}\n")
     
-    def setBlock(self, instData, blockPos: BlockPos, id: BlockId, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False):
+    def setBlock(self, instData, blockPos: BlockPos, blockId: BlockId, blockState: Optional[BlockState] = None, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False):
         (chunk, ckLocal) = self.getChunk(blockPos)
-        chunk.setBlock(self, instData, ckLocal, id, doUpdateLight, doUpdateBuried, doUpdateMesh)
+        chunk.setBlock(self, instData, ckLocal, blockId, blockState, doUpdateLight, doUpdateBuried, doUpdateMesh)
 
     def getBlock(self, blockPos: BlockPos) -> str:
         (chunkPos, localPos) = toChunkLocal(blockPos)
@@ -1681,7 +1687,7 @@ class World:
     # app.instances[idx] = [Instance(app.cube, np.array([[modelX], [modelY], [modelZ]]), texture), False]
 
 def isOpaque(block: BlockId):
-    return block not in ['torch', 'air']
+    return block not in ['torch', 'air', 'water', 'flowing_water']
 
 def getLuminance(block: BlockId):
     if block == 'glowstone':

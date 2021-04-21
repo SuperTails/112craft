@@ -1,6 +1,7 @@
 from typing import List, Any, Optional, Tuple
 import typing
 from shader import ShaderProgram
+import world
 from world import World, nearestBlockCoord
 from entity import Entity, EntityModel, Animation, EntityRenderData, AnimController
 from player import Player
@@ -88,7 +89,7 @@ class ClientState:
     def getPlayer(self) -> Optional[Player]:
         return self.player
 
-def lookedAtBlock(client: ClientState) -> Optional[Tuple[BlockPos, str]]:
+def lookedAtBlock(client: ClientState, useFluids=False) -> Optional[Tuple[BlockPos, str]]:
     lookX = cos(client.cameraPitch)*sin(-client.cameraYaw)
     lookY = sin(client.cameraPitch)
     lookZ = cos(client.cameraPitch)*cos(-client.cameraYaw)
@@ -133,8 +134,14 @@ def lookedAtBlock(client: ClientState) -> Optional[Tuple[BlockPos, str]]:
     
     reach = client.getPlayer().reach
 
+    def blockFilter(blockId):
+        if blockId == 'water' or blockId == 'flowing_water':
+            return useFluids
+        else:
+            return blockId != 'air'
+
     while 1:
-        if client.world.coordsOccupied(BlockPos(x, y, z)):
+        if client.world.coordsOccupied(BlockPos(x, y, z), blockFilter):
             blockPos = BlockPos(x, y, z)
             break
 

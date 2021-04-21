@@ -962,14 +962,26 @@ def handleS2CPackets(mode, app, client: ClientState):
                     entities.pop(entIdx)
                 else:
                     entIdx += 1
+        elif isinstance(packet, network.MultiBlockChangeS2C):
+            chunk = client.world.chunks[ChunkPos(packet.chunkX, 0, packet.chunkZ)]
+
+            for blockStateId, pos in packet.blocks:
+                blockStateId = util.REGISTRY.decode_block(blockStateId)
+                blockId = blockStateId.pop('name').removeprefix('minecraft:')
+                blockId = world.convertBlock(blockId, (app.textures, app.cube, app.textureIndices))
+
+                pos = BlockPos(pos.x, pos.y + packet.chunkSectionY * 16, pos.z)
+
+                chunk.setBlock(client.world, (app.textures, app.cube, app.textureIndices), pos, blockId, blockStateId)
+
         elif isinstance(packet, network.BlockChangeS2C):
-            blockId = util.REGISTRY.decode_block(packet.blockId)
-            blockId = blockId['name'].removeprefix('minecraft:')
+            blockStateId = util.REGISTRY.decode_block(packet.blockId)
+            blockId = blockStateId.pop('name').removeprefix('minecraft:')
             blockId = world.convertBlock(blockId, (app.textures, app.cube, app.textureIndices))
 
             try:
-                if not app.client.local:
-                    app.client.world.setBlock((app.textures, app.cube, app.textureIndices), packet.location, blockId)
+                if not client.local:
+                    client.world.setBlock((app.textures, app.cube, app.textureIndices), packet.location, blockId, blockStateId)
             except KeyError:
                 pass
         elif isinstance(packet, network.WindowConfirmationS2C):
@@ -1363,10 +1375,10 @@ def appStarted(app):
 
     app.client = client
 
-    def makeTitleMode(app, _player): return TitleMode(app)
-    app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
-    #def makePlayingMode(app, player): return PlayingMode(app, player)
-    #app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
+    #def makeTitleMode(app, _player): return TitleMode(app)
+    #app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
+    def makePlayingMode(app, player): return PlayingMode(app, player)
+    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     # ---------------

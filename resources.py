@@ -871,6 +871,8 @@ def loadResources(app):
         },
         'glowstone': { 'all': 'glowstone' },
         'torch':     { 'all': 'torch_on' },
+        'water': { 'all': 'water_placeholder' },
+        'flowing_water': { 'all': 'water_placeholder' },
     }
 
     app.hardnesses = {

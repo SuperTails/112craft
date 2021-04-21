@@ -5,7 +5,7 @@ Very important are BlockPos, ChunkPos, BlockId, and ItemId.
 
 import decimal
 import math
-from typing import NamedTuple, Tuple, Optional
+from typing import NamedTuple, Tuple, Optional, Any
 from quarry.types.registry import LookupRegistry
 
 REGISTRY: LookupRegistry
@@ -130,5 +130,7 @@ class BlockPos(NamedTuple):
     z: int
 
 BlockId = str
+
+BlockState = dict[str, Any]
 
 ItemId = str
