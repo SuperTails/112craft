@@ -873,6 +873,8 @@ def loadResources(app):
         'torch':     { 'all': 'torch_on' },
         'water': { 'all': 'water_placeholder' },
         'flowing_water': { 'all': 'water_placeholder' },
+        'lava': { 'all': 'lava_placeholder' },
+        'flowing_lava': { 'all': 'lava_placeholder' },
     }
 
     app.hardnesses = {

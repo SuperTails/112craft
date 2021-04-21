@@ -95,11 +95,13 @@ def sendUseItem(app, hand: int):
                 blockId = server.world.getBlock(pos)
                 blockState = server.world.getBlockState(pos)
 
-                if blockId in ['water', 'flowing_water'] and blockState['level'] == '0':
+                if blockId in ('water', 'flowing_water') and blockState['level'] == '0':
                     server.world.setBlock((app.textures, app.cube, app.textureIndices), pos, 'air', {})
-
                     heldSlot.stack.item = 'water_bucket'
-        elif heldSlot.stack.item == 'water_bucket':
+                elif blockId in ('lava', 'flowing_lava') and blockState['level'] == '0':
+                    server.world.setBlock((app.textures, app.cube, app.textureIndices), pos, 'air', {})
+                    heldSlot.stack.item = 'lava_bucket'
+        elif heldSlot.stack.item == 'water_bucket' or heldSlot.stack.item == 'lava_bucket':
             block = server.world.lookedAtBlock(player.reach, cameraPos,
                 player.headPitch, player.headYaw, useFluids=False)
             
@@ -108,7 +110,12 @@ def sendUseItem(app, hand: int):
                 faceIdx = ['left', 'right', 'back', 'front', 'bottom', 'top'].index(face) * 2
                 pos2 = world.adjacentBlockPos(pos, faceIdx)
 
-                server.world.setBlock((app.textures, app.cube, app.textureIndices), pos2, 'flowing_water', { 'level': '0' })
+                if heldSlot.stack.item == 'water_bucket':
+                    blockId = 'flowing_water'
+                else:
+                    blockId = 'flowing_lava'
+
+                server.world.setBlock((app.textures, app.cube, app.textureIndices), pos2, blockId, { 'level': '0' })
 
                 heldSlot.stack.item = 'bucket'
     else:

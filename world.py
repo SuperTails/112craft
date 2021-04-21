@@ -499,6 +499,12 @@ class Chunk:
                     return
             
             self.requestScheduledTick(blockPos, 5)
+        elif blockId in ('lava', 'flowing_lava'):
+            for (_, p) in self.scheduledTicks:
+                if p == blockPos:
+                    return
+            
+            self.requestScheduledTick(blockPos, 30)
         
     def doScheduledTick(self, app, world: 'World', blockPos: BlockPos):
         instData = (app.textures, app.cube, app.textureIndices)
@@ -508,19 +514,30 @@ class Chunk:
         
         blockId = self.blocks[blockPos.x, blockPos.y, blockPos.z]
         blockState = self.blockStates[blockPos.x, blockPos.y, blockPos.z]
-        if blockId in ('water', 'flowing_water'):
-            level = int(blockState['level'])
-            if self.blocks[blockPos.x, blockPos.y-1, blockPos.z] in ('air', 'flowing_water', 'water'):
-                self.setBlock(world, instData, BlockPos(blockPos.x, blockPos.y-1, blockPos.z),
-                    'flowing_water', { 'level': '8' })
+        if blockId in ('water', 'flowing_water', 'lava', 'flowing_lava'):
+            if blockId in ('water', 'flowing_water'):
+                levelChange = 1
+                flowingName = 'flowing_water'
+                liquid = ('water', 'flowing_water')
+                liquidOrAir = ('water', 'flowing_water', 'air')
             else:
-                if level != 7:
+                levelChange = 2
+                flowingName = 'flowing_lava'
+                liquid = ('lava', 'flowing_lava')
+                liquidOrAir = ('lava', 'flowing_lava', 'air')
+
+            level = int(blockState['level'])
+            if self.blocks[blockPos.x, blockPos.y-1, blockPos.z] in liquidOrAir:
+                self.setBlock(world, instData, BlockPos(blockPos.x, blockPos.y-1, blockPos.z),
+                    flowingName, { 'level': '8' })
+            else:
+                if (level + levelChange) // 8 == level // 8:
                     for faceIdx in range(0, 8, 2):
                         adjPos = adjacentBlockPos(gp, faceIdx)
                         blockId = world.getBlock(adjPos)
                         shouldFlow = False
-                        nextLevel = (level % 8) + 1
-                        if blockId in ['water', 'flowing_water']:
+                        nextLevel = (level % 8) + levelChange
+                        if blockId in liquid:
                             blockState = world.getBlockState(adjPos)
                             oldLevel = int(blockState['level'])
                             if (oldLevel % 8) > nextLevel:
@@ -531,12 +548,12 @@ class Chunk:
                             shouldFlow = False
                         
                         if shouldFlow:
-                            world.setBlock(instData, adjPos, 'flowing_water', { 'level': str(nextLevel) })
+                            world.setBlock(instData, adjPos, flowingName, { 'level': str(nextLevel) })
             
             for faceIdx in range(0, 8, 2):
                 adjPos = adjacentBlockPos(gp, faceIdx)
                 blockId = world.getBlock(adjPos)
-                if blockId in ('water', 'flowing_water'):
+                if blockId in liquid:
                     blockState = world.getBlockState(adjPos)
                     oldLevel = int(blockState['level'])
                     
@@ -544,15 +561,15 @@ class Chunk:
                         sideHigher = True
                         break
             
-            aboveHigher = self.blocks[blockPos.x, blockPos.y+1, blockPos.z] in ('water', 'flowing_water')
+            aboveHigher = self.blocks[blockPos.x, blockPos.y+1, blockPos.z] in liquid
             
             if level != 0:
                 if level == 8 and not aboveHigher:
-                    self.setBlock(world, instData, blockPos, 'flowing_water', { 'level': '1' })
-                elif level == 7 and not sideHigher:
+                    self.setBlock(world, instData, blockPos, flowingName, { 'level': '1' })
+                elif (level + levelChange) // 8 != level // 8:
                     self.setBlock(world, instData, blockPos, 'air')
                 elif not sideHigher:
-                    self.setBlock(world, instData, blockPos, 'flowing_water', { 'level': str((level % 8) + 1) })
+                    self.setBlock(world, instData, blockPos, flowingName, { 'level': str((level % 8) + 1) })
             
     def save(self, path):
         file = nbt.NBTFile()
@@ -969,7 +986,7 @@ class Chunk:
                             uSize, vSize = 2/16, 2/16
                             uOffset, vOffset = 7/16, 8/16
                         vert = (vert * [2/16, 10/16, 2/16, uSize, vSize]) + [0.0, -3/16, 0.0, uOffset, vOffset]
-                    elif blockId == 'water' or blockId == 'flowing_water':
+                    elif blockId in ('water', 'flowing_water', 'lava', 'flowing_lava'):
                         level = int(blockState['level']) if 'level' in blockState else 0
 
                         if level > 8:
@@ -1821,7 +1838,7 @@ class World:
         lastMaxVal = 0.0
         
         def blockFilter(blockId):
-            if blockId == 'water' or blockId == 'flowing_water':
+            if blockId in ('water', 'flowing_water', 'lava', 'flowing_lava'):
                 return useFluids
             else:
                 return blockId != 'air'
@@ -1874,13 +1891,13 @@ class World:
     # app.instances[idx] = [Instance(app.cube, np.array([[modelX], [modelY], [modelZ]]), texture), False]
 
 def isSolid(block: BlockId):
-    return block not in ['torch', 'air', 'water', 'flowing_water']
+    return block not in ['torch', 'air', 'water', 'flowing_water', 'lava', 'flowing_lava']
 
 def isOpaque(block: BlockId):
-    return block not in ['torch', 'air', 'water', 'flowing_water']
+    return block not in ['torch', 'air', 'water', 'flowing_water', 'lava', 'flowing_lava']
 
 def getLuminance(block: BlockId):
-    if block == 'glowstone':
+    if block in ('glowstone', 'lava', 'flowing_lava'):
         return 15
     elif block == 'torch':
         return 14
