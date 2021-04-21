@@ -966,6 +966,30 @@ def handleS2CPackets(mode, app, client: ClientState):
                     entities.pop(entIdx)
                 else:
                     entIdx += 1
+        elif isinstance(packet, network.UpdateLightS2C):
+            print(f'Light update at {packet.chunkX} {packet.chunkZ}, trust edges: {packet.trustEdges}')
+
+            # TODO:
+
+            if ChunkPos(packet.chunkX, 0, packet.chunkZ) not in client.world.chunks:
+                # FIXME:
+                continue
+
+            chunk = client.world.chunks[ChunkPos(packet.chunkX, 0, packet.chunkZ)]
+
+            for idx in range(1, 17):
+                skyLight = packet.skyLights[idx]
+                if skyLight is not None:
+                    pass
+                elif packet.emptySkyLights[idx]:
+                    chunk.lightLevels[:, (idx-1)*16:idx*16, :] = 0
+                
+                blockLight = packet.blockLights[idx]
+                if blockLight is not None:
+                    pass
+                elif packet.emptyBlockLights[idx]:
+                    chunk.blockLightLevels[:, (idx-1)*16:idx*16, :] = 0
+
         elif isinstance(packet, network.MultiBlockChangeS2C):
             chunk = client.world.chunks[ChunkPos(packet.chunkX, 0, packet.chunkZ)]
 

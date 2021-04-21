@@ -11,6 +11,7 @@ from enum import Enum
 from util import BlockPos
 from quarry.types.buffer import BufferUnderrun
 from quarry.types.chat import Message
+from quarry.types.chunk import PackedArray
 import math
 
 c2sQueue = SimpleQueue()
@@ -376,6 +377,58 @@ class SpawnMobS2C:
         xVel, yVel, zVel = buf.unpack('hhh')
 
         return cls(entityId, uuid, kind, x-0.5, y-0.5, -(z+0.5), yaw, pitch, headPitch, xVel, yVel, -zVel)
+
+@dataclass
+class UpdateLightS2C:
+    chunkX: int
+    chunkZ: int
+    trustEdges: bool
+
+    skyLights: List[Optional[PackedArray]]
+    emptySkyLights: List[bool]
+
+    blockLights: List[Optional[PackedArray]]
+    emptyBlockLights: List[bool]
+
+    @classmethod
+    def fromBuf(cls, buf):
+        chunkX = buf.unpack_varint()
+        chunkZ = buf.unpack_varint()
+        trustEdges = buf.unpack('?')
+
+        skyLightMask = buf.unpack_varint()
+        blockLightMask = buf.unpack_varint()
+        emptySkyLightMask = buf.unpack_varint()
+        emptyBlockLightMask = buf.unpack_varint()
+
+        skyLights = []
+        emptySkyLights = []
+        for bit in range(18):
+            if skyLightMask & (1 << bit) != 0:
+                skyLightArr = unpackLightArray(buf)
+            else:
+                skyLightArr = None
+            skyLights.append(skyLightArr)
+            emptySkyLights.append(emptySkyLightMask & (1 << bit) != 0)
+        
+        blockLights = []
+        emptyBlockLights = []
+        for bit in range(18):
+            if blockLightMask & (1 << bit) != 0:
+                blockLightArr = unpackLightArray(buf)
+            else:
+                blockLightArr = None
+            blockLights.append(blockLightArr)
+            emptyBlockLights.append(emptyBlockLightMask & (1 << bit) != 0)
+        
+        return cls(chunkX, -(chunkZ+1), trustEdges, skyLights, emptySkyLights, blockLights, emptyBlockLights)
+        
+
+def unpackLightArray(buf) -> PackedArray:
+    length = buf.unpack_varint()
+    assert(length == 2048)
+
+    return PackedArray.from_light_bytes(buf.read(length))
 
 @dataclass
 class MultiBlockChangeS2C:
@@ -804,6 +857,7 @@ class MinecraftProtocol(ClientProtocol):
         buf.discard()
 
     def packet_update_light(self, buf):
+        s2cQueue.put(UpdateLightS2C.fromBuf(buf))
         buf.discard()
     
     def packet_spawn_mob(self, buf):
@@ -812,7 +866,6 @@ class MinecraftProtocol(ClientProtocol):
     
     def packet_player_position_and_look(self, buf):
         s2cQueue.put(PlayerPositionAndLookS2C.fromBuf(buf))
-
         buf.discard()
     
     def packet_chunk_data(self, buf):

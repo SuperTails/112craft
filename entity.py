@@ -668,7 +668,7 @@ class Entity:
 
             self.variables = {}
 
-            self.lastClientTick = time.time()
+            self.lastClientTick = time.time() - 0.05
             self.lastRender = time.time()
             self.lifeTime = 0
             self.distanceMoved = 0.0

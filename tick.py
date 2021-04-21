@@ -414,7 +414,8 @@ def serverTick(app, server: ServerState):
 
     server.world.loadUnloadChunks(server.getLocalPlayer().pos, (app.textures, app.cube, app.textureIndices))
     server.world.addChunkDetails(instData)
-    server.world.tickChunks((app.textures, app.cube, app.textureIndices))
+    #server.world.tickChunks((app.textures, app.cube, app.textureIndices))
+    server.world.tickChunks(app)
 
     updateBlockBreaking(app, server)
 
@@ -487,6 +488,8 @@ def serverTick(app, server: ServerState):
     network.s2cQueue.put(network.TimeUpdateS2C(0, server.time))
     
     # HACK:
+    for ent1, ent2 in zip(server.entities, app.client.entities):
+        ent1.variables = copy.copy(ent2.variables)
     app.client.entities = copy.deepcopy(server.entities)
     app.client.player.inventory = copy.deepcopy(server.getLocalPlayer().inventory)
     

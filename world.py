@@ -37,6 +37,7 @@ import anvil
 import os
 import copy
 import itertools
+from collections import deque
 from nbt import nbt
 from inventory import Slot, Stack
 from enum import IntEnum
@@ -447,10 +448,11 @@ class Chunk:
 
     worldgenStage: WorldgenStage = WorldgenStage.NOT_STARTED
 
+    tickIdx: int
+    scheduledTicks: deque[Tuple[int, BlockPos]]
+
     isTicking: bool
     isVisible: bool
-
-    vertexCnt: int = 0
 
     def __init__(self, pos: ChunkPos):
         self.pos = pos
@@ -463,6 +465,9 @@ class Chunk:
         self.blockLightLevels = np.full((16, CHUNK_HEIGHT, 16), 0)
         self.instances = [None] * self.blocks.size
 
+        self.tickIdx = 0
+        self.scheduledTicks = deque()
+
         self.isTicking = False
         self.isVisible = False
 
@@ -473,10 +478,82 @@ class Chunk:
         self.meshVertexCounts = [0] * (CHUNK_HEIGHT // MESH_HEIGHT)
         self.meshDirtyFlags = [True] * (CHUNK_HEIGHT // MESH_HEIGHT)
     
-    def tick(self, app):
+    def tick(self, app, world: 'World'):
         for (pos, entity) in self.tileEntities.items():
             entity.tick(app)
+        
+        while len(self.scheduledTicks) != 0 and self.scheduledTicks[0][0] <= self.tickIdx:
+            (_, pos) = self.scheduledTicks.popleft()
+            self.doScheduledTick(app, world, pos)
+        
+        self.tickIdx += 1
     
+    def requestScheduledTick(self, blockPos: BlockPos, delay: int):
+        self.scheduledTicks.append((self.tickIdx + delay, blockPos))
+    
+    def doBlockUpdate(self, world: 'World', blockPos: BlockPos):
+        blockId = self.blocks[blockPos.x, blockPos.y, blockPos.z]
+        if blockId in ('water', 'flowing_water'):
+            for (_, p) in self.scheduledTicks:
+                if p == blockPos:
+                    return
+            
+            self.requestScheduledTick(blockPos, 5)
+        
+    def doScheduledTick(self, app, world: 'World', blockPos: BlockPos):
+        instData = (app.textures, app.cube, app.textureIndices)
+
+        gp = self._globalBlockPos(blockPos)
+        sideHigher = False
+        
+        blockId = self.blocks[blockPos.x, blockPos.y, blockPos.z]
+        blockState = self.blockStates[blockPos.x, blockPos.y, blockPos.z]
+        if blockId in ('water', 'flowing_water'):
+            level = int(blockState['level'])
+            if self.blocks[blockPos.x, blockPos.y-1, blockPos.z] in ('air', 'flowing_water', 'water'):
+                self.setBlock(world, instData, BlockPos(blockPos.x, blockPos.y-1, blockPos.z),
+                    'flowing_water', { 'level': '8' })
+            else:
+                if level != 7:
+                    for faceIdx in range(0, 8, 2):
+                        adjPos = adjacentBlockPos(gp, faceIdx)
+                        blockId = world.getBlock(adjPos)
+                        shouldFlow = False
+                        nextLevel = (level % 8) + 1
+                        if blockId in ['water', 'flowing_water']:
+                            blockState = world.getBlockState(adjPos)
+                            oldLevel = int(blockState['level'])
+                            if (oldLevel % 8) > nextLevel:
+                                shouldFlow = True
+                        elif blockId == 'air':
+                            shouldFlow = True
+                        else:
+                            shouldFlow = False
+                        
+                        if shouldFlow:
+                            world.setBlock(instData, adjPos, 'flowing_water', { 'level': str(nextLevel) })
+            
+            for faceIdx in range(0, 8, 2):
+                adjPos = adjacentBlockPos(gp, faceIdx)
+                blockId = world.getBlock(adjPos)
+                if blockId in ('water', 'flowing_water'):
+                    blockState = world.getBlockState(adjPos)
+                    oldLevel = int(blockState['level'])
+                    
+                    if (oldLevel % 8) < (level % 8):
+                        sideHigher = True
+                        break
+            
+            aboveHigher = self.blocks[blockPos.x, blockPos.y+1, blockPos.z] in ('water', 'flowing_water')
+            
+            if level != 0:
+                if level == 8 and not aboveHigher:
+                    self.setBlock(world, instData, blockPos, 'flowing_water', { 'level': '1' })
+                elif level == 7 and not sideHigher:
+                    self.setBlock(world, instData, blockPos, 'air')
+                elif not sideHigher:
+                    self.setBlock(world, instData, blockPos, 'flowing_water', { 'level': str((level % 8) + 1) })
+            
     def save(self, path):
         file = nbt.NBTFile()
         file.name = 'data'
@@ -649,7 +726,7 @@ class Chunk:
                         blockId = 'dirt'
                     else:
                         blockId = 'stone'
-                    self.setBlock(world, instData, BlockPos(xIdx, yIdx, zIdx), blockId, doUpdateLight=False, doUpdateBuried=False)
+                    self.setBlock(world, instData, BlockPos(xIdx, yIdx, zIdx), blockId, doUpdateLight=False, doUpdateBuried=False, doBlockUpdates=False)
         
         #print(f"minval: {minVal}, maxVal: {maxVal}")
 
@@ -665,7 +742,7 @@ class Chunk:
                 for y in range(y, min(y + 2, CHUNK_HEIGHT)):
                     for z in range(z, min(z + 2, 16)):
                         if self.blocks[x, y, z] == 'stone':
-                            self.setBlock(world, instData, BlockPos(x, y, z), ore, doUpdateLight=False, doUpdateBuried=False, doUpdateMesh=False)
+                            self.setBlock(world, instData, BlockPos(x, y, z), ore, doUpdateLight=False, doUpdateBuried=False, doUpdateMesh=False, doBlockUpdates=False)
     
     def populate(self, world: 'World', instData, seed):
         random.seed(hash((self.pos, seed)))
@@ -1087,7 +1164,7 @@ class Chunk:
                         self.tileEntities[blockPos] = Furnace(blockPos)
 
 
-    def setBlock(self, world, instData, blockPos: BlockPos, blockId: BlockId, blockState: Optional[BlockState] = None, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False):
+    def setBlock(self, world, instData, blockPos: BlockPos, blockId: BlockId, blockState: Optional[BlockState] = None, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False, doBlockUpdates=True):
         meshIdx = blockPos.y // MESH_HEIGHT
         self.meshDirtyFlags[meshIdx] = True
 
@@ -1112,6 +1189,16 @@ class Chunk:
         
         if blockId == 'furnace':
             self.tileEntities[blockPos] = Furnace(blockPos)
+
+        if doBlockUpdates:
+            self.doBlockUpdate(world, blockPos)
+            
+            globalPos = self._globalBlockPos(blockPos)
+            for faceIdx in range(0, 12, 2):
+                adjPos = adjacentBlockPos(globalPos, faceIdx)
+                
+                (chunk, localPos) = world.getChunk(adjPos)
+                chunk.doBlockUpdate(world, localPos)
         
         '''
         for faceIdx in range(0, 12, 2):
@@ -1295,7 +1382,7 @@ class World:
     def tickChunks(self, app):
         for chunk in self.chunks.values():
             if chunk.isTicking:
-                chunk.tick(app)
+                chunk.tick(app, self)
 
     
     def loadUnloadChunks(self, centerPos, instData):
