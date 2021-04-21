@@ -892,11 +892,19 @@ class Chunk:
                             uSize, vSize = 2/16, 2/16
                             uOffset, vOffset = 7/16, 8/16
                         vert = (vert * [2/16, 10/16, 2/16, uSize, vSize]) + [0.0, -3/16, 0.0, uOffset, vOffset]
-                    elif blockId == 'water':
+                    elif blockId == 'water' or blockId == 'flowing_water':
                         level = int(blockState['level']) if 'level' in blockState else 0
                         falling = blockState['falling'] if 'falling' in blockState else False
 
-                        vert = (vert * [1.0, (7 - level) / 8, 1.0, 1.0, 1.0] - [0.0, (1 + level) / 16, 0.0, 0.0, 0.0])
+                        if falling != False:
+                            print("FALLING")
+
+                        if level < 8:
+                            blockHeight = (8 - level) / 9
+                        else:
+                            blockHeight = 1.0
+
+                        vert = (vert * [1.0, blockHeight, 1.0, 1.0, 1.0] - [0.0, (1 - blockHeight) / 2, 0.0, 0.0, 0.0])
                     
                     faceVertices[l, :5] = vert
 
@@ -1514,7 +1522,7 @@ class World:
                 for faceIdx in range(0, 12, 2):
                     gPos = adjacentBlockPos(blockPos, faceIdx)
 
-                    if self.coordsOccupied(gPos):
+                    if self.coordsOccupied(gPos, isOpaque):
                         continue
 
                     if not self.coordsInBounds(gPos):
@@ -1528,7 +1536,7 @@ class World:
                 for faceIdx in range(0, 12, 2):
                     gPos = adjacentBlockPos(blockPos, faceIdx)
 
-                    if self.coordsOccupied(gPos):
+                    if self.coordsOccupied(gPos, isOpaque):
                         continue
 
                     if not self.coordsInBounds(gPos):
@@ -1563,7 +1571,7 @@ class World:
             for faceIdx in range(0, 12, 2):
                 gPos = adjacentBlockPos(blockPos, faceIdx)
 
-                if self.coordsOccupied(gPos):
+                if self.coordsOccupied(gPos, isOpaque):
                     continue
 
                 if not self.coordsInBounds(gPos):
@@ -1607,7 +1615,7 @@ class World:
                         continue
                     if not self.coordsInBounds(nextPos):
                         continue
-                    if self.coordsOccupied(nextPos):
+                    if self.coordsOccupied(nextPos, isOpaque):
                         continue
 
                     heapq.heappush(exSources, (-nextLight, nextPos))
@@ -1675,7 +1683,7 @@ class World:
                     continue
                 if not self.coordsInBounds(nextPos):
                     continue
-                if self.coordsOccupied(nextPos):
+                if self.coordsOccupied(nextPos, isOpaque):
                     continue
 
                 existingLight = self.getLightLevel(nextPos) if isSky else self.getBlockLightLevel(nextPos)
@@ -1685,6 +1693,9 @@ class World:
 
 
     # app.instances[idx] = [Instance(app.cube, np.array([[modelX], [modelY], [modelZ]]), texture), False]
+
+def isSolid(block: BlockId):
+    return block not in ['torch', 'air', 'water', 'flowing_water']
 
 def isOpaque(block: BlockId):
     return block not in ['torch', 'air', 'water', 'flowing_water']

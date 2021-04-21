@@ -649,7 +649,11 @@ class PlayingMode(Mode):
 
         player: Player = app.client.getPlayer()
 
-        block = lookedAtBlock(app.client)
+        stack = player.inventory[player.hotbarIdx].stack
+
+        useFluids = stack.item == 'bucket' and not stack.isEmpty()
+
+        block = lookedAtBlock(app.client, useFluids)
         if block is not None:
             (pos, face) = block
             faceIdx = ['left', 'right', 'back', 'front', 'bottom', 'top'].index(face) * 2
@@ -666,21 +670,21 @@ class PlayingMode(Mode):
 
                 sendPlayerPlacement(app, 0, pos, mcFace, 0.5, 0.5, 0.5, False)
             else:
-                stack = player.inventory[player.hotbarIdx].stack
                 if stack.amount == 0: return
-                
-                if stack.item not in app.textures: return
 
-                if stack.amount > 0:
-                    stack.amount -= 1
-                
-                # TODO: Cursor position, inside block??
-                sendPlayerPlacement(app, 0, pos2, mcFace, 0.5, 0.5, 0.5, False)
-                
-                if config.UGLY_HACK:
-                    app.client.world.setBlock((app.textures, app.cube, app.textureIndices), pos2, stack.item)
+                if stack.item in app.textures:
+                    if stack.amount > 0:
+                        stack.amount -= 1
+                    
+                    # TODO: Cursor position, inside block??
+                    sendPlayerPlacement(app, 0, pos2, mcFace, 0.5, 0.5, 0.5, False)
+                    
+                    if config.UGLY_HACK:
+                        app.client.world.setBlock((app.textures, app.cube, app.textureIndices), pos2, stack.item)
 
-                resources.getDigSound(app, app.client.world.getBlock(pos2)).play()
+                    resources.getDigSound(app, app.client.world.getBlock(pos2)).play()
+                else:
+                    sendUseItem(app, 0)
     
     def mouseReleased(self, app, event):
         if self.overlay is not None:

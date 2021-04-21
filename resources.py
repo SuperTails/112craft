@@ -1096,6 +1096,9 @@ def loadResources(app):
         'iron_pickaxe': app.rePack.getItemTex('iron_pickaxe'),
         'iron_shovel': app.rePack.getItemTex('iron_shovel'),
         'torch': Image.open('assets/Vanilla_Resource_Pack_1.16.220/textures/blocks/torch_on.png'),
+        'bucket': app.rePack.getItemTex('bucket_empty'),
+        'lava_bucket': app.rePack.getItemTex('bucket_lava'),
+        'water_bucket': app.rePack.getItemTex('bucket_water')
     }
 
     app.tkItemTextures = copy.copy(commonItemTextures)
