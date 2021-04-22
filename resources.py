@@ -825,6 +825,7 @@ def loadSounds(app):
         'oak_log': 'wood',
         'oak_planks': 'wood',
         'torch': 'wood',
+        'wall_torch': 'wood',
         'crafting_table': 'wood',
     }
 
@@ -872,6 +873,7 @@ def loadResources(app):
         'obsidian': { 'all': 'obsidian' },
         'glowstone': { 'all': 'glowstone' },
         'torch':     { 'all': 'torch_on' },
+        'wall_torch': { 'all': 'torch_on' },
         'water': { 'all': 'water_placeholder' },
         'flowing_water': { 'all': 'water_placeholder' },
         'lava': { 'all': 'lava_placeholder' },
@@ -895,6 +897,7 @@ def loadResources(app):
         'crafting_table': ('axe', 2.0),
         'bedrock': (None, float('inf')),
         'torch': (None, 0.1),
+        'wall_torch': (None, 0.1),
     }
 
     global HARDNESSES
@@ -918,6 +921,7 @@ def loadResources(app):
         'bedrock': { '': None },
         'glowstone': { '': 'glowstone' },
         'torch': { '': 'torch' },
+        'wall_torch': { '': 'torch' },
     }
 
     loadTkTextures(app)

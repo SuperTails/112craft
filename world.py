@@ -998,6 +998,42 @@ class Chunk:
                             uSize, vSize = 2/16, 2/16
                             uOffset, vOffset = 7/16, 8/16
                         vert = (vert * [2/16, 10/16, 2/16, uSize, vSize]) + [0.0, -3/16, 0.0, uOffset, vOffset]
+                    elif blockId == 'wall_torch':
+                        if faceIdx < 8:
+                            uSize, vSize = 2/16, 10/16
+                            uOffset, vOffset = 7/16, 0/16
+                        else:
+                            uSize, vSize = 2/16, 2/16
+                            uOffset, vOffset = 7/16, 8/16
+
+                        facing = blockState['facing']
+
+                        vert = (vert * [2/16, 10/16, 2/16, uSize, vSize]) + [0.0, 0.0, 0.0, uOffset, vOffset]
+
+                        if facing == 'west':
+                            newX = math.cos(math.radians(20.0)) * vert[0] - math.sin(math.radians(20.0)) * vert[1] + 0.4
+                            newY = math.cos(math.radians(20.0)) * vert[1] + math.sin(math.radians(20.0)) * vert[0]
+                            newZ = vert[2]
+                        elif facing == 'east':
+                            newX = math.cos(math.radians(-20.0)) * vert[0] - math.sin(math.radians(-20.0)) * vert[1] - 0.4
+                            newY = math.cos(math.radians(-20.0)) * vert[1] + math.sin(math.radians(-20.0)) * vert[0]
+                            newZ = vert[2]
+                        elif facing == 'south':
+                            newX = vert[0]
+                            newZ = math.cos(math.radians(20.0)) * vert[2] - math.sin(math.radians(20.0)) * vert[1] + 0.4
+                            newY = math.cos(math.radians(20.0)) * vert[1] + math.sin(math.radians(20.0)) * vert[2]
+                        elif facing == 'north':
+                            newX = vert[0]
+                            newZ = math.cos(math.radians(-20.0)) * vert[2] - math.sin(math.radians(-20.0)) * vert[1] - 0.4
+                            newY = math.cos(math.radians(-20.0)) * vert[1] + math.sin(math.radians(-20.0)) * vert[2]
+                        else:
+                            raise Exception(facing)
+
+                        vert[0] = newX
+                        vert[1] = newY
+                        vert[2] = newZ
+ 
+                        print(f'Facing: {facing}')
                     elif blockId in ('water', 'flowing_water', 'lava', 'flowing_lava'):
                         level = int(blockState['level']) if 'level' in blockState else 0
 
@@ -1008,7 +1044,7 @@ class Chunk:
                             blockHeight = (8 - level) / 9
                         else:
                             blockHeight = 1.0
-
+                        
                         vert = (vert * [1.0, blockHeight, 1.0, 1.0, 1.0] - [0.0, (1 - blockHeight) / 2, 0.0, 0.0, 0.0])
                     
                     faceVertices[l, :5] = vert
@@ -1903,10 +1939,10 @@ class World:
     # app.instances[idx] = [Instance(app.cube, np.array([[modelX], [modelY], [modelZ]]), texture), False]
 
 def isSolid(block: BlockId):
-    return block not in ['torch', 'air', 'water', 'flowing_water', 'lava', 'flowing_lava']
+    return block not in ['torch', 'wall_torch', 'air', 'water', 'flowing_water', 'lava', 'flowing_lava']
 
 def isOpaque(block: BlockId):
-    return block not in ['torch', 'air', 'water', 'flowing_water', 'lava', 'flowing_lava']
+    return block not in ['torch', 'wall_torch', 'air', 'water', 'flowing_water', 'lava', 'flowing_lava']
 
 def getLuminance(block: BlockId):
     if block in ('glowstone', 'lava', 'flowing_lava'):
