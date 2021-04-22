@@ -676,11 +676,30 @@ class PlayingMode(Mode):
                     if stack.amount > 0:
                         stack.amount -= 1
                     
+                    
+                    if stack.item == 'torch':
+                        if face in ('top', 'bottom'):
+                            placedId = 'torch'
+                            placedState = {}
+                        else:
+                            placedId = 'wall_torch'
+                            if face == 'left':
+                                placedState = { 'facing': 'west' }
+                            elif face == 'right':
+                                placedState = { 'facing': 'east' }
+                            elif face == 'front':
+                                placedState = { 'facing': 'north' }
+                            else:
+                                placedState = { 'facing': 'south' }
+                    else:
+                        placedId = stack.item
+                        placedState = {}
+                    
                     # TODO: Cursor position, inside block??
                     sendPlayerPlacement(app, 0, pos2, mcFace, 0.5, 0.5, 0.5, False)
                     
                     if config.UGLY_HACK:
-                        app.client.world.setBlock((app.textures, app.cube, app.textureIndices), pos2, stack.item)
+                        app.client.world.setBlock((app.textures, app.cube, app.textureIndices), pos2, placedId, placedState)
 
                     resources.getDigSound(app, app.client.world.getBlock(pos2)).play()
                 else:
@@ -1406,7 +1425,7 @@ def appStarted(app):
     #def makeTitleMode(app, _player): return TitleMode(app)
     #app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
     def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
+    app.mode = WorldLoadMode(app, 'world', True, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     # ---------------
