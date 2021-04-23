@@ -43,7 +43,7 @@ from inventory import Slot, Stack
 from enum import IntEnum
 from math import cos, sin
 from numpy import ndarray
-from typing import NamedTuple, List, Any, Tuple, Optional, Union
+from typing import NamedTuple, List, Any, Tuple, Optional, Union, Iterable
 import util
 from util import *
 from OpenGL.GL import * #type:ignore
@@ -1304,8 +1304,11 @@ class Chunk:
         
         if doUpdateLight:
             globalPos = self._globalBlockPos(blockPos)
-            world.updateLight(globalPos, isSky=True)
-            world.updateLight(globalPos, isSky=False)
+            #world.propogateLight([globalPos], isSky=False, addOne=True)
+            world.updateLight2((globalPos, ), isSky=True)
+            world.updateLight2((globalPos, ), isSky=False)
+            #world.updateLight(globalPos, isSky=True)
+            #world.updateLight(globalPos, isSky=False)
         
         if doUpdateMesh:
             self.createMesh(world, instData)
@@ -1649,6 +1652,81 @@ class World:
         # FIXME:
         chunk.meshDirtyFlags[y // MESH_HEIGHT] = True
     
+    def updateLight2(self, changes: Iterable[BlockPos], isSky: bool):
+        fringe = self.propogateLight(changes, isSky, True)
+        self.propogateLight(fringe | set(changes), isSky, False)
+
+    def propogateLight(self, changes: Iterable[BlockPos], isSky: bool, isEx):
+        def getLightWithLum(pos):
+            if isSky:
+                return self.getLightLevel(pos)
+            else:
+                blockId = self.getBlock(pos)
+                return max(self.getBlockLightLevel(pos), getLuminance(blockId))
+            
+        def getLightLevel(pos):
+            if isSky:
+                return self.getLightLevel(pos)
+            else:
+                return self.getBlockLightLevel(pos)
+        
+        def setLightLevel(pos, level):
+            if isSky:
+                self.setLightLevel(pos, level)
+            else:
+                self.setBlockLightLevel(pos, level)
+        
+        fringe = set()
+        visited = set()
+
+        if isEx:
+            queue = [(-(getLightLevel(pos) + 1), pos) for pos in changes]
+        else:
+            queue = [(-getLightWithLum(pos), pos) for pos in changes]
+        heapq.heapify(queue)
+
+        while len(queue) > 0:
+            (currentLight, currentPos) = heapq.heappop(queue)
+            currentLight *= -1
+
+            if currentPos in visited:
+                continue
+
+            visited.add(currentPos)
+
+            posLightLevel = getLightLevel(currentPos)
+
+            if posLightLevel > 0 and posLightLevel > currentLight or (isEx and posLightLevel == currentLight):
+                fringe.add(currentPos)
+                continue
+
+            if not isEx:
+                setLightLevel(currentPos, currentLight)
+
+            if currentLight == 0:
+                continue
+
+            for faceIdx in range(0, 12, 2):
+                nextPos = adjacentBlockPos(currentPos, faceIdx)
+
+                if self.coordsOccupied(nextPos, isOpaque):
+                    cost = 15
+                elif faceIdx == 8 and isSky:
+                    cost = 0
+                else:
+                    cost = 1
+
+                nextLight = max(currentLight - cost, 0)
+
+                heapq.heappush(queue, (-nextLight, nextPos))
+        
+        if isEx:
+            for v in visited:
+                if v not in fringe:
+                    setLightLevel(v, 0)
+        
+        return fringe
+        
     def updateLight(self, blockPos: BlockPos, isSky: bool):
         added = self.coordsOccupied(blockPos)
 

@@ -1094,6 +1094,7 @@ def loadResources(app):
         'coal': app.rePack.getItemTex('coal'),
         'iron_ingot': app.rePack.getItemTex('iron_ingot'),
         'diamond': app.rePack.getItemTex('diamond'),
+        'redstone': app.rePack.getItemTex('redstone_dust'),
         'wooden_sword': app.rePack.getItemTex('wood_sword'),
         'wooden_pickaxe': app.rePack.getItemTex('wood_pickaxe'),
         'wooden_axe': app.rePack.getItemTex('wood_axe'),

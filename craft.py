@@ -140,8 +140,7 @@ class WorldLoadMode(Mode):
                 server.players = [player]
                 server.localPlayer = player.entityId
 
-                # FIXME: IDs
-                server.entities = [entity.Entity(app, 1, nbt=tag) for tag in nbtfile["Entities"][1:]]
+                server.entities = [entity.Entity(app, server.getEntityId(), nbt=tag) for tag in nbtfile["Entities"][1:]]
             except FileNotFoundError:
                 player = Player(app)
                 player.pos[1] = 75.0
@@ -152,8 +151,7 @@ class WorldLoadMode(Mode):
                 server.players = [player]
                 server.localPlayer = player.entityId
 
-                # FIXME: IDs
-                server.entities = [entity.Entity(app, 2, 'fox', 5.0, 72.0, 3.0)]
+                server.entities = [entity.Entity(app, server.getEntityId(), 'fox', 5.0, 72.0, 3.0)]
 
             cx = math.floor(player.pos[0] / 16)
             cy = math.floor(player.pos[1] / world.CHUNK_HEIGHT)
