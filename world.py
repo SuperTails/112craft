@@ -808,6 +808,7 @@ class Chunk:
         
         self.worldgenStage = WorldgenStage.POPULATED
     
+    @timed()
     def doFirstLighting(self):
         import heapq
 
@@ -868,54 +869,55 @@ class Chunk:
                         self.lightLevels[newPos[0], yIdx, newPos[1]] = newLevel
                         heapq.heappush(queue, (-newLevel, newPos))
     
+    @timed()
     def updateAllBuried(self, world: 'World'):
-        for i in range(16 * CHUNK_HEIGHT * 16):
-            if self.instances[i] is not None:
-                self.instances[i][1] = True
-                self.instances[i][0].visibleFaces = [True] * 12
+        def okFilter(p):
+            return p[1] is not None
+
+        for i, thisInst in filter(okFilter, enumerate(self.instances)):
+            thisInst[1] = True
+            thisInst[0].visibleFaces = [True] * 12
         
-        for i in range(16 * CHUNK_HEIGHT * 16):
-            if self.instances[i] is not None:
-                x, y, z = self._coordsFromIdx(i)
-                thisInst = self.instances[i][0]
+        for i, thisInst in filter(okFilter, enumerate(self.instances)):
+            x, y, z = self._coordsFromIdx(i)
+            thisInst = thisInst[0]
 
-                if x > 0:
-                    thatIdx = i - 16
-                    #thatIdx = self._coordsToIdx(BlockPos(x - 1, y, z))
+            if x > 0:
+                thatIdx = i - 16
+                #thatIdx = self._coordsToIdx(BlockPos(x - 1, y, z))
 
-                    if self.instances[thatIdx] is not None:
-                        self.instances[thatIdx][0].visibleFaces[2] = False
-                        self.instances[thatIdx][0].visibleFaces[3] = False
+                if self.instances[thatIdx] is not None:
+                    self.instances[thatIdx][0].visibleFaces[2] = False
+                    self.instances[thatIdx][0].visibleFaces[3] = False
 
-                        thisInst.visibleFaces[0] = False
-                        thisInst.visibleFaces[1] = False
-                
-                if z > 0:
-                    thatIdx = i - 1
-                    #thatIdx = self._coordsToIdx(BlockPos(x, y, z - 1))
+                    thisInst.visibleFaces[0] = False
+                    thisInst.visibleFaces[1] = False
+            
+            if z > 0:
+                thatIdx = i - 1
+                #thatIdx = self._coordsToIdx(BlockPos(x, y, z - 1))
 
-                    if self.instances[thatIdx] is not None:
-                        self.instances[thatIdx][0].visibleFaces[6] = False
-                        self.instances[thatIdx][0].visibleFaces[7] = False
+                if self.instances[thatIdx] is not None:
+                    self.instances[thatIdx][0].visibleFaces[6] = False
+                    self.instances[thatIdx][0].visibleFaces[7] = False
 
-                        thisInst.visibleFaces[4] = False
-                        thisInst.visibleFaces[5] = False
-                
-                
-                if y > 0:
-                    #thatIdx = self._coordsToIdx(BlockPos(x, y - 1, z))
-                    thatIdx = i - 256
+                    thisInst.visibleFaces[4] = False
+                    thisInst.visibleFaces[5] = False
+            
+            
+            if y > 0:
+                #thatIdx = self._coordsToIdx(BlockPos(x, y - 1, z))
+                thatIdx = i - 256
 
-                    if self.instances[thatIdx] is not None:
-                        self.instances[thatIdx][0].visibleFaces[10] = False
-                        self.instances[thatIdx][0].visibleFaces[11] = False
+                if self.instances[thatIdx] is not None:
+                    self.instances[thatIdx][0].visibleFaces[10] = False
+                    self.instances[thatIdx][0].visibleFaces[11] = False
 
-                        thisInst.visibleFaces[8] = False
-                        thisInst.visibleFaces[9] = False
+                    thisInst.visibleFaces[8] = False
+                    thisInst.visibleFaces[9] = False
         
-        for i in range(16 * CHUNK_HEIGHT * 16):
-            if self.instances[i] is not None:
-                self.instances[i][1] = any(self.instances[i][0].visibleFaces)
+        for i, thisInst in filter(okFilter, enumerate(self.instances)):
+            thisInst[1] = any(thisInst[0].visibleFaces)
         
         for y in range(CHUNK_HEIGHT):
             for foo in range(16):
@@ -925,7 +927,6 @@ class Chunk:
                 self.updateBuriedStateAt(world, BlockPos(foo, y, 0))
                 self.updateBuriedStateAt(world, BlockPos(foo, y, 15))
     
-    @timed()
     def lightAndOptimize(self, world: 'World'):
         print(f"Lighting and optimizing chunk at {self.pos}")
         
@@ -1332,6 +1333,8 @@ class World:
 
     serverChunks: dict[ChunkPos, ChunkDataS2C]
 
+    dirtyLights: set[BlockPos]
+
     def getHighestBlock(self, x: int, z: int) -> int:
         for y in range(CHUNK_HEIGHT - 1, -1, -1):
             if self.getBlock(BlockPos(x, y, z)) != 'air':
@@ -1348,6 +1351,8 @@ class World:
 
         self.caveChecked = set()
         self.caves = {}
+
+        self.dirtyLights = set()
 
         self.local = True
 
@@ -1391,7 +1396,10 @@ class World:
     
     def setBlock(self, instData, blockPos: BlockPos, blockId: BlockId, blockState: Optional[BlockState] = None, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False):
         (chunk, ckLocal) = self.getChunk(blockPos)
-        chunk.setBlock(self, instData, ckLocal, blockId, blockState, doUpdateLight, doUpdateBuried, doUpdateMesh)
+
+        #chunk.setBlock(self, instData, ckLocal, blockId, blockState, doUpdateLight, doUpdateBuried, doUpdateMesh)
+        chunk.setBlock(self, instData, ckLocal, blockId, blockState, False, doUpdateBuried, doUpdateMesh)
+        self.dirtyLights.add(blockPos)
 
     def getBlock(self, blockPos: BlockPos) -> str:
         (chunkPos, localPos) = toChunkLocal(blockPos)
@@ -1451,7 +1459,10 @@ class World:
         for chunk in self.chunks.values():
             if chunk.isTicking:
                 chunk.tick(app, self)
-
+        
+        self.updateLight2(self.dirtyLights, False)
+        self.updateLight2(self.dirtyLights, True)
+        self.dirtyLights = set()
     
     def loadUnloadChunks(self, centerPos, instData):
         (chunkPos, _) = toChunkLocal(nearestBlockPos(centerPos[0], centerPos[1], centerPos[2]))
@@ -2025,7 +2036,7 @@ def isOpaque(block: BlockId):
 def getLuminance(block: BlockId):
     if block in ('glowstone', 'lava', 'flowing_lava'):
         return 15
-    elif block == 'torch':
+    elif block in ('torch', 'wall_torch'):
         return 14
     else:
         return 0
