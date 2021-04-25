@@ -656,7 +656,6 @@ def loadTextureAtlas(app):
         app.textureIndices[name] = [idx + texNames.index(name) for name in indices]
 
         if name == 'redstone_wire':
-            print(f'Names are {texNames}, indices are {app.textureIndices[name]}')
             crossIm = app.rePack.getBlockTex('redstone_dust_cross')
             lineIm = app.rePack.getBlockTex('redstone_dust_line')
             for east in [False, True]:

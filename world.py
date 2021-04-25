@@ -549,33 +549,42 @@ class Chunk:
     def requestScheduledTick(self, blockPos: BlockPos, delay: int):
         self.scheduledTicks.append((self.tickIdx + delay, blockPos))
     
-    def doBlockUpdate(self, instData, world: 'World', blockPos: BlockPos):
+    def doBlockUpdate(self, instData, world: 'World', blockPos: BlockPos, priority: int):
         blockId = self.blocks[blockPos.x, blockPos.y, blockPos.z]
-        if blockId in ('water', 'flowing_water'):
-            for (_, p) in self.scheduledTicks:
-                if p == blockPos:
-                    return
-            
-            self.requestScheduledTick(blockPos, 5)
-        elif blockId in ('lava', 'flowing_lava'):
-            for (_, p) in self.scheduledTicks:
-                if p == blockPos:
-                    return
-            
-            globalPos = self._globalBlockPos(blockPos)
-            for faceIdx in range(0, 12, 2):
-                adjPos = adjacentBlockPos(globalPos, faceIdx)
-                adjBlockId = world.getBlock(adjPos)
-                if adjBlockId in ('water', 'flowing_water'):
-                    blockState = self.blockStates[blockPos.x, blockPos.y, blockPos.z]
-                    if blockState['level'] == '0':
-                        self.setBlock(world, instData, blockPos, 'obsidian')
-                    else:
-                        self.setBlock(world, instData, blockPos, 'cobblestone')
-            
-            self.requestScheduledTick(blockPos, 30)
-        elif blockId == 'redstone_wire':
-            updateRedstoneWire(self._globalBlockPos(blockPos), world, instData)
+        if priority == -1:
+            if blockId in ('water', 'flowing_water'):
+                for (_, p) in self.scheduledTicks:
+                    if p == blockPos:
+                        return
+                
+                self.requestScheduledTick(blockPos, 5)
+            elif blockId in ('lava', 'flowing_lava'):
+                for (_, p) in self.scheduledTicks:
+                    if p == blockPos:
+                        return
+                
+                globalPos = self._globalBlockPos(blockPos)
+                for faceIdx in range(0, 12, 2):
+                    adjPos = adjacentBlockPos(globalPos, faceIdx)
+                    adjBlockId = world.getBlock(adjPos)
+                    if adjBlockId in ('water', 'flowing_water'):
+                        blockState = self.blockStates[blockPos.x, blockPos.y, blockPos.z]
+                        if blockState['level'] == '0':
+                            self.setBlock(world, instData, blockPos, 'obsidian')
+                        else:
+                            self.setBlock(world, instData, blockPos, 'cobblestone')
+                
+                self.requestScheduledTick(blockPos, 30)
+            elif blockId == 'redstone_wire':
+                updateRedstoneWire(self._globalBlockPos(blockPos), world, instData)
+                world.updateRedstone([self._globalBlockPos(blockPos)], instData)
+        elif priority == 3:
+            if blockId in ('redstone_torch', 'redstone_wall_torch'):
+                for (_, p) in self.scheduledTicks:
+                    if p == blockPos:
+                        return
+ 
+                self.requestScheduledTick(blockPos, 2)
         
     def doScheduledTick(self, app, world: 'World', blockPos: BlockPos):
         instData = (app.textures, app.cube, app.textureIndices)
@@ -641,6 +650,27 @@ class Chunk:
                     self.setBlock(world, instData, blockPos, 'air')
                 elif not sideHigher:
                     self.setBlock(world, instData, blockPos, flowingName, { 'level': str((level % 8) + 1) })
+        elif blockId in ('redstone_torch', 'redstone_wall_torch'):
+            if blockId == 'redstone_torch':
+                otherPos = BlockPos(blockPos.x, blockPos.y - 1, blockPos.z)
+            elif blockState['facing'] == 'west':
+                otherPos = BlockPos(blockPos.x + 1, blockPos.y, blockPos.z)
+            elif blockState['facing'] == 'east':
+                otherPos = BlockPos(blockPos.x - 1, blockPos.y, blockPos.z)
+            elif blockState['facing'] == 'north':
+                otherPos = BlockPos(blockPos.x, blockPos.y, blockPos.z - 1)
+            else:
+                otherPos = BlockPos(blockPos.x, blockPos.y, blockPos.z + 1)
+            
+            otherPos = self._globalBlockPos(otherPos)
+
+            lit = not world.isWeaklyPowered(otherPos)
+            
+            newLit = 'true' if lit else 'false'
+
+            if newLit != blockState['lit']:
+                blockState['lit'] = newLit 
+                self.setBlock(world, instData, blockPos, blockId, blockState)
             
     def save(self, path):
         file = nbt.NBTFile()
@@ -1336,13 +1366,17 @@ class Chunk:
                     if block == 'furnace':
                         self.tileEntities[blockPos] = Furnace(blockPos)
 
-
     def setBlock(self, world, instData, blockPos: BlockPos, blockId: BlockId, blockState: Optional[BlockState] = None, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False, doBlockUpdates=True):
+        (x, y, z) = blockPos
+
+        if doBlockUpdates:
+            prevId = self.blocks[x, y, z]
+            prevState = copy.deepcopy(self.blockStates[x, y, z])
+
         meshIdx = blockPos.y // MESH_HEIGHT
         self.meshDirtyFlags[meshIdx] = True
 
         (textures, cube, _) = instData
-        (x, y, z) = blockPos
         self.blocks[x, y, z] = blockId
         self.blockStates[x, y, z] = {} if blockState is None else blockState
         idx = self._coordsToIdx(blockPos)
@@ -1365,7 +1399,12 @@ class Chunk:
 
         if doBlockUpdates:
             if blockId == 'redstone_wire':
-                self.doBlockUpdate(instData, world, blockPos)
+                if prevId == blockId: #type:ignore
+                    priority = 3
+                else:
+                    priority = -1
+
+                self.doBlockUpdate(instData, world, blockPos, priority)
 
                 toUpdate = set()
 
@@ -1380,19 +1419,17 @@ class Chunk:
                 for adjPos2 in toUpdate:
                     globalPos = self._globalBlockPos(adjPos2)
 
-                    print(f'Updating at {globalPos}')
-
                     (chunk, localPos) = world.getChunk(globalPos)
-                    chunk.doBlockUpdate(instData, world, localPos)
+                    chunk.doBlockUpdate(instData, world, localPos, priority)
             else:
-                self.doBlockUpdate(instData, world, blockPos)
+                self.doBlockUpdate(instData, world, blockPos, -1)
                 
                 globalPos = self._globalBlockPos(blockPos)
                 for faceIdx in range(0, 12, 2):
                     adjPos = adjacentBlockPos(globalPos, faceIdx)
                     
                     (chunk, localPos) = world.getChunk(adjPos)
-                    chunk.doBlockUpdate(instData, world, localPos)
+                    chunk.doBlockUpdate(instData, world, localPos, -1)
         
         '''
         for faceIdx in range(0, 12, 2):
@@ -1798,6 +1835,208 @@ class World:
         chunk.blockLightLevels[x, y, z] = level
         # FIXME:
         chunk.meshDirtyFlags[y // MESH_HEIGHT] = True
+    
+    def isWeaklyPowered(self, pos: BlockPos) -> bool:
+        if self.isStronglyPowered(pos):
+            return True
+        
+        above = BlockPos(pos.x, pos.y + 1, pos.z)
+        if self.getBlock(above) == 'redstone_wire' and int(self.getBlockState(above)['power']) > 0:
+            return True
+        else:
+            for face, neededDir in ((0, 'east'), (2, 'west'), (4, 'north'), (6, 'south')):
+                adjPos = adjacentBlockPos(pos, face)
+                adjId = self.getBlock(adjPos)
+                adjState = self.getBlockState(adjPos)
+                if adjId == 'redstone_wire' and int(adjState['power']) > 0:
+                    return True
+            
+            return False
+        
+    def isStronglyPowered(self, pos: BlockPos) -> bool:
+        if (self.getBlock(pos) in ('redstone_torch', 'redstone_wall_torch')
+            and self.getBlockState(pos)['lit'] == 'true'):
+
+            return True
+        elif (self.getBlock(BlockPos(pos.x, pos.y - 1, pos.z)) in ('redstone_torch', 'redstone_wall_torch')
+            and self.getBlockState(BlockPos(pos.x, pos.y - 1, pos.z))['lit'] == 'true'):
+
+            return True
+        else:
+            return False
+    
+    def updateRedstone(self, changes: Iterable[BlockPos], instData):
+        def isWire(pos):
+            return self.getBlock(pos) == 'redstone_wire'
+
+        changes = list(filter(isWire, changes))
+
+        wires = self.findWires(changes)
+
+        for wire in wires:
+            blockState = self.getBlockState(wire)
+            blockState['power'] = '0'
+            self.setBlock(instData, wire, 'redstone_wire', blockState, doUpdateLight=False, doUpdateBuried=False, doBlockUpdates=False)
+
+        self.propogateRedstone(wires, False, instData)
+    
+    def findWires(self, changes: Iterable[BlockPos]):
+        visited = set()
+
+        toVisit = list(changes)
+
+        while len(toVisit) > 0:
+            currentPos = toVisit.pop()
+
+            visited.add(currentPos)
+
+            edges = []
+
+            if self.getBlock(currentPos) == 'redstone_wire':
+                conns = getWireConnections(currentPos, self)
+
+                dirs = { 'west':  (-1, 0), 'east': (1, 0), 'south': (0, -1), 'north': (0, 1) }
+
+                for dirName, val in conns.items():
+                    dx, dz = dirs[dirName]
+                    if val == 'up':
+                        dy = 1
+                    elif val == 'down':
+                        dy = -1
+                    elif val == 'side':
+                        dy = 0
+                    else:
+                        continue
+
+                    nextPos = BlockPos(currentPos.x + dx, currentPos.y + dy, currentPos.z + dz)
+
+                    if self.getBlock(nextPos) != 'redstone_wire':
+                        continue
+
+                    edges.append(nextPos)
+            else:
+                for faceIdx in range(0, 12, 2):
+                    nextPos = adjacentBlockPos(currentPos, faceIdx)
+                    if self.getBlock(nextPos) != 'redstone_wire':
+                        continue
+                    edges.append(nextPos)
+
+            for nextPos in edges:
+                if nextPos not in visited:
+                    toVisit.append(nextPos)
+        
+        return visited
+ 
+    def propogateRedstone(self, changes: Iterable[BlockPos], isEx, instData):
+        def getPowerWithSources(pos):
+            blockId = self.getBlock(pos)
+            blockState = self.getBlockState(pos)
+            if blockId == 'redstone_wire':
+                for faceIdx in range(0, 12, 2):
+                    adjPos = adjacentBlockPos(pos, faceIdx)
+                    if self.isStronglyPowered(adjPos):
+                        return 15
+
+                return int(blockState['power'])
+            else:
+                return 0
+            
+        def getPowerLevel(pos):
+            blockId = self.getBlock(pos)
+            blockState = self.getBlockState(pos)
+            if blockId == 'redstone_wire':
+                return int(blockState['power'])
+            else:
+                raise Exception(pos)
+                return 0
+        
+        def setPowerLevel(pos, level):
+            doBlockUpdates = not isEx
+
+            blockId = self.getBlock(pos)
+            blockState = self.getBlockState(pos)
+
+            if blockId == 'redstone_wire':
+                blockState['power'] = str(level)
+                self.setBlock(instData, pos, blockId, blockState, doBlockUpdates=True)
+            else:
+                print("Ignoring power level at {level}")
+        
+        fringe = set()
+        visited = set()
+
+        if isEx:
+            queue = [(-(getPowerLevel(pos) + 1), pos) for pos in changes]
+        else:
+            queue = [(-getPowerWithSources(pos), pos) for pos in changes]
+        heapq.heapify(queue)
+
+        while len(queue) > 0:
+            (currentLight, currentPos) = heapq.heappop(queue)
+            currentLight *= -1
+
+            if currentPos in visited:
+                continue
+
+            visited.add(currentPos)
+
+            posLightLevel = getPowerLevel(currentPos)
+
+            if posLightLevel > 0 and posLightLevel > currentLight or (isEx and posLightLevel == currentLight):
+                fringe.add(currentPos)
+                continue
+
+            if not isEx:
+                setPowerLevel(currentPos, currentLight)
+
+            if currentLight == 0:
+                continue
+    
+            edges = []
+        
+            if self.getBlock(currentPos) == 'redstone_wire':
+                conns = getWireConnections(currentPos, self)
+
+                dirs = { 'west':  (-1, 0), 'east': (1, 0), 'south': (0, -1), 'north': (0, 1) }
+
+                for dirName, val in conns.items():
+                    dx, dz = dirs[dirName]
+                    if val == 'up':
+                        dy = 1
+                    elif val == 'down':
+                        dy = -1
+                    elif val == 'side':
+                        dy = 0
+                    else:
+                        continue
+
+                    nextPos = BlockPos(currentPos.x + dx, currentPos.y + dy, currentPos.z + dz)
+                    cost = 1
+
+                    if self.getBlock(nextPos) != 'redstone_wire':
+                        continue
+
+                    edges.append((nextPos, cost))
+            else:
+                for faceIdx in range(0, 12, 2):
+                    nextPos = adjacentBlockPos(currentPos, faceIdx)
+                    if self.getBlock(nextPos) != 'redstone_wire':
+                        continue
+                    cost = 0
+                    edges.append((nextPos, cost))
+
+            for nextPos, cost in edges:
+                nextLight = max(currentLight - cost, 0)
+
+                heapq.heappush(queue, (-nextLight, nextPos))
+        
+        if isEx:
+            for v in visited:
+                if v not in fringe:
+                    setPowerLevel(v, 0)
+        
+        return visited 
+
     
     def updateLight2(self, changes: Iterable[BlockPos], isSky: bool):
         fringe = self.propogateLight(changes, isSky, True)
