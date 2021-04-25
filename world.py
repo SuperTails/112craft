@@ -1581,7 +1581,7 @@ class World:
         for x in [xPos - entity.radius * 0.99, xPos + entity.radius * 0.99]:
             for z in [zPos - entity.radius * 0.99, zPos + entity.radius * 0.99]:
                 feetPos = nearestBlockPos(x, yPos, z)
-                if self.coordsOccupied(feetPos):
+                if self.coordsOccupied(feetPos, isSolid):
                     return True
         
         return False
@@ -2403,10 +2403,12 @@ class World:
     # app.instances[idx] = [Instance(app.cube, np.array([[modelX], [modelY], [modelZ]]), texture), False]
 
 def isSolid(block: BlockId):
-    return block not in ['torch', 'wall_torch', 'redstone_torch', 'redstone_wall_torch', 'redstone_wire', 'air', 'water', 'flowing_water', 'lava', 'flowing_lava']
+    return block not in ['torch', 'wall_torch', 'redstone_torch', 'redstone_wall_torch', 'redstone_wire',
+        'air', 'water', 'flowing_water', 'lava', 'flowing_lava', 'nether_portal']
 
 def isOpaque(block: BlockId):
-    return block not in ['torch', 'wall_torch', 'redstone_torch', 'redstone_wall_torch', 'redstone_wire', 'air', 'water', 'flowing_water', 'lava', 'flowing_lava']
+    return block not in ['torch', 'wall_torch', 'redstone_torch', 'redstone_wall_torch', 'redstone_wire',
+        'air', 'water', 'flowing_water', 'lava', 'flowing_lava', 'nether_portal']
 
 def getLuminance(block: BlockId):
     if block in ('glowstone', 'lava', 'flowing_lava'):

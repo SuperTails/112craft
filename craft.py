@@ -1034,7 +1034,7 @@ def handleS2CPackets(mode, app, client: ClientState):
         elif isinstance(packet, network.MultiBlockChangeS2C):
             if ChunkPos(packet.chunkX, 0, packet.chunkZ) not in client.world.chunks:
                 continue
-
+        
             chunk = client.world.chunks[ChunkPos(packet.chunkX, 0, packet.chunkZ)]
 
             for blockStateId, pos in packet.blocks:
@@ -1044,7 +1044,10 @@ def handleS2CPackets(mode, app, client: ClientState):
 
                 pos = BlockPos(pos.x, pos.y + packet.chunkSectionY * 16, pos.z)
 
-                chunk.setBlock(client.world, (app.textures, app.cube, app.textureIndices), pos, blockId, blockStateId, doBlockUpdates=False)
+                try:
+                    chunk.setBlock(client.world, (app.textures, app.cube, app.textureIndices), pos, blockId, blockStateId, doBlockUpdates=False)
+                except Exception as e:
+                    print(f'Ignoring exception in MultiBlockChange: {e}')
 
         elif isinstance(packet, network.BlockChangeS2C):
             blockStateId = util.REGISTRY.decode_block(packet.blockId)
@@ -1457,7 +1460,7 @@ def appStarted(app):
     #def makeTitleMode(app, _player): return TitleMode(app)
     #app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
     def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'world', True, makePlayingMode, seed=random.randint(0, 2**31))
+    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     # ---------------
