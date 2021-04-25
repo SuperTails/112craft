@@ -63,6 +63,7 @@ from world import Chunk, World
 from typing import List, Optional, Tuple, Any
 from enum import Enum
 from player import Player, Slot, Stack
+import inventory
 import resources
 from resources import loadResources, getHardnessAgainst, getBlockDrop, getAttackDamage
 from nbt import nbt
@@ -1118,7 +1119,7 @@ class ContainerGui:
 
                 self.actionNum += 1
 
-                app.mode.overlay.onSlotClicked(app, isRight, slot)
+                inventory.onSlotClicked(app.mode.overlay.heldItem, app, isRight, slot)
                 self.postClick(app, i)
     
     def postClick(self, app, slotIdx):
@@ -1314,55 +1315,6 @@ class InventoryMode(Mode):
         
         return None
     
-    def onSlotClicked(self, app, isRight: bool, slot: Slot):
-        if slot.canInput and slot.canOutput:
-            if isRight:
-                self.onRightClickIntoNormalSlot(app, slot)
-            else:
-                self.onLeftClickIntoNormalSlot(app, slot)
-        elif not slot.canInput and slot.canOutput:
-            print(f"before: {self.heldItem}, {slot.stack}")
-            merged = self.heldItem.tryMergeWith(slot.stack)
-            print(f"merged: {merged}")
-            if merged is not None:
-                self.heldItem = merged
-                slot.stack = Stack('', 0)
-        else:
-            raise Exception("TODO")
-    
-    def onRightClickIntoNormalSlot(self, app, normalSlot):
-        normalSlot = normalSlot.stack
-        if self.heldItem.isEmpty():
-            # Picks up half of the slot
-            if normalSlot.isInfinite():
-                amountTaken = 1
-            else:
-                amountTaken = math.ceil(normalSlot.amount / 2)
-                normalSlot.amount -= amountTaken
-            self.heldItem = Stack(normalSlot.item, amountTaken)
-        else:
-            newStack = normalSlot.tryMergeWith(Stack(self.heldItem.item, 1))
-            if newStack is not None:
-                if not self.heldItem.isInfinite():
-                    self.heldItem.amount -= 1
-                normalSlot.item = newStack.item
-                normalSlot.amount = newStack.amount
-    
-    def onLeftClickIntoNormalSlot(self, app, normalSlot):
-        normalSlot = normalSlot.stack
-        newStack = self.heldItem.tryMergeWith(normalSlot)
-        if newStack is None or self.heldItem.isEmpty():
-            tempItem = self.heldItem.item
-            tempAmount = self.heldItem.amount
-            self.heldItem.item = normalSlot.item
-            self.heldItem.amount = normalSlot.amount
-            normalSlot.item = tempItem
-            normalSlot.amount = tempAmount
-        else:
-            self.heldItem = Stack('', 0)
-            normalSlot.item = newStack.item
-            normalSlot.amount = newStack.amount
-
     def someMousePressed(self, app, event, isRight: bool):
         (_, _, w) = render.getSlotCenterAndSize(app, 0)
 
@@ -1460,7 +1412,7 @@ def appStarted(app):
     #def makeTitleMode(app, _player): return TitleMode(app)
     #app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
     def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
+    app.mode = WorldLoadMode(app, 'world', True, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     # ---------------

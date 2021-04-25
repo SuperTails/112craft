@@ -1,5 +1,6 @@
 from util import ItemId
 import copy
+import math
 from nbt import nbt
 from typing import Optional, Literal, Tuple, overload
 from dataclasses import dataclass
@@ -89,3 +90,55 @@ class Slot:
     
     def isInfinite(self) -> bool:
         return self.stack.isInfinite()
+
+def onSlotClicked(heldItem: Stack, app, isRight: bool, slot: Slot):
+    if slot.canInput and slot.canOutput:
+        if isRight:
+            onRightClickIntoNormalSlot(heldItem, app, slot)
+        else:
+            onLeftClickIntoNormalSlot(heldItem, app, slot)
+    elif not slot.canInput and slot.canOutput:
+        print(f"before: {heldItem}, {slot.stack}")
+        merged = heldItem.tryMergeWith(slot.stack)
+        print(f"merged: {merged}")
+        if merged is not None:
+            heldItem.item, heldItem.amount = merged.item, merged.amount
+            slot.stack = Stack('', 0)
+    else:
+        raise Exception("TODO")
+
+def onRightClickIntoNormalSlot(heldItem: Stack, app, normalSlot: Slot):
+    normalStack = normalSlot.stack
+    if heldItem.isEmpty():
+        # Picks up half of the slot
+        if normalSlot.isInfinite():
+            amountTaken = 1
+        else:
+            amountTaken = math.ceil(normalStack.amount / 2)
+            normalStack.amount -= amountTaken
+        heldItem.item = normalStack.item
+        heldItem.amount = amountTaken
+    else:
+        newStack = normalStack.tryMergeWith(Stack(heldItem.item, 1))
+        if newStack is not None:
+            if not heldItem.isInfinite():
+                heldItem.amount -= 1
+            normalStack.item = newStack.item
+            normalStack.amount = newStack.amount
+
+def onLeftClickIntoNormalSlot(heldItem: Stack, app, normalSlot: Slot):
+    normalStack = normalSlot.stack
+    newStack = heldItem.tryMergeWith(normalStack)
+    if newStack is None or heldItem.isEmpty():
+        tempItem = heldItem.item
+        tempAmount = heldItem.amount
+        heldItem.item = normalStack.item
+        heldItem.amount = normalStack.amount
+        normalStack.item = tempItem
+        normalStack.amount = tempAmount
+    else:
+        heldItem.amount = 0
+        heldItem.item = ''
+        normalStack.item = newStack.item
+        normalStack.amount = newStack.amount
+

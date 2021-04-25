@@ -5,11 +5,22 @@ from entity import Entity
 from player import Player
 from util import BlockPos
 from nbt import nbt
+from inventory import Stack, Slot
+from dataclasses import dataclass
+
+@dataclass
+class Window:
+    playerId: int
+    pos: BlockPos
+    kind: str
 
 class ServerState:
     world: World
     entities: List[Entity]
     players: List[Player]
+
+    heldItems: dict[int, Stack]
+    craftSlots: dict[int, List[Slot]]
 
     breakingBlock: float
     breakingBlockPos: BlockPos
@@ -18,6 +29,9 @@ class ServerState:
 
     teleportId: int
     nextEntityId: int
+
+    nextWindowId: int
+    openWindows: dict[int, Window]
 
     time: int
 
@@ -33,8 +47,13 @@ class ServerState:
     def __init__(self):
         self.teleportId = 1
         self.nextEntityId = 2
+        self.nextWindowId = 1
         self.breakingBlock = 0.0
         self.breakingBlockPos = BlockPos(0, 0, 0)
+
+        self.openWindows = {}
+        self.heldItems = {}
+        self.craftSlots = {}
 
         self.tickTimes = [0.0] * 10
         self.tickTimeIdx = 0
@@ -42,6 +61,10 @@ class ServerState:
         self.time = 0
 
         self.gravity = 0.10
+    
+    def getWindowId(self):
+        self.nextWindowId += 1
+        return self.nextWindowId
     
     def getEntityId(self):
         self.nextEntityId += 1

@@ -7,7 +7,7 @@ new entities are spawned, other entities are removed, collisions occur, etc.
 from entity import Entity
 from player import Player
 from client import ClientState
-from server import ServerState
+from server import ServerState, Window
 from util import BlockPos, roundHalfUp, ChunkPos
 import util
 import world
@@ -19,9 +19,11 @@ import copy
 import random
 import network
 import resources
-from inventory import Stack
-from typing import Optional
+from inventory import Stack, Slot
+import inventory
+from typing import Optional, List, Tuple
 from quarry.types.uuid import UUID
+from quarry.types.chat import Message
 
 def sendPlayerDigging(app, action: network.DiggingAction, location: BlockPos, face: int):
     if hasattr(app, 'server'):
@@ -63,19 +65,120 @@ def sendPlayerPosition(app, x, y, z, onGround):
     else:
         network.c2sQueue.put(network.PlayerPositionC2S(x, y, z, onGround))
 
+def getSlotsInWindow(server: ServerState, windowId: int) -> Tuple[Stack, List[Slot]]:
+    if windowId == 0:
+        player = server.getLocalPlayer()
+
+        if player.entityId not in server.craftSlots:
+            server.craftSlots[player.entityId] = [Slot(canInput=False)] + [Slot() for _ in range(4)]
+        
+        # TODO: Armor slots
+        baseSlots = server.craftSlots[player.entityId] + [Slot() for _ in range(4)]
+    else:
+        window = server.openWindows[windowId]
+
+        player = None
+        for p in server.players:
+            if p.entityId == window.playerId:
+                player = p
+                break
+        
+        if player is None:
+            raise Exception(f'Window click from nonexistent player {window.playerId}')
+        
+        if window.kind == 'furnace':
+            (chunk, localPos) = server.world.getChunk(window.pos)
+            furnace: world.Furnace = chunk.tileEntities[localPos]
+
+            baseSlots = [furnace.inputSlot, furnace.fuelSlot, furnace.outputSlot] 
+        else:
+            raise Exception(f'Unknown window kind {window.kind}')
+
+    slots = baseSlots + player.inventory[9:36] + player.inventory[0:9]
+    
+    if player.entityId not in server.heldItems:
+        server.heldItems[player.entityId] = Stack('', 0)
+    
+    return (server.heldItems[player.entityId], slots)
+    
 def sendClickWindow(app, windowId: int, slotIdx: int, button: int, actionNum: int, mode: int, item, count):
     print(f'Sending window ID {windowId} and slot {slotIdx}, action {actionNum}')
 
     if hasattr(app, 'server'):
-        # TODO:
-        pass
+        server: ServerState = app.server
+
+        heldItem, slots = getSlotsInWindow(server, windowId)
+
+        if windowId == 0 or server.openWindows[windowId].kind == 'crafting':
+            prevOutput = copy.deepcopy(slots[0].stack)
+        else:
+            prevOutput = None
+
+        if mode == 0:
+            if button == 0:
+                isRight = False
+            elif button == 1:
+                isRight = True
+            else:
+                raise Exception(f'Invalid button {button} in mode 0')
+
+            inventory.onSlotClicked(heldItem, app, isRight, slots[slotIdx])
+        else:
+            raise Exception(f'Invalid mode {mode} and button {button}')
+        
+        if windowId == 0:
+            assert(prevOutput is not None)
+            craftingGuiPostClick(slots, False, app, slotIdx, prevOutput)
+        elif server.openWindows[windowId].kind == 'crafting':
+            assert(prevOutput is not None)
+            craftingGuiPostClick(slots, True, app, slotIdx, prevOutput)
+        
     else:
         network.c2sQueue.put(network.ClickWindowC2S(windowId, slotIdx, button, actionNum, mode, item, count))
 
+def craftingGuiPostClick(slots: List[Slot], is3x3: bool, app, slotIdx, prevOutput: Stack):
+    if is3x3:
+       totalCraftSlots = 9+1
+    else:
+        totalCraftSlots = 4+1
+
+    if slotIdx == 0 and prevOutput != slots[0].stack:
+        # Something was crafted
+        for slot in slots[1:totalCraftSlots]:
+            if slot.stack.amount > 0:
+                slot.stack.amount -= 1
+
+    def toid(s): return None if s.isEmpty() else s.item
+
+    rowLen = round(math.sqrt(totalCraftSlots - 1))
+
+    c = []
+
+    for rowIdx in range(rowLen):
+        row = []
+        for colIdx in range(rowLen):
+            row.append(toid(slots[1 + rowIdx * rowLen + colIdx].stack))
+        c.append(row)
+    
+    slots[0].stack = Stack('', 0)
+
+    for r in app.recipes:
+        if r.isCraftedBy(c):
+            slots[0].stack = copy.copy(r.outputs)
+            break
+    
 def sendCloseWindow(app, windowId: int):
     if hasattr(app, 'server'):
-        # TODO:
-        pass
+        server: ServerState = app.server
+
+        if windowId == 0:
+            player = server.getLocalPlayer()
+            if player.entityId in server.craftSlots:
+                craftSlots = server.craftSlots.pop(player.entityId)
+                for craftSlot in craftSlots[1:]:
+                    player.pickUpItem(app, craftSlot.stack)
+        else:
+            server.openWindows.pop(windowId)
     else:
         network.c2sQueue.put(network.CloseWindowC2S(windowId))
 
@@ -143,10 +246,40 @@ def sendPlayerMovement(app, onGround: bool):
     else:
         network.c2sQueue.put(network.PlayerMovementC2S(onGround))
 
+def syncWindowSlots(server: ServerState, windowId: int):
+    if windowId == 0:
+        # TODO:
+        raise Exception()
+    else:
+        for slotIdx, slot in enumerate(getSlotsInWindow(server, windowId)[1]):
+            if not slot.stack.isEmpty():
+                itemId = util.REGISTRY.encode('minecraft:item', 'minecraft:' + slot.stack.item)
+                network.s2cQueue.put(network.SetSlotS2C(windowId, slotIdx, itemId, slot.stack.amount))
+
+
 def sendPlayerPlacement(app, hand: int, location: BlockPos, face: int, cx: float, cy: float, cz: float, insideBlock: bool):
     if hasattr(app, 'server'):
-        player: Player = app.server.getLocalPlayer()
-        if not player.creative:
+        server: ServerState = app.server
+        player: Player = server.getLocalPlayer()
+
+        blockId = server.world.getBlock(location)
+        if blockId == 'crafting_table':
+            windowId = server.getWindowId()
+            kind = util.REGISTRY.encode('minecraft:menu', 'minecraft:crafting')
+            title = Message.from_string('Crafting Table')
+
+            server.openWindows[windowId] = Window(player.entityId, location, 'crafting')
+            network.s2cQueue.put(network.OpenWindowS2C(windowId, kind, title))
+            syncWindowSlots(server, windowId)
+        elif blockId == 'furnace':
+            windowId = server.getWindowId()
+            kind = util.REGISTRY.encode('minecraft:menu', 'minecraft:furnace')
+            title = Message.from_string('Furnace')
+
+            server.openWindows[windowId] = Window(player.entityId, location, 'furnace')
+            network.s2cQueue.put(network.OpenWindowS2C(windowId, kind, title))
+            syncWindowSlots(server, windowId)
+        elif not player.creative and blockId == 'air':
             stack = player.inventory[player.hotbarIdx].stack
             if not stack.isInfinite():
                 stack.amount -= 1
