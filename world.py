@@ -412,8 +412,6 @@ def convertBlock(block, instData):
         block = 'oak_log'
     elif block in ['dandelion', 'poppy', 'fern', 'grass', 'brown_mushroom', 'red_mushroom']:
         block = 'air'
-    elif block in ['repeater', 'redstone_wire', 'redstone_torch', 'redstone_wall_torch', 'stone_button', 'stone_pressure_plate']:
-        block = 'air'
     elif block in ['glowstone', 'dispenser', 'red_bed', 'chest', 'note_block', 'gold_block']:
         block = 'oak_planks'
     elif block.endswith('_wool'):
@@ -986,12 +984,14 @@ class Chunk:
             for faceIdx in range(0, 12, 2):
                 if not inst.visibleFaces[faceIdx]: continue
 
-                faceVertices = np.zeros((6, 9))
+                faceVertices = np.zeros((6, 12))
 
                 for l in range(6):
                     vert = CUBE_MESH_VERTICES[((faceIdx // 2) * 6 + l) * 5:][:5]
 
-                    if blockId == 'torch':
+                    tint = (1.0, 1.0, 1.0)
+
+                    if blockId in ('torch', 'redstone_torch'):
                         if faceIdx < 8:
                             uSize, vSize = 2/16, 10/16
                             uOffset, vOffset = 7/16, 0/16
@@ -999,7 +999,7 @@ class Chunk:
                             uSize, vSize = 2/16, 2/16
                             uOffset, vOffset = 7/16, 8/16
                         vert = (vert * [2/16, 10/16, 2/16, uSize, vSize]) + [0.0, -3/16, 0.0, uOffset, vOffset]
-                    elif blockId == 'wall_torch':
+                    elif blockId in ('wall_torch', 'redstone_wall_torch'):
                         if faceIdx < 8:
                             uSize, vSize = 2/16, 10/16
                             uOffset, vOffset = 7/16, 0/16
@@ -1033,8 +1033,6 @@ class Chunk:
                         vert[0] = newX
                         vert[1] = newY
                         vert[2] = newZ
- 
-                        print(f'Facing: {facing}')
                     elif blockId in ('water', 'flowing_water', 'lava', 'flowing_lava'):
                         level = int(blockState['level']) if 'level' in blockState else 0
 
@@ -1047,8 +1045,37 @@ class Chunk:
                             blockHeight = 1.0
                         
                         vert = (vert * [1.0, blockHeight, 1.0, 1.0, 1.0] - [0.0, (1 - blockHeight) / 2, 0.0, 0.0, 0.0])
-                    
+                    elif blockId == 'redstone_wire':
+                        power = int(blockState['power'])
+                        tintStr = (
+                            '#4B0000',
+                            '#6F0000',
+                            '#790000',
+                            '#820000',
+                            '#8C0000',
+                            '#970000',
+                            '#A10000',
+                            '#AB0000',
+                            '#B50000',
+                            '#BF0000',
+                            '#CA0000',
+                            '#D30000',
+                            '#DD0000',
+                            '#E70600',
+                            '#F11B00',
+                            '#FC3100',
+                        )[power]
+
+                        r = int(tintStr[1:3], 16) / 0xFF
+                        g = int(tintStr[3:5], 16) / 0xFF
+                        b = int(tintStr[5:7], 16) / 0xFF
+
+                        tint = (r, g, b)
+
+                        vert = (vert * [1.0, 1/16, 1.0, 1.0, 1.0] - [0.0, (1 - 1/16) / 2, 0.0, 0.0, 0.0])
+
                     faceVertices[l, :5] = vert
+                    faceVertices[l, 9:12] = tint
 
                 adjBlockPos = adjacentBlockPos(BlockPos(bx, by, bz), faceIdx)
                 (ckPos, ckLocal) = toChunkLocal(self._globalBlockPos(adjBlockPos))
@@ -1063,6 +1090,15 @@ class Chunk:
                         lightLevel = 15
                         blockLightLevel = 0
 
+                atlasIdx = instData[2][blockId][faceIdx // 2]
+                if blockId == 'redstone_wire':
+                    east = blockState['east'] != 'none'
+                    north = blockState['north'] != 'none'
+                    south = blockState['south'] != 'none'
+                    west = blockState['west'] != 'none'
+
+                    atlasIdx += east * 8 + north * 4 + south * 2 + west
+
                 offsetArr = [
                     bx + self.pos.x * 16, by + self.pos.y * CHUNK_HEIGHT, bz + self.pos.z * 16,
                     0.0, 0.0,
@@ -1070,7 +1106,11 @@ class Chunk:
                     # Block index
                     bx * 16 * MESH_HEIGHT + (by % MESH_HEIGHT) * 16 + bz,
                     # Texture atlas index
-                    instData[2][blockId][faceIdx // 2]
+                    atlasIdx,
+                    # Tint
+                    0.0,
+                    0.0,
+                    0.0
                 ]
 
                 faceVertices += offsetArr
@@ -1111,23 +1151,26 @@ class Chunk:
         glBindBuffer(GL_ARRAY_BUFFER, vbo)
         glBufferData(GL_ARRAY_BUFFER, usedVertices.nbytes, usedVertices, GL_DYNAMIC_DRAW)
 
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * 4, ctypes.c_void_p(0))
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(0))
         glEnableVertexAttribArray(0)
 
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 9 * 4, ctypes.c_void_p(3 * 4))
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(3 * 4))
         glEnableVertexAttribArray(1)
 
-        glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 9 * 4, ctypes.c_void_p(5 * 4))
+        glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(5 * 4))
         glEnableVertexAttribArray(2)
 
-        glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 9 * 4, ctypes.c_void_p(6 * 4))
+        glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(6 * 4))
         glEnableVertexAttribArray(3)
 
-        glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, 9 * 4, ctypes.c_void_p(7 * 4))
+        glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(7 * 4))
         glEnableVertexAttribArray(4)
 
-        glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, 9 * 4, ctypes.c_void_p(8 * 4))
+        glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(8 * 4))
         glEnableVertexAttribArray(5)
+
+        glVertexAttribPointer(6, 3, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(9 * 4))
+        glEnableVertexAttribArray(6)
 
         glBindBuffer(GL_ARRAY_BUFFER, 0)
 
@@ -1394,11 +1437,11 @@ class World:
             if self.importPath != '':
                 f.write(f"importPath={self.importPath}\n")
     
-    def setBlock(self, instData, blockPos: BlockPos, blockId: BlockId, blockState: Optional[BlockState] = None, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False):
+    def setBlock(self, instData, blockPos: BlockPos, blockId: BlockId, blockState: Optional[BlockState] = None, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False, doBlockUpdates=True):
         (chunk, ckLocal) = self.getChunk(blockPos)
 
         #chunk.setBlock(self, instData, ckLocal, blockId, blockState, doUpdateLight, doUpdateBuried, doUpdateMesh)
-        chunk.setBlock(self, instData, ckLocal, blockId, blockState, False, doUpdateBuried, doUpdateMesh)
+        chunk.setBlock(self, instData, ckLocal, blockId, blockState, False, doUpdateBuried, doUpdateMesh, doBlockUpdates)
         self.dirtyLights.add(blockPos)
 
     def getBlock(self, blockPos: BlockPos) -> str:
@@ -1454,16 +1497,24 @@ class World:
 
             if not keepGoing:
                 break
+    
+    def flushLightChanges(self):
+        if self.dirtyLights != set():
+            try:
+                self.updateLight2(self.dirtyLights, False)
+                self.updateLight2(self.dirtyLights, True)
+            except Exception as e:
+                print(f'Ignoring exception in flushLightChanges {e}')
+                
+            self.dirtyLights = set()
         
     def tickChunks(self, app):
         for chunk in self.chunks.values():
             if chunk.isTicking:
                 chunk.tick(app, self)
         
-        self.updateLight2(self.dirtyLights, False)
-        self.updateLight2(self.dirtyLights, True)
-        self.dirtyLights = set()
-    
+        self.flushLightChanges()
+        
     def loadUnloadChunks(self, centerPos, instData):
         (chunkPos, _) = toChunkLocal(nearestBlockPos(centerPos[0], centerPos[1], centerPos[2]))
         (x, _, z) = chunkPos
@@ -2028,10 +2079,10 @@ class World:
     # app.instances[idx] = [Instance(app.cube, np.array([[modelX], [modelY], [modelZ]]), texture), False]
 
 def isSolid(block: BlockId):
-    return block not in ['torch', 'wall_torch', 'air', 'water', 'flowing_water', 'lava', 'flowing_lava']
+    return block not in ['torch', 'wall_torch', 'redstone_torch', 'redstone_wall_torch', 'redstone_wire', 'air', 'water', 'flowing_water', 'lava', 'flowing_lava']
 
 def isOpaque(block: BlockId):
-    return block not in ['torch', 'wall_torch', 'air', 'water', 'flowing_water', 'lava', 'flowing_lava']
+    return block not in ['torch', 'wall_torch', 'redstone_torch', 'redstone_wall_torch', 'redstone_wire', 'air', 'water', 'flowing_water', 'lava', 'flowing_lava']
 
 def getLuminance(block: BlockId):
     if block in ('glowstone', 'lava', 'flowing_lava'):

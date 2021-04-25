@@ -486,11 +486,11 @@ def drawChatHistory(app, client: ClientState, canvas, useAge=True):
 
             if msgStr.startswith('chat.type.announcement'):
                 msgStr = msgStr.removeprefix('chat.type.announcement')[1:-1]
-                name, text = msgStr.split(', ')
+                name, text = msgStr.split(', ', 1)
                 msgStr = f'[{name}] {text}'
             elif msgStr.startswith('chat.type.text'):
                 msgStr = msgStr.removeprefix('chat.type.text')[1:-1]
-                name, text = msgStr.split(', ')
+                name, text = msgStr.split(', ', 1)
                 msgStr = f'<{name}> {text}'
 
             canvas.create_text(0, y, text=msgStr, anchor='w')
@@ -670,7 +670,7 @@ class PlayingMode(Mode):
             else:
                 if stack.amount == 0: return
 
-                if stack.item in app.textures:
+                if stack.item in app.textures or stack.item == 'redstone':
                     if stack.amount > 0:
                         stack.amount -= 1
                     
@@ -689,6 +689,29 @@ class PlayingMode(Mode):
                                 placedState = { 'facing': 'north' }
                             else:
                                 placedState = { 'facing': 'south' }
+                    elif stack.item == 'redstone_torch':
+                        if face in ('top', 'bottom'):
+                            placedId = 'redstone_torch'
+                            placedState = {}
+                        else:
+                            placedId = 'redstone_wall_torch'
+                            if face == 'left':
+                                placedState = { 'facing': 'west' }
+                            elif face == 'right':
+                                placedState = { 'facing': 'east' }
+                            elif face == 'front':
+                                placedState = { 'facing': 'north' }
+                            else:
+                                placedState = { 'facing': 'south' }
+                    elif stack.item == 'redstone':
+                        placedId = 'redstone_wire'
+                        placedState = {
+                            'east': 'none',
+                            'north': 'none',
+                            'south': 'none',
+                            'west': 'none',
+                            'power': '0',
+                        }
                     else:
                         placedId = stack.item
                         placedState = {}
@@ -984,7 +1007,7 @@ def handleS2CPackets(mode, app, client: ClientState):
                 else:
                     entIdx += 1
         elif isinstance(packet, network.UpdateLightS2C):
-            print(f'Light update at {packet.chunkX} {packet.chunkZ}, trust edges: {packet.trustEdges}')
+            #print(f'Light update at {packet.chunkX} {packet.chunkZ}, trust edges: {packet.trustEdges}')
 
             # TODO:
 
@@ -1008,6 +1031,9 @@ def handleS2CPackets(mode, app, client: ClientState):
                     chunk.blockLightLevels[:, (idx-1)*16:idx*16, :] = 0
 
         elif isinstance(packet, network.MultiBlockChangeS2C):
+            if ChunkPos(packet.chunkX, 0, packet.chunkZ) not in client.world.chunks:
+                continue
+
             chunk = client.world.chunks[ChunkPos(packet.chunkX, 0, packet.chunkZ)]
 
             for blockStateId, pos in packet.blocks:
@@ -1017,7 +1043,7 @@ def handleS2CPackets(mode, app, client: ClientState):
 
                 pos = BlockPos(pos.x, pos.y + packet.chunkSectionY * 16, pos.z)
 
-                chunk.setBlock(client.world, (app.textures, app.cube, app.textureIndices), pos, blockId, blockStateId)
+                chunk.setBlock(client.world, (app.textures, app.cube, app.textureIndices), pos, blockId, blockStateId, doBlockUpdates=False)
 
         elif isinstance(packet, network.BlockChangeS2C):
             blockStateId = util.REGISTRY.decode_block(packet.blockId)
@@ -1026,9 +1052,9 @@ def handleS2CPackets(mode, app, client: ClientState):
 
             try:
                 if not client.local:
-                    client.world.setBlock((app.textures, app.cube, app.textureIndices), packet.location, blockId, blockStateId)
-            except KeyError:
-                pass
+                    client.world.setBlock((app.textures, app.cube, app.textureIndices), packet.location, blockId, blockStateId, doBlockUpdates=False)
+            except KeyError as e:
+                print(f'Ignoring exception when handling BlockChange packet: {e}')
         elif isinstance(packet, network.WindowConfirmationS2C):
             print(packet)
         elif isinstance(packet, network.OpenWindowS2C):
@@ -1039,6 +1065,13 @@ def handleS2CPackets(mode, app, client: ClientState):
             app.mode.overlay = InventoryMode(app, packet.windowId, windowName)
         elif isinstance(packet, network.ChatMessageS2C):
             app.client.chat.append((time.time(), packet.data))
+        elif isinstance(packet, network.JoinGameS2C):
+            # TODO:
+            pass
+        elif isinstance(packet, network.RespawnS2C):
+            print(f'RESPAWN: {packet.worldName}, {packet.dimension}')
+            app.client.world.chunks = {}
+            app.client.world.serverChunks = {}
         elif packet is None:
             raise Exception("Disconnected")
 
@@ -1423,7 +1456,7 @@ def appStarted(app):
     #def makeTitleMode(app, _player): return TitleMode(app)
     #app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
     def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'world', True, makePlayingMode, seed=random.randint(0, 2**31))
+    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     # ---------------
@@ -1488,7 +1521,7 @@ def updateBlockBreaking(app, mode: PlayingMode):
             resources.getDigSound(app, blockId).play()
 
             if not app.client.local:
-                app.client.world.setBlock((app.textures, app.cube, app.textureIndices), pos, 'air')
+                app.client.world.setBlock((app.textures, app.cube, app.textureIndices), pos, 'air', doBlockUpdates=False)
     else:
         if app.breakingBlock > 0.0:
             # FIXME: Face

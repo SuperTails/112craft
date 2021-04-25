@@ -5,6 +5,7 @@ out vec4 FragColor;
 //in vec3 ourColor;
 in vec2 FaceTexCoord;
 in vec2 AtlasTexCoord;
+in vec3 Tint;
 
 in float breakColor;
 in float light;
@@ -22,7 +23,13 @@ void main() {
     //FragColor = vertexColor;
     //FragColor = vec4(ourColor, 1.0);
 
-    vec3 c = texture(blockTexture, AtlasTexCoord).rgb;
+    vec4 blockColor = texture(blockTexture, AtlasTexCoord);
+
+    if (blockColor.a == 0.0) {
+        discard;
+    }
+
+    vec3 c = blockColor.rgb;
 
     vec4 d = texture(breakTexture, FaceTexCoord);
 
@@ -40,7 +47,9 @@ void main() {
 
     float light2 = 0.18 + pow(totalLight / 16.0, 1.5);
 
-    FragColor = vec4(baseColor * light2, 1.0);
+    vec3 tintedColor = baseColor * Tint;
+
+    FragColor = vec4(tintedColor * light2, 1.0);
 
     //FragColor = vec4(0.5, 1.0, 1.0, 1.0);
 }

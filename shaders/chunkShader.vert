@@ -6,6 +6,7 @@ layout (location = 2) in float aLight;
 layout (location = 3) in float aBlockLight;
 layout (location = 4) in float aBlockIdx;
 layout (location = 5) in float aAtlasIdx;
+layout (location = 6) in vec3 aTint;
 
 uniform mat4 view;
 uniform mat4 projection;
@@ -16,6 +17,7 @@ uniform float atlasWidth;
 
 out vec2 AtlasTexCoord;
 out vec2 FaceTexCoord;
+out vec3 Tint;
 
 out float breakColor;
 out float light;
@@ -40,4 +42,5 @@ void main() {
 
     light = aLight;
     blockLight = aBlockLight;
+    Tint = aTint;
 }

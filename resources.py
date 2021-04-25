@@ -633,8 +633,11 @@ def loadTextureAtlas(app):
 
     totalUnique = 0
 
-    for (_, sides) in app.texturePaths.items():
-        totalUnique += len(getFacesUsedForTexture(**sides))
+    for (name, sides) in app.texturePaths.items():
+        if name == 'redstone_wire':
+            totalUnique += 16
+        else:
+            totalUnique += len(getFacesUsedForTexture(**sides))
 
     width = 16 * totalUnique
 
@@ -648,10 +651,47 @@ def loadTextureAtlas(app):
 
         app.textureIndices[name] = [idx + texNames.index(name) for name in indices]
 
-        for name in texNames:
-            im = app.rePack.getBlockTex(name)
-            atlas.paste(im, (idx * 16, 0))
-            idx += 1
+        if name == 'redstone_wire':
+            print(f'Names are {texNames}, indices are {app.textureIndices[name]}')
+            crossIm = app.rePack.getBlockTex('redstone_dust_cross')
+            lineIm = app.rePack.getBlockTex('redstone_dust_line')
+            for east in [False, True]:
+                for north in [False, True]:
+                    for south in [False, True]:
+                        for west in [False, True]:
+
+                            if east and west and not south and not north:
+                                myIm: Image.Image = lineIm.copy()
+                            elif north and south and not east and not west:
+                                myIm: Image.Image = lineIm.copy()
+                                myIm = myIm.rotate(90.0)
+                            else:
+                                myIm: Image.Image = crossIm.copy()
+
+                                if not west:
+                                    for x in range(0, 5):
+                                        for y in range(0, 16):
+                                            myIm.putpixel((x, y), 0)
+                                if not east:
+                                    for x in range(16 - 5, 16):
+                                        for y in range(0, 16):
+                                            myIm.putpixel((x, y), 0)
+                                if not south:
+                                    for x in range(0, 16):
+                                        for y in range(0, 5):
+                                            myIm.putpixel((x, y), 0)
+                                if not north:
+                                    for x in range(0, 16):
+                                        for y in range(16 - 5, 16):
+                                            myIm.putpixel((x, y), 0)
+
+                            atlas.paste(myIm, (idx * 16, 0))
+                            idx += 1
+        else:
+            for name in texNames:
+                im = app.rePack.getBlockTex(name)
+                atlas.paste(im, (idx * 16, 0))
+                idx += 1
     
     CLIENT_DATA.atlasWidth = width
         
@@ -826,6 +866,9 @@ def loadSounds(app):
         'oak_planks': 'wood',
         'torch': 'wood',
         'wall_torch': 'wood',
+        'redstone_torch': 'wood',
+        'redstone_wall_torch': 'wood',
+        'redstone_wire': 'stone',
         'crafting_table': 'wood',
     }
 
@@ -878,6 +921,9 @@ def loadResources(app):
         'flowing_water': { 'all': 'water_placeholder' },
         'lava': { 'all': 'lava_placeholder' },
         'flowing_lava': { 'all': 'lava_placeholder' },
+        'redstone_wire': { 'all': 'redstone_dust_cross' },
+        'redstone_torch': { 'all': 'redstone_torch_on' },
+        'redstone_wall_torch': { 'all': 'redstone_torch_on' },
     }
 
     app.hardnesses = {
@@ -897,7 +943,10 @@ def loadResources(app):
         'crafting_table': ('axe', 2.0),
         'bedrock': (None, float('inf')),
         'torch': (None, 0.1),
+        'redstone_torch': (None, 0.1),
         'wall_torch': (None, 0.1),
+        'redstone_wall_torch': (None, 0.1),
+        'redstone_wire': (None, 0.1),
     }
 
     global HARDNESSES
@@ -922,6 +971,9 @@ def loadResources(app):
         'glowstone': { '': 'glowstone' },
         'torch': { '': 'torch' },
         'wall_torch': { '': 'torch' },
+        'redstone_torch': { '', 'redstone_torch' },
+        'redstone_wall_torch': { '', 'redstone_torch' },
+        'redstone_wire': { '', 'redstone' },
     }
 
     loadTkTextures(app)
@@ -1108,7 +1160,8 @@ def loadResources(app):
         'torch': Image.open('assets/Vanilla_Resource_Pack_1.16.220/textures/blocks/torch_on.png'),
         'bucket': app.rePack.getItemTex('bucket_empty'),
         'lava_bucket': app.rePack.getItemTex('bucket_lava'),
-        'water_bucket': app.rePack.getItemTex('bucket_water')
+        'water_bucket': app.rePack.getItemTex('bucket_water'),
+        'flint_and_steel': app.rePack.getItemTex('flint_and_steel'),
     }
 
     app.tkItemTextures = copy.copy(commonItemTextures)

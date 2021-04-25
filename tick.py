@@ -360,6 +360,8 @@ def clientTick(client: ClientState, instData):
     if not client.local:
         client.world.loadUnloadChunks(client.player.pos, instData)
         client.world.addChunkDetails(instData)
+    
+    client.world.flushLightChanges()
 
     player: Player = client.player
 

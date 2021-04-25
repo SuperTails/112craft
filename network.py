@@ -721,6 +721,81 @@ class SpawnPlayerS2C:
         pitch = 2*math.pi*pitch/256
 
         return cls(entityId, playerUUID, x-0.5, y-0.5, -(z+0.5), yaw, pitch)
+ 
+@dataclass
+class DimensionType:
+    piglinSafe: bool
+    natural: bool
+    ambientLight: float
+    fixedTime: Optional[int]
+    infiniburn: str
+    respawnAnchorWorks: bool
+    hasSkylight: bool
+    bedWorks: bool
+    effects: str
+    hasRaids: bool
+    logicalHeight: int
+    coordScale: float
+    ultrawarm: bool
+    hasCeiling: bool
+
+@dataclass
+class JoinGameS2C:
+    entityId: int
+    hardcore: bool
+    gamemode: int
+    prevGamemode: Optional[int]
+    worldNames: List[str]
+    dimensionCodec: Any
+    dimension: Any
+    worldName: str
+    seedHash: int
+    maxPlayers: int
+    viewDistance: int
+    reducedInfo: bool
+    enableRespawn: bool
+    isDebug: bool
+    isFlat: bool
+
+    @classmethod
+    def fromBuf(cls, buf):
+        entityId, hardcore, gamemode, prevGamemode = buf.unpack('i?Bb')
+        if prevGamemode == -1:
+            prevGamemode = None
+
+        worldNames = [buf.unpack_string() for _ in range(buf.unpack_varint())]
+
+        dimensionCodec = buf.unpack_nbt()
+        dimension = buf.unpack_nbt()
+        worldName = buf.unpack_string()
+        seedHash = buf.unpack('q')
+        maxPlayers = buf.unpack_varint()
+        viewDistance = buf.unpack_varint()
+        reducedInfo, enableRespawn, isDebug, isFlat = buf.unpack('????')
+
+        return cls(entityId, hardcore, gamemode, prevGamemode, worldNames,
+            dimensionCodec, dimension, worldName, seedHash, maxPlayers,
+            viewDistance, reducedInfo, enableRespawn, isDebug, isFlat)
+    
+@dataclass
+class RespawnS2C:
+    dimension: Any
+    worldName: str
+    seedHash: int
+    gamemode: int
+    prevGamemode: Optional[int]
+    isDebug: bool
+    isFlat: bool
+    copyMetadata: bool
+
+    @classmethod
+    def fromBuf(cls, buf):
+        dimension = buf.unpack_nbt()
+        worldName = buf.unpack_string()
+        seedHash, gamemode, prevGamemode, isDebug, isFlag, copyMetadata = buf.unpack('qBB???')
+
+        return cls(dimension, worldName, seedHash, gamemode, prevGamemode, isDebug, isFlag, copyMetadata)
+
 
 printI = 0
 
@@ -762,6 +837,10 @@ class MinecraftProtocol(ClientProtocol):
         self.mainLoop = self.ticker.add_loop(1, doTick)
         self.ticker.start()
     
+    def packet_join_game(self, buf):
+        s2cQueue.put(JoinGameS2C.fromBuf(buf))
+        buf.discard()
+    
     def packet_multi_block_change(self, buf):
         s2cQueue.put(MultiBlockChangeS2C.fromBuf(buf))
         buf.discard()
@@ -777,6 +856,10 @@ class MinecraftProtocol(ClientProtocol):
             # Sometimes the server's first packet is all zeros.
             # No idea why.
             pass
+        buf.discard()
+    
+    def packet_respawn(self, buf):
+        s2cQueue.put(RespawnS2C.fromBuf(buf))
         buf.discard()
     
     def packet_spawn_player(self, buf):
