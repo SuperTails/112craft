@@ -703,6 +703,8 @@ class PlayingMode(Mode):
                                 placedState = { 'facing': 'north' }
                             else:
                                 placedState = { 'facing': 'south' }
+                        
+                        placedState['lit'] = 'true'
                     elif stack.item == 'redstone':
                         placedId = 'redstone_wire'
                         placedState = {

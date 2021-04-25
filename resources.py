@@ -636,6 +636,10 @@ def loadTextureAtlas(app):
     for (name, sides) in app.texturePaths.items():
         if name == 'redstone_wire':
             totalUnique += 16
+        if name == 'redstone_torch':
+            totalUnique += 2
+        elif name == 'redstone_wall_torch':
+            totalUnique += 2
         else:
             totalUnique += len(getFacesUsedForTexture(**sides))
 
@@ -687,6 +691,11 @@ def loadTextureAtlas(app):
 
                             atlas.paste(myIm, (idx * 16, 0))
                             idx += 1
+        elif name in ('redstone_torch', 'redstone_wall_torch'):
+            for name in ('redstone_torch_on', 'redstone_torch_off'):
+                im = app.rePack.getBlockTex(name)
+                atlas.paste(im, (idx * 16, 0))
+                idx += 1
         else:
             for name in texNames:
                 im = app.rePack.getBlockTex(name)

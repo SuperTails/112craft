@@ -1098,6 +1098,9 @@ class Chunk:
                     west = blockState['west'] != 'none'
 
                     atlasIdx += east * 8 + north * 4 + south * 2 + west
+                elif blockId in ('redstone_torch', 'redstone_wall_torch'):
+                    if blockState['lit'] == 'false':
+                        atlasIdx += 1
 
                 offsetArr = [
                     bx + self.pos.x * 16, by + self.pos.y * CHUNK_HEIGHT, bz + self.pos.z * 16,
