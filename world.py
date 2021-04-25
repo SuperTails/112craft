@@ -428,6 +428,66 @@ def convertBlock(block, instData):
     
     return block
 
+def getWireConnections(pos: BlockPos, world: 'World'):
+    def connectable(blockId):
+        return blockId in ('redstone_wire', 'redstone_torch', 'redstone_wall_torch')
+
+    def connectableVert(blockId):
+        return blockId == 'redstone_wire'
+
+    state = {}
+    for dirName, dx, dz in (('west', -1, 0), ('east', 1, 0), ('south', 0, -1), ('north', 0, 1)):
+        conn = 'none'
+
+        horizPos = BlockPos(pos.x + dx, pos.y, pos.z + dz)
+
+        if world.coordsOccupied(horizPos, connectable):
+            conn = 'side'
+        else:
+            downPos = BlockPos(horizPos.x, horizPos.y - 1, horizPos.z)
+            if not world.coordsOccupied(horizPos) and world.coordsOccupied(downPos, connectableVert):
+                conn = 'down'
+            else:
+                corner = BlockPos(pos.x, pos.y + 1, pos.z)
+                upPos = BlockPos(horizPos.x, horizPos.y + 1, horizPos.z)
+                if not world.coordsOccupied(corner) and world.coordsOccupied(upPos, connectableVert):
+                    conn = 'up'
+                
+        state[dirName] = conn
+    
+    cnt = (state['east'] != 'none') + (state['west'] != 'none') + (state['north'] != 'none') + (state['south'] != 'none')
+    if cnt == 1:
+        if state['east'] != 'none':
+            state['west'] = 'side'
+        elif state['west'] != 'none':
+            state['east'] = 'side'
+        elif state['north'] != 'none':
+            state['south'] = 'side'
+        elif state['south'] != 'none':
+            state['north'] = 'side'
+    
+    return state
+    
+def updateRedstoneWire(pos: BlockPos, world: 'World', instData):
+    state = world.getBlockState(pos)
+
+    newConns = getWireConnections(pos, world)
+
+    connsChanged = False
+
+    for name, val in newConns.items():
+        if val == 'down':
+            val = 'side'
+
+        if state[name] != val:
+            connsChanged = True
+            state[name] = val
+
+    powerChanged = False
+    
+    if connsChanged or powerChanged:
+        world.setBlock(instData, pos, 'redstone_wire', state, doBlockUpdates=powerChanged)
+
 
 class Chunk:
     pos: ChunkPos
@@ -512,9 +572,10 @@ class Chunk:
                         self.setBlock(world, instData, blockPos, 'obsidian')
                     else:
                         self.setBlock(world, instData, blockPos, 'cobblestone')
-
             
             self.requestScheduledTick(blockPos, 30)
+        elif blockId == 'redstone_wire':
+            updateRedstoneWire(self._globalBlockPos(blockPos), world, instData)
         
     def doScheduledTick(self, app, world: 'World', blockPos: BlockPos):
         instData = (app.textures, app.cube, app.textureIndices)
@@ -1303,14 +1364,35 @@ class Chunk:
             self.tileEntities[blockPos] = Furnace(blockPos)
 
         if doBlockUpdates:
-            self.doBlockUpdate(instData, world, blockPos)
-            
-            globalPos = self._globalBlockPos(blockPos)
-            for faceIdx in range(0, 12, 2):
-                adjPos = adjacentBlockPos(globalPos, faceIdx)
+            if blockId == 'redstone_wire':
+                self.doBlockUpdate(instData, world, blockPos)
+
+                toUpdate = set()
+
+                for faceIdx1 in range(0, 12, 2):
+                    adjPos1 = adjacentBlockPos(blockPos, faceIdx1)
+                    toUpdate.add(adjPos1)
+                    for faceIdx2 in range(0, 12, 2):
+                        adjPos2 = adjacentBlockPos(adjPos1, faceIdx2)
+                        if adjPos2 != blockPos:
+                            toUpdate.add(adjPos2)
                 
-                (chunk, localPos) = world.getChunk(adjPos)
-                chunk.doBlockUpdate(instData, world, localPos)
+                for adjPos2 in toUpdate:
+                    globalPos = self._globalBlockPos(adjPos2)
+
+                    print(f'Updating at {globalPos}')
+
+                    (chunk, localPos) = world.getChunk(globalPos)
+                    chunk.doBlockUpdate(instData, world, localPos)
+            else:
+                self.doBlockUpdate(instData, world, blockPos)
+                
+                globalPos = self._globalBlockPos(blockPos)
+                for faceIdx in range(0, 12, 2):
+                    adjPos = adjacentBlockPos(globalPos, faceIdx)
+                    
+                    (chunk, localPos) = world.getChunk(adjPos)
+                    chunk.doBlockUpdate(instData, world, localPos)
         
         '''
         for faceIdx in range(0, 12, 2):

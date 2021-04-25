@@ -674,7 +674,6 @@ class PlayingMode(Mode):
                     if stack.amount > 0:
                         stack.amount -= 1
                     
-                    
                     if stack.item == 'torch':
                         if face in ('top', 'bottom'):
                             placedId = 'torch'
@@ -1458,7 +1457,7 @@ def appStarted(app):
     #def makeTitleMode(app, _player): return TitleMode(app)
     #app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
     def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
+    app.mode = WorldLoadMode(app, 'world', True, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     # ---------------

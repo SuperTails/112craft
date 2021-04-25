@@ -980,9 +980,9 @@ def loadResources(app):
         'glowstone': { '': 'glowstone' },
         'torch': { '': 'torch' },
         'wall_torch': { '': 'torch' },
-        'redstone_torch': { '', 'redstone_torch' },
-        'redstone_wall_torch': { '', 'redstone_torch' },
-        'redstone_wire': { '', 'redstone' },
+        'redstone_torch': { '': 'redstone_torch' },
+        'redstone_wall_torch': { '': 'redstone_torch' },
+        'redstone_wire': { '': 'redstone' },
     }
 
     loadTkTextures(app)
