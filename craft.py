@@ -1238,7 +1238,7 @@ class CraftingTableGui(ContainerGui):
     
     def postClick(self, app, slotIdx):
         craftingGuiPostClick(self, app, slotIdx)
-
+    
 class PauseMode(Mode):
     submode: PlayingMode
     buttons: ButtonManager

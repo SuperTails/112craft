@@ -331,6 +331,14 @@ def sendChatMessage(app, text: str):
                 ent = Entity(app, server.getEntityId(), parts[1],
                     player.pos[0]+0.5, player.pos[1]+0.5, player.pos[2]+0.5)
                 app.entities.append(ent)
+            elif parts[0] == 'explode':
+                power = int(parts[1])
+
+                player = server.getLocalPlayer()
+
+                pos = world.nearestBlockPos(player.pos[0], player.pos[1], player.pos[2])
+
+                server.world.explodeAt(pos, power, (app.textures, app.cube, app.textureIndices))
             elif parts[0] == 'tp':
                 # TODO:
                 '''

@@ -1574,6 +1574,60 @@ class World:
         (chunkPos, localPos) = toChunkLocal(blockPos)
         return self.chunks[chunkPos].blockStates[localPos.x, localPos.y, localPos.z]
     
+    def explodeAt(self, blockPos: BlockPos, power: int, instData):
+        exploded = set()
+
+        # https://minecraft.fandom.com/wiki/Explosion
+        for d1 in range(-8, 8):
+            for d2 in range(-8, 8):
+                exploded |= self.explodeRay(blockPos, d1, d2, -8, power)
+                exploded |= self.explodeRay(blockPos, d1, d2,  8, power)
+
+                exploded |= self.explodeRay(blockPos, d1, -8, d2, power)
+                exploded |= self.explodeRay(blockPos, d1,  8, d2, power)
+
+                exploded |= self.explodeRay(blockPos, -8, d1, d2, power)
+                exploded |= self.explodeRay(blockPos,  8, d1, d2, power)
+
+        for exp in exploded:
+            self.setBlock(instData, exp, 'air', {})
+    
+    def explodeRay(self, startPos: BlockPos, dx, dy, dz, power: int) -> set[BlockPos]:
+        strength = power * (0.7 + random.random() * 0.6)
+
+        mag = math.sqrt(dx**2 + dy**2 + dz**2)
+
+        x, y, z = startPos.x, startPos.y, startPos.z
+
+        xChange = dx * 0.3 / mag
+        yChange = dy * 0.3 / mag
+        zChange = dz * 0.3 / mag
+
+        exploded = set()
+
+        while strength > 0.0:
+            if strength <= 0.0:
+                break
+        
+            x += xChange
+            y += yChange
+            z += zChange
+
+            strength -= 0.3 * 0.75
+
+            curPos = nearestBlockPos(x, y, z)
+
+            blockId = self.getBlock(curPos)
+            if blockId != 'air':
+                resist = getBlastResistance(blockId)
+
+                strength -= (resist + 0.3) * 0.3
+
+                if strength > 0.0:
+                    exploded.add(curPos)
+        
+        return exploded
+        
     def hasBlockBeneath(self, entity):
         [xPos, yPos, zPos] = entity.pos
         yPos -= 0.1
@@ -2401,6 +2455,33 @@ class World:
 
 
     # app.instances[idx] = [Instance(app.cube, np.array([[modelX], [modelY], [modelZ]]), texture), False]
+
+def getBlastResistance(block: BlockId):
+    if block == 'grass':
+        return 0.6
+    elif block == 'dirt':
+        return 0.5
+    elif block in ('stone', 'cobblestone'):
+        return 6.0
+    elif block.endswith('_leaves'):
+        return 0.2
+    elif block.endswith('_log'):
+        return 2.0
+    elif block.endswith('_planks'):
+        return 3.0
+    elif block in ('water', 'lava', 'flowing_water', 'flowing_lava'):
+        return 100.0
+    elif block == 'bedrock':
+        return 1e6
+    elif block == 'crafting_table':
+        return 2.5
+    elif block == 'furnace':
+        return 3.5
+    elif block.endswith('_ore'):
+        return 3.0
+    else:
+        return 6.0
+    
 
 def isSolid(block: BlockId):
     return block not in ['torch', 'wall_torch', 'redstone_torch', 'redstone_wall_torch', 'redstone_wire',
