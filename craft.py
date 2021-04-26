@@ -854,12 +854,9 @@ def handleS2CPackets(mode, app, client: ClientState):
         elif isinstance(packet, network.AckPlayerDiggingS2C):
             print(packet)
         elif isinstance(packet, network.SpawnEntityS2C):
-            if packet.kind == 37:
-                kind = 'item'
-            else:
-                kind = None
-            
-            if kind is None:
+            kind = util.REGISTRY.decode('minecraft:entity_type', packet.kind).removeprefix('minecraft:')
+
+            if kind not in ['item', 'tnt']:
                 print(f'Ignoring entity kind {packet.kind}')
             else:
                 print(f'Adding entity {kind} with ID {packet.entityId}')
@@ -954,6 +951,8 @@ def handleS2CPackets(mode, app, client: ClientState):
                                 itemId = util.REGISTRY.decode('minecraft:item', value['item']).removeprefix('minecraft:')
                                 print(itemId)
                                 ent.extra.stack = Stack(itemId, value['count'])
+                        elif idx == 7 and ent.kind.name == 'tnt':
+                            ent.extra.fuse = value
                         else:
                             # TODO:
                             pass
@@ -1412,7 +1411,7 @@ def appStarted(app):
     #def makeTitleMode(app, _player): return TitleMode(app)
     #app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
     def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'world', True, makePlayingMode, seed=random.randint(0, 2**31))
+    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     # ---------------

@@ -518,7 +518,6 @@ class ItemData:
         if self.pickupDelay > 0: 
             self.pickupDelay -= 1
 
-
     def toNbt(self) -> nbt.TAG_Compound:
         tag = nbt.TAG_Compound()
         tag.tags.append(nbt.TAG_Short(self.age, 'Age'))
@@ -535,6 +534,28 @@ class ItemData:
         self.age = tag['Age'].value
         self.pickupDelay = tag['PickupDelay'].value
         self.stack = Stack.fromNbt(tag['Item'])
+
+class TntData:
+    fuse: int
+
+    def __init__(self):
+        self.fuse = 80
+    
+    def tick(self, entity: 'Entity'):
+        self.fuse -= 1
+
+        if self.fuse <= 0:
+            # TODO:
+            raise Exception()
+    
+    def toNbt(self) -> nbt.TAG_Compound:
+        tag = nbt.TAG_Compound()
+        tag.tags.append(nbt.TAG_Short(self.fuse, 'Fuse'))
+
+        return tag
+    
+    def fromNbt(self, tag: nbt.TAG_Compound):
+        self.fuse = tag['Fuse'].value
 
 @dataclass
 class EntityKind:
@@ -602,7 +623,7 @@ def registerEntityKinds(app):
             walkSpeed=0.2,
             radius=0.3,
             height=1.5,
-            ai=Ai([NullTask()])
+            ai=Ai([NullTask()]),
         ),
         'item': EntityKind(
             name='item',
@@ -613,6 +634,16 @@ def registerEntityKinds(app):
             height=0.2,
             ai=Ai([NullTask()]),
             extraData=ItemData(),
+        ),
+        'tnt': EntityKind(
+            name='tnt',
+            model='geometry.tnt',
+            maxHealth=20.0,
+            walkSpeed=0.0,
+            radius=0.5,
+            height=1.0,
+            ai=Ai([NullTask()]),
+            extraData=TntData(),
         ),
     }
 
@@ -758,6 +789,8 @@ class Entity:
     def getRotations(self, data) -> List[List[float]]:
         if self.kind.name == 'item':
             return [[0.0, self.lifeTime / 10.0, 0.0]]
+        elif self.kind.name == 'tnt':
+            return [[0.0, 0.0, 0.0]]
         
         renderData: EntityRenderData = data.entityRenderData[self.kind.name]
 

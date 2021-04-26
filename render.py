@@ -484,6 +484,8 @@ def drawEntities(client: ClientState, view, projection):
 
         if entity.kind.name == 'item':
             model = CLIENT_DATA.entityModels['geometry.item']
+        elif entity.kind.name == 'tnt':
+            model = CLIENT_DATA.entityModels['geometry.tnt']
         else:
             model = CLIENT_DATA.entityModels[CLIENT_DATA.entityRenderData[entity.kind.name].geometry['default']]
 
@@ -494,6 +496,8 @@ def drawEntities(client: ClientState, view, projection):
             else:
                 # FIXME: Items without a block form
                 texture = CLIENT_DATA.glTextures['stone']
+        elif entity.kind.name == 'tnt':
+            texture = CLIENT_DATA.glTextures['tnt']
         else:
             texture = CLIENT_DATA.entityTextures[entity.kind.name]
 

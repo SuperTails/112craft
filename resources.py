@@ -864,6 +864,7 @@ def loadSounds(app):
 
     app.soundKinds = {
         'grass': 'grass',
+        'tnt': 'grass',
         'dirt': 'gravel',
         'cobblestone': 'stone',
         'stone': 'stone',
@@ -924,7 +925,8 @@ def loadResources(app):
         'obsidian': { 'all': 'obsidian' },
         'nether_portal': { 'all': 'portal_placeholder' },
         'glowstone': { 'all': 'glowstone' },
-        'torch':     { 'all': 'torch_on' },
+        'tnt': { 'side': 'tnt_side', 'down': 'tnt_bottom', 'up': 'tnt_top' },
+        'torch': { 'all': 'torch_on' },
         'wall_torch': { 'all': 'torch_on' },
         'water': { 'all': 'water_placeholder' },
         'flowing_water': { 'all': 'water_placeholder' },
@@ -952,6 +954,7 @@ def loadResources(app):
         'crafting_table': ('axe', 2.0),
         'bedrock': (None, float('inf')),
         'nether_portal': (None, float('inf')),
+        'tnt': (None, 0.1),
         'torch': (None, 0.1),
         'redstone_torch': (None, 0.1),
         'wall_torch': (None, 0.1),
@@ -980,6 +983,7 @@ def loadResources(app):
         'bedrock': { '': None },
         'nether_portal': { '': None },
         'glowstone': { '': 'glowstone' },
+        'tnt': { '', 'tnt' },
         'torch': { '': 'torch' },
         'wall_torch': { '': 'torch' },
         'redstone_torch': { '': 'redstone_torch' },
