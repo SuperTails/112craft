@@ -700,7 +700,26 @@ def serverTick(app, server: ServerState):
         dim = server.getDimensionOf(player)
 
         player.tick(app, dim.world, dim.entities, 0.0, 0.0)
-    
+
+        if dim.world.getBlock(player.getBlockPos()) == 'nether_portal':
+            if player.portalCooldown == 0:
+                import quarry.types.nbt as quarrynbt
+
+                if player.dimension == 'overworld':
+                    player.dimension = 'nether'
+                elif player.dimension == 'nether':
+                    player.dimension = 'overworld'
+                else:
+                    raise Exception(player.dimension)
+
+                # TODO:
+                network.s2cQueue.put(network.RespawnS2C(
+                    quarrynbt.TagCompound({}), 'minecraft:' + player.dimension,
+                    0, 0, None, False, False, True
+                ))
+            else:
+                player.portalCooldown = 100
+
     '''
     collideY(app, player)
     if player.onGround:

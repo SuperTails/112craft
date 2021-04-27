@@ -97,6 +97,9 @@ class Player(Entity):
     def tick(self, app, world, entities, playerX, playerZ):
         if self.immunity > 0:
             self.immunity -= 1
+
+        if self.portalCooldown > 0:
+            self.portalCooldown -= 1
     
     def pickUpItem(self, app, newItem: Stack):
         """Adds an item to the player's inventory."""

@@ -668,6 +668,8 @@ class Entity:
     distanceMoved: float
     modifMoveSpeed: float
 
+    portalCooldown: int
+
     path: List[BlockPos]
 
     variables: dict[str, float]
@@ -692,6 +694,8 @@ class Entity:
             self.headYaw = 0.0
 
             self.immunity = 0
+
+            self.portalCooldown = 300
 
             self.path = []
 
@@ -750,6 +754,8 @@ class Entity:
         data.tags.append(nbt.TAG_Float(name="Health", value=self.health))
 
         data.tags.append(nbt.TAG_Byte(name="OnGround", value=self.onGround))
+
+        data.tags.append(nbt.TAG_Int(name="PortalCooldown", value=self.portalCooldown))
 
         if self.extra is not None:
             extra = self.extra.toNbt()
@@ -1045,6 +1051,9 @@ class Entity:
     
         if self.immunity > 0:
             self.immunity -= 1
+        
+        if self.portalCooldown > 0:
+            self.portalCooldown -= 1
 
         self.distanceMoved += math.sqrt(self.velocity[0]**2 + self.velocity[2]**2)
         

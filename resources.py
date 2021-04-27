@@ -985,7 +985,7 @@ def loadResources(app):
         'crafting_table': { '': 'crafting_table' },
         'bedrock': { '': None },
         'nether_portal': { '': None },
-        'netherrack': { '', 'netherrack' },
+        'netherrack': { '': 'netherrack' },
         'glowstone': { '': 'glowstone' },
         'tnt': { '', 'tnt' },
         'torch': { '': 'torch' },
