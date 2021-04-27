@@ -122,45 +122,10 @@ class WorldLoadMode(Mode):
         app.client.local = local
 
         if local:
-            server = ServerState()
+            app.server = ServerState.open(worldName, seed, importPath, app)
+            self.centerPos = [16.0 * app.server.preloadPos.x, 0.0, 16.0 * app.server.preloadPos.z]
 
-            server.world = World(worldName, seed, importPath=importPath)
-            app.client.world = server.world
-
-            try:
-                path = server.world.saveFolderPath() + '/entities.dat'
-
-                nbtfile = nbt.NBTFile(path)
-
-                player = Player(app, tag=nbtfile["Entities"][0])
-                # FIXME:
-                player.entityId = 10_000
-
-                self.centerPos = player.pos
-
-                server.players = [player]
-                server.localPlayer = player.entityId
-
-                server.entities = [entity.Entity(app, server.getEntityId(), nbt=tag) for tag in nbtfile["Entities"][1:]]
-            except FileNotFoundError:
-                player = Player(app)
-                player.pos[1] = 75.0
-                player.entityId = 10_000
-
-                self.centerPos = player.pos
-
-                server.players = [player]
-                server.localPlayer = player.entityId
-
-                server.entities = [entity.Entity(app, server.getEntityId(), 'fox', 5.0, 72.0, 3.0)]
-
-            cx = math.floor(player.pos[0] / 16)
-            cy = math.floor(player.pos[1] / world.CHUNK_HEIGHT)
-            cz = math.floor(player.pos[2] / 16)
-
-            server.world.loadChunk((app.textures, app.cube, app.textureIndices), ChunkPos(cx, cy, cz))
-
-            app.server = server
+            app.client.world = app.server.world
         else:
             if hasattr(app, 'server'):
                 delattr(app, 'server')
@@ -1411,7 +1376,7 @@ def appStarted(app):
     #def makeTitleMode(app, _player): return TitleMode(app)
     #app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
     def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
+    app.mode = WorldLoadMode(app, 'world', True, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     # ---------------
