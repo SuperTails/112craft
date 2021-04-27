@@ -1,6 +1,25 @@
 import math
+from numba import jit
 
+@jit(nopython=True) #type:ignore
 def simplex(x, y, z):
+    def skew(x, y, z):
+        f = (math.sqrt(3 + 1) - 1) / 3
+
+        xp = x + (x + y + z) * f
+        yp = y + (x + y + z) * f
+        zp = z + (x + y + z) * f
+
+        return (xp, yp, zp)
+
+    def unskew(x, y, z):
+        g = (1 - 1/math.sqrt(3 + 1)) / 3
+
+        xs = x - (x + y + z) * g
+        ys = y - (x + y + z) * g
+        zs = z - (x + y + z) * g
+        return (xs, ys, zs)
+
     # https://weber.itn.liu.se/~stegu/simplexnoise/simplexnoise.pdf
     # https://en.wikipedia.org/wiki/Simplex_noise
 
@@ -61,23 +80,6 @@ def simplex(x, y, z):
         total += max(0, r_2 - d**2)**4 * (dx * gx + dy * gy + dz * gz)
 
     return total
-
-def skew(x, y, z):
-    f = (math.sqrt(3 + 1) - 1) / 3
-
-    xp = x + (x + y + z) * f
-    yp = y + (x + y + z) * f
-    zp = z + (x + y + z) * f
-
-    return (xp, yp, zp)
-
-def unskew(x, y, z):
-    g = (1 - 1/math.sqrt(3 + 1)) / 3
-
-    xs = x - (x + y + z) * g
-    ys = y - (x + y + z) * g
-    zs = z - (x + y + z) * g
-    return (xs, ys, zs)
 
 def getSimplexFractal(x, y, z, baseFreq: float, octaves: int, seed):
     """Returns the sum of multiple levels of perlin noise.
