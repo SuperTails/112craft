@@ -802,11 +802,15 @@ def drawHud(client: ClientState, canvas, startTime):
 
         feetPos = (client.cameraPos[0], client.cameraPos[1] - player.height + 0.1, client.cameraPos[2])
         feetBlockPos = world.nearestBlockPos(feetPos[0], feetPos[1], feetPos[2])
-        (ckPos, _) = world.toChunkLocal(feetBlockPos)
+        (ckPos, ckLocal) = world.toChunkLocal(feetBlockPos)
         if ckPos in client.world.chunks:
             lightLevel = client.world.getLightLevel(feetBlockPos)
             blockLightLevel = client.world.getBlockLightLevel(world.nearestBlockPos(feetPos[0], feetPos[1], feetPos[2]))
             drawTextOutlined(canvas, 10, 190, text=f'Sky {lightLevel}, Block {blockLightLevel}', anchor='nw')
+
+            biome = client.world.chunks[ckPos].biomes[ckLocal.x // 4, ckLocal.y // 4, ckLocal.z // 4]
+
+            drawTextOutlined(canvas, 10, 230, text=f'Biome: {biome.name}', anchor='nw')
 
 def redrawAll(client: ClientState, canvas, doDrawHud=True):
     startTime = time.time()

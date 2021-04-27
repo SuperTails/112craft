@@ -130,7 +130,7 @@ class WorldLoadMode(Mode):
             if hasattr(app, 'server'):
                 delattr(app, 'server')
 
-            app.client.world = World('temp', world.NullGen(), 0)
+            app.client.world = World('saves/temp', world.NullGen(), 0)
             app.client.world.local = False
 
             self.centerPos = [0.0, 0.0, 0.0]

@@ -1,5 +1,6 @@
 from quarry.types import nbt
 from dataclasses import dataclass
+from typing import Union
 
 @dataclass
 class BiomeEntry:
@@ -25,8 +26,15 @@ class BiomeRegistry:
 
         return cls(biomes)
     
-    def getBiome(self, biomeId: int) -> BiomeEntry:
-        return self.biomes[biomeId]
+    def getBiome(self, biomeId: Union[int, str]) -> BiomeEntry:
+        if isinstance(biomeId, int):
+            return self.biomes[biomeId]
+        else:
+            for b in self.biomes:
+                if b.name == biomeId:
+                    return b
+            
+            raise KeyError(biomeId)
 
 @dataclass
 class DimensionTypeRegistry:
@@ -49,3 +57,6 @@ class DimensionCodec:
         br  = BiomeRegistry.fromNbt(tag.value['minecraft:worldgen/biome'])
 
         return cls(dtr, br)
+
+    def getBiome(self, biomeId: Union[int, str]):
+        return self.biomeRegistry.getBiome(biomeId)

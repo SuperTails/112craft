@@ -49,6 +49,7 @@ import util
 from util import *
 from OpenGL.GL import * #type:ignore
 from network import ChunkDataS2C
+from dimregistry import BiomeEntry
 
 # Places a tree with its bottommost log at the given position in the world.
 # If `doUpdates` is True, this recalculates the lighting and block visibility.
@@ -525,7 +526,7 @@ class Chunk:
         self.blockLightLevels = np.full((16, CHUNK_HEIGHT, 16), 0)
         self.instances = [None] * self.blocks.size
 
-        self.biomes = np.full((16, CHUNK_HEIGHT // 4, 16), 'void', dtype=object)
+        self.biomes = np.full((16, CHUNK_HEIGHT // 4, 16), util.DIMENSION_CODEC.getBiome('minecraft:the_void'), dtype=object)
 
         self.tickIdx = 0
         self.scheduledTicks = deque()
@@ -775,6 +776,14 @@ class Chunk:
 
                     self.blocks[x, y, z] = blockId
                     self.blockStates[x, y, z] = block
+        
+        if packet.biomes is not None:
+            for idx, biome in enumerate(packet.biomes):
+                xIdx = idx // ((CHUNK_HEIGHT // 4) * 4)
+                zIdx = (idx // (CHUNK_HEIGHT // 4)) % 4
+                yIdx = idx % (CHUNK_HEIGHT // 4)
+
+                self.biomes[xIdx, yIdx, zIdx] = util.DIMENSION_CODEC.getBiome(biome)
 
         self.setAllBlocks(world, instData)
 
