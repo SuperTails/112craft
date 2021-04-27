@@ -130,7 +130,7 @@ class WorldLoadMode(Mode):
             if hasattr(app, 'server'):
                 delattr(app, 'server')
 
-            app.client.world = World('temp', 0)
+            app.client.world = World('temp', world.NullGen(), 0)
             app.client.world.local = False
 
             self.centerPos = [0.0, 0.0, 0.0]
@@ -1035,12 +1035,17 @@ def handleS2CPackets(mode, app, client: ClientState):
         elif isinstance(packet, network.ChatMessageS2C):
             app.client.chat.append((time.time(), packet.data))
         elif isinstance(packet, network.JoinGameS2C):
+            app.client.player.entityId = packet.entityId
             # TODO:
+            print(packet.dimension)
             pass
         elif isinstance(packet, network.RespawnS2C):
             print(f'RESPAWN: {packet.worldName}, {packet.dimension}')
-            app.client.world.chunks = {}
-            app.client.world.serverChunks = {}
+            if hasattr(app, 'server'):
+                app.client.world = app.server.getLocalDimension().world
+            else:
+                app.client.world.chunks = {}
+                app.client.world.serverChunks = {}
         elif packet is None:
             raise Exception("Disconnected")
 

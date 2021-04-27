@@ -94,18 +94,16 @@ class ServerState:
         return self.getDimensionOf(player)
     
     def getDimensionOf(self, player: Player) -> Dimension:
-        if player.dimension != 'overworld':
-            # TODO:
-            raise Exception()
-        else:
-            return self.dimensions[0]
+        return self.getDimension(player.dimension)
     
     def getDimension(self, name: str) -> Dimension:
-        if name != 'overworld':
+        if name == 'overworld':
+            return self.dimensions[0]
+        elif name == 'nether':
+            return self.dimensions[1]
+        else:
             # TODO:
             raise Exception()
-        else:
-            return self.dimensions[0]
     
     def save(self):
         self.saveWorld()
@@ -164,7 +162,7 @@ class ServerState:
         server.saveName = worldName
 
         overworld = Dimension()
-        overworld.world = World(server.saveFolderPath() + '/region', seed, importPath=importPath)
+        overworld.world = World(server.saveFolderPath() + '/region', world.OverworldGen(), seed, importPath=importPath)
 
         try:
             path = server.saveFolderPath() + '/entities.dat'
@@ -175,7 +173,19 @@ class ServerState:
         except FileNotFoundError:
             overworld.entities = [entity.Entity(app, server.getEntityId(), 'fox', 5.0, 75.0, 3.0)]
         
-        server.dimensions = [overworld]
+        nether = Dimension()
+        nether.world = World(server.saveFolderPath() + '/DIM-1/region', world.NetherGen(), seed, importPath=importPath)
+
+        try:
+            path = server.saveFolderPath() + '/DIM-1/entities.dat'
+
+            nbtfile = nbt.NBTFile(path)
+
+            nether.entities = [entity.Entity(app, server.getEntityId(), nbt=tag) for tag in nbtfile["Entities"][1:]]
+        except FileNotFoundError:
+            nether.entities = []
+        
+        server.dimensions = [overworld, nether]
 
         server.addPlayer(app)
         preloadPos = server.players[0].pos

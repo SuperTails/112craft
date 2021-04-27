@@ -43,6 +43,7 @@ from inventory import Slot, Stack
 from enum import IntEnum
 from math import cos, sin
 from numpy import ndarray
+from abc import ABC, abstractmethod
 from typing import NamedTuple, List, Any, Tuple, Optional, Union, Iterable
 import util
 from util import *
@@ -488,7 +489,6 @@ def updateRedstoneWire(pos: BlockPos, world: 'World', instData):
     if connsChanged or powerChanged:
         world.setBlock(instData, pos, 'redstone_wire', state, doBlockUpdates=powerChanged)
 
-
 class Chunk:
     pos: ChunkPos
     blocks: ndarray
@@ -787,69 +787,6 @@ class Chunk:
 
         self.worldgenStage = WorldgenStage.POPULATED
 
-    @timed()
-    def generate(self, world, instData, cavePositions, seed):
-        # x and y and z
-        minVal = 100.0
-        maxVal = -100.0
-
-        positions = []
-
-        for cave in cavePositions:
-            minIdx = binarySearchMin(cave, self.pos.x * 16 - 1)
-            maxIdx = binarySearchMax(cave, (self.pos.x + 1) * 16)
-
-            if minIdx is not None or maxIdx is not None:
-                if minIdx is None:
-                    minIdx = 0
-                if maxIdx is None:
-                    maxIdx = len(cave) - 1
-
-                for posIdx in range(minIdx, maxIdx + 1):
-                    pos = cave[posIdx]
-                    for xOff in range(-1, 2):
-                        for yOff in range(-1, 2):
-                            for zOff in range(-1, 2):
-                                pos2 = BlockPos(pos.x + xOff, pos.y + yOff, pos.z + zOff)
-                                (ckPos, ckLocal) = toChunkLocal(pos2)
-                                if ckPos == self.pos:
-                                    positions.append(ckLocal)
-                
-        print(f"{len(positions)}-many positions")
-
-        for xIdx in range(0, 16):
-            for zIdx in range(0, 16):
-                globalPos = self._globalBlockPos(BlockPos(xIdx, 0, zIdx))
-
-                noise = perlin.getPerlinFractal(globalPos.x, globalPos.z, 1.0 / 256.0, 4, seed)
-
-                if noise < minVal: minVal = noise
-                if noise > maxVal: maxVal = noise
-
-                if CHUNK_HEIGHT == 16: #type:ignore
-                    factor = 2
-                else:
-                    factor = 10
-
-                topY = int(noise * factor + 8 + ((CHUNK_HEIGHT - 16) / 240) * (72 - 8))
-
-                for yIdx in range(0, topY):
-                    if BlockPos(xIdx, yIdx, zIdx) in positions:
-                        blockId = 'air'
-                    elif yIdx == 0:
-                        blockId = 'bedrock'
-                    elif yIdx == topY - 1:
-                        blockId = 'grass'
-                    elif topY - yIdx < 3:
-                        blockId = 'dirt'
-                    else:
-                        blockId = 'stone'
-                    self.setBlock(world, instData, BlockPos(xIdx, yIdx, zIdx), blockId, doUpdateLight=False, doUpdateBuried=False, doBlockUpdates=False)
-        
-        #print(f"minval: {minVal}, maxVal: {maxVal}")
-
-        self.worldgenStage = WorldgenStage.GENERATED
-    
     def disperseOre(self, world: 'World', instData, seed, ore: BlockId, frequency: int, maxHeight: int):
         for _ in range(frequency):
             x = random.randrange(0, 16)
@@ -1479,7 +1416,125 @@ class Chunk:
         if doUpdateMesh:
             self.createMesh(world, instData)
 
+class TerrainGen(ABC):
+    @abstractmethod
+    def generate(self, chunk: Chunk, world: 'World', instData, seed):
+        pass
 
+    @abstractmethod
+    def checkCavesAround(self, centerPos: ChunkPos, seed):
+        pass
+
+class NullGen(TerrainGen):
+    def generate(self, chunk: Chunk, world: 'World', instData, seed):
+        pass
+
+    def checkCavesAround(self, centerPos: ChunkPos, seed):
+        pass
+
+class OverworldGen(TerrainGen):
+    caveChecked: set[ChunkPos]
+    caves: dict[ChunkPos, List[BlockPos]]
+
+    def __init__(self):
+        self.caveChecked = set()
+        self.caves = {}
+
+
+    @timed()
+    def generate(self, chunk: Chunk, world: 'World', instData,  seed):
+        cavePositions = self.caves.values()
+
+        # x and y and z
+        minVal = 100.0
+        maxVal = -100.0
+
+        positions = []
+
+        for cave in cavePositions:
+            minIdx = binarySearchMin(cave, chunk.pos.x * 16 - 1)
+            maxIdx = binarySearchMax(cave, (chunk.pos.x + 1) * 16)
+
+            if minIdx is not None or maxIdx is not None:
+                if minIdx is None:
+                    minIdx = 0
+                if maxIdx is None:
+                    maxIdx = len(cave) - 1
+
+                for posIdx in range(minIdx, maxIdx + 1):
+                    pos = cave[posIdx]
+                    for xOff in range(-1, 2):
+                        for yOff in range(-1, 2):
+                            for zOff in range(-1, 2):
+                                pos2 = BlockPos(pos.x + xOff, pos.y + yOff, pos.z + zOff)
+                                (ckPos, ckLocal) = toChunkLocal(pos2)
+                                if ckPos == chunk.pos:
+                                    positions.append(ckLocal)
+                
+        print(f"{len(positions)}-many positions")
+
+        for xIdx in range(0, 16):
+            for zIdx in range(0, 16):
+                globalPos = chunk._globalBlockPos(BlockPos(xIdx, 0, zIdx))
+
+                noise = perlin.getPerlinFractal(globalPos.x, globalPos.z, 1.0 / 256.0, 4, seed)
+
+                if noise < minVal: minVal = noise
+                if noise > maxVal: maxVal = noise
+
+                if CHUNK_HEIGHT == 16: #type:ignore
+                    factor = 2
+                else:
+                    factor = 10
+
+                topY = int(noise * factor + 8 + ((CHUNK_HEIGHT - 16) / 240) * (72 - 8))
+
+                for yIdx in range(0, topY):
+                    if BlockPos(xIdx, yIdx, zIdx) in positions:
+                        blockId = 'air'
+                    elif yIdx == 0:
+                        blockId = 'bedrock'
+                    elif yIdx == topY - 1:
+                        blockId = 'grass'
+                    elif topY - yIdx < 3:
+                        blockId = 'dirt'
+                    else:
+                        blockId = 'stone'
+                    chunk.blocks[xIdx, yIdx, zIdx] = blockId
+                    chunk.blockStates[xIdx, yIdx, zIdx] = {}
+            
+        chunk.setAllBlocks(world, instData)
+        #chunk.setBlock(world, instData, BlockPos(xIdx, yIdx, zIdx), blockId, doUpdateLight=False, doUpdateBuried=False, doBlockUpdates=False)
+        
+        chunk.worldgenStage = WorldgenStage.GENERATED
+    
+    def checkCavesAround(self, centerPos: ChunkPos, seed):
+        dist = math.ceil(MAX_CAVE_DISP / 16)
+        for pos in adjacentChunks(centerPos, dist):
+            if pos not in self.caveChecked:
+                random.seed(hash((pos, seed)))
+
+                self.caveChecked.add(pos)
+
+                if random.random() < 0.1:
+                    caveX = pos.x * 16 + random.randrange(0, 16)
+                    caveY = pos.y * CHUNK_HEIGHT + random.randrange(40, 100)
+                    caveZ = pos.z * 16 + random.randrange(0, 16)
+
+                    caveStart = BlockPos(caveX, caveY, caveZ)
+
+                    self.caves[pos] = generateCaveCenter(caveStart, seed)
+
+class NetherGen(TerrainGen):
+    def generate(self, chunk: Chunk, world: 'World', instData, seed):
+        chunk.blocks[:, 0, :] = 'bedrock'
+        chunk.blocks[:, 128, :] = 'bedrock'
+        chunk.blocks[:, 1:70, :] = 'netherrack'
+
+    def checkCavesAround(self, centerPos: ChunkPos, seed):
+        pass
+
+    
 def getRegionCoords(pos: ChunkPos) -> Tuple[int, int]:
     return (math.floor(pos.x / 32), math.floor(pos.z / 32))
 
@@ -1492,14 +1547,13 @@ class World:
 
     savePath: str
     
-    caveChecked: set[ChunkPos]
-    caves: dict[ChunkPos, List[BlockPos]]
-
     local: bool
 
     serverChunks: dict[ChunkPos, ChunkDataS2C]
 
     dirtyLights: set[BlockPos]
+
+    generator: TerrainGen
 
     def getHighestBlock(self, x: int, z: int) -> int:
         for y in range(CHUNK_HEIGHT - 1, -1, -1):
@@ -1507,17 +1561,16 @@ class World:
                 return y
         return 0
     
-    def __init__(self, savePath: str, seed=None, importPath=''):
+    def __init__(self, savePath: str, generator: TerrainGen, seed=None, importPath=''):
         self.chunks = {}
         self.importPath = importPath
         self.regions = {}
 
         self.savePath = savePath
 
-        self.serverChunks = {}
+        self.generator = generator
 
-        self.caveChecked = set()
-        self.caves = {}
+        self.serverChunks = {}
 
         self.dirtyLights = set()
 
@@ -1773,26 +1826,9 @@ class World:
                 chunk = anvil.Chunk.from_region(self.regions[regionPos], pos2.x, pos2.z)
                 ck.loadFromAnvilChunk(self, instData, chunk)
             else:
-                ck.generate(self, instData, self.caves.values(), self.seed)
+                self.generator.generate(ck, self, instData, self.seed)
 
         return ck
-    
-    def checkCavesAround(self, centerPos: ChunkPos):
-        dist = math.ceil(MAX_CAVE_DISP / 16)
-        for pos in adjacentChunks(centerPos, dist):
-            if pos not in self.caveChecked:
-                random.seed(hash((pos, self.seed)))
-
-                self.caveChecked.add(pos)
-
-                if random.random() < 0.1:
-                    caveX = pos.x * 16 + random.randrange(0, 16)
-                    caveY = pos.y * CHUNK_HEIGHT + random.randrange(40, 100)
-                    caveZ = pos.z * 16 + random.randrange(0, 16)
-
-                    caveStart = BlockPos(caveX, caveY, caveZ)
-
-                    self.caves[pos] = generateCaveCenter(caveStart, self.seed)
     
     def canLoadChunk(self, pos: ChunkPos):
         if self.local:
@@ -1803,7 +1839,7 @@ class World:
     def loadChunk(self, instData, pos: ChunkPos):
         print(f"Loading chunk at {pos}")
         if self.local:
-            self.checkCavesAround(pos)
+            self.generator.checkCavesAround(pos, self.seed)
             self.chunks[pos] = self.createChunk(instData, pos)
         else:
             self.chunks[pos] = Chunk(pos)

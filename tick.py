@@ -346,6 +346,23 @@ def sendChatMessage(app, text: str):
                 pos = world.nearestBlockPos(player.pos[0], player.pos[1], player.pos[2])
 
                 wld.explodeAt(pos, power, (app.textures, app.cube, app.textureIndices))
+            elif parts[0] == 'dimension':
+                player = server.getLocalPlayer()
+                
+                if player.dimension == 'overworld':
+                    player.dimension = 'nether'
+                elif player.dimension == 'nether':
+                    player.dimension = 'overworld'
+                else:
+                    raise Exception(player.dimension)
+                
+                import quarry.types.nbt as quarrynbt
+                
+                # TODO:
+                network.s2cQueue.put(network.RespawnS2C(
+                    quarrynbt.TagCompound({}), 'minecraft:' + player.dimension,
+                    0, 0, None, False, False, True
+                ))
             elif parts[0] == 'tp':
                 # TODO:
                 '''
