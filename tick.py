@@ -377,6 +377,12 @@ def sendChatMessage(app, text: str):
                     quarrynbt.TagCompound({}), 'minecraft:' + player.dimension,
                     0, 0, None, False, False, True
                 ))
+            elif parts[0] == 'chunkstates':
+                for dim in server.dimensions:
+                    print(f'== DIMENSION {dim} ==')
+                    for pos, chunk in dim.world.chunks.items():
+                        print(f'{pos} - {chunk.worldgenStage}')
+
             elif parts[0] == 'tp':
                 # TODO:
                 '''
@@ -468,6 +474,10 @@ def updateBlockBreaking(app, server: ServerState):
 
     blockId = wld.getBlock(pos)
     blockState = wld.getBlockState(pos)
+
+    if blockId == 'air':
+        print(f'Invalid mining at {server.breakingBlockPos}')
+        return
 
     # HACK:
     player = server.getLocalPlayer()

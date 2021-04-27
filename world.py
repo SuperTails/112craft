@@ -539,10 +539,16 @@ class Chunk:
     def tick(self, app, world: 'World'):
         for (pos, entity) in self.tileEntities.items():
             entity.tick(app)
+
+        total = 0
         
         while len(self.scheduledTicks) != 0 and self.scheduledTicks[0][0] <= self.tickIdx:
             (_, pos) = self.scheduledTicks.popleft()
+            total += 1
             self.doScheduledTick(app, world, pos)
+        
+        if total != 0:
+            print(f'Did {total} scheduled ticks')
         
         self.tickIdx += 1
     
@@ -591,9 +597,10 @@ class Chunk:
 
         gp = self._globalBlockPos(blockPos)
         sideHigher = False
-        
-        blockId = self.blocks[blockPos.x, blockPos.y, blockPos.z]
-        blockState = self.blockStates[blockPos.x, blockPos.y, blockPos.z]
+
+        blockId = copy.deepcopy(self.blocks[blockPos.x, blockPos.y, blockPos.z])
+        blockState = copy.deepcopy(self.blockStates[blockPos.x, blockPos.y, blockPos.z])
+
         if blockId in ('water', 'flowing_water', 'lava', 'flowing_lava'):
             if blockId in ('water', 'flowing_water'):
                 levelChange = 1
@@ -605,11 +612,44 @@ class Chunk:
                 flowingName = 'flowing_lava'
                 liquid = ('lava', 'flowing_lava')
                 liquidOrAir = ('lava', 'flowing_lava', 'air')
+            
+            def setIfChanged(pos: BlockPos, blockId: BlockId, blockState, isLocal):
+                if isLocal:
+                    oldId = self.blocks[pos.x, pos.y, pos.z]
+                    oldState = self.blockStates[pos.x, pos.y, pos.z]
+
+                    if blockId != oldId or oldState != blockState:
+                        print(f'Changed {oldId}[{oldState}] to {blockId}[{blockState}] (local) at {self._globalBlockPos(pos)}')
+                        self.setBlock(world, instData, pos, blockId, blockState)
+                else:
+                    oldId = world.getBlock(pos)
+                    oldState = world.getBlockState(pos)
+
+                    if blockId != oldId or oldState != blockState:
+                        print(f'Changed {oldId}[{oldState}] to {blockId}[{blockState}] (global) at {pos}')
+                        world.setBlock(instData, pos, blockId, blockState)
+            
+            
+            if blockPos.y == 0:
+                canFlowDown = False
+            else:
+                belowPos = BlockPos(blockPos.x, blockPos.y - 1, blockPos.z)
+                
+                belowId = self.blocks[belowPos.x, belowPos.y, belowPos.z]
+                belowState = self.blockStates[belowPos.x, belowPos.y, belowPos.z]
+
+                if belowId == 'air':
+                    canFlowDown = True
+                elif belowId in liquid:
+                    canFlowDown = belowState['level'] != '0'
+                else:
+                    canFlowDown = False
 
             level = int(blockState['level'])
-            if self.blocks[blockPos.x, blockPos.y-1, blockPos.z] in liquidOrAir:
-                self.setBlock(world, instData, BlockPos(blockPos.x, blockPos.y-1, blockPos.z),
-                    flowingName, { 'level': '8' })
+                    
+            if canFlowDown:
+                setIfChanged(BlockPos(blockPos.x, blockPos.y - 1, blockPos.z),
+                    flowingName, { 'level': '8' }, isLocal=True)
             else:
                 if (level + levelChange) // 8 == level // 8:
                     for faceIdx in range(0, 8, 2):
@@ -628,7 +668,7 @@ class Chunk:
                             shouldFlow = False
                         
                         if shouldFlow:
-                            world.setBlock(instData, adjPos, flowingName, { 'level': str(nextLevel) })
+                            setIfChanged(adjPos, flowingName, { 'level': str(nextLevel) }, isLocal=False)
             
             for faceIdx in range(0, 8, 2):
                 adjPos = adjacentBlockPos(gp, faceIdx)
@@ -642,14 +682,15 @@ class Chunk:
                         break
             
             aboveHigher = self.blocks[blockPos.x, blockPos.y+1, blockPos.z] in liquid
-            
+
             if level != 0:
                 if level == 8 and not aboveHigher:
-                    self.setBlock(world, instData, blockPos, flowingName, { 'level': '1' })
+                    setIfChanged(blockPos, flowingName, { 'level': '1' }, isLocal=False)
                 elif (level + levelChange) // 8 != level // 8:
-                    self.setBlock(world, instData, blockPos, 'air')
+                    setIfChanged(blockPos, 'air', {}, isLocal=False)
                 elif not sideHigher:
-                    self.setBlock(world, instData, blockPos, flowingName, { 'level': str((level % 8) + 1) })
+                    setIfChanged(blockPos, flowingName, { 'level': str((level % 8) + 1) }, isLocal=False)
+
         elif blockId in ('redstone_torch', 'redstone_wall_torch'):
             if blockId == 'redstone_torch':
                 otherPos = BlockPos(blockPos.x, blockPos.y - 1, blockPos.z)
@@ -835,65 +876,48 @@ class Chunk:
         self.worldgenStage = WorldgenStage.POPULATED
     
     @timed()
-    def doFirstLighting(self):
-        import heapq
+    def doFirstLighting(self, world: 'World'):
+        needUpdates = set()
 
-        highestBlock = CHUNK_HEIGHT - 1
         for yIdx in range(CHUNK_HEIGHT - 1, -1, -1):
-            isEmpty = True
-            for zIdx in range(16):
-                for xIdx in range(16):
-                    if self.blocks[xIdx, yIdx, zIdx] != 'air':
-                        isEmpty = False
-                    else:
-                        self.lightLevels[xIdx, yIdx, zIdx] = 15
-            highestBlock = yIdx
-            if not isEmpty:
-                break
-                    
-        
-        for yIdx in range(highestBlock, -1, -1):
             allAreDark = True
+
+            if yIdx == CHUNK_HEIGHT - 1:
+                self.lightLevels[:, yIdx, :] = 15
+            else:
+                self.lightLevels
 
             for xIdx in range(16):
                 for zIdx in range(16):
-                    if self.coordsOccupied(BlockPos(xIdx, yIdx, zIdx), isOpaque):
+                    thisPos = BlockPos(xIdx, yIdx, zIdx)
+                    if self.coordsOccupied(thisPos, isOpaque):
                         lightLevel = 0
-                    elif yIdx == highestBlock:
-                        lightLevel = 15
                     else:
-                        lightAbove = self.lightLevels[xIdx, yIdx + 1, zIdx]
-                        if lightAbove == 15:
-                            lightLevel = 15
-                        else:
-                            lightLevel = max(lightAbove - 1, 0)
-                    
-                    if lightLevel != 0:
                         allAreDark = False
-
-                    self.lightLevels[xIdx, yIdx, zIdx] = lightLevel
-            
+                        for faceIdx in range(8, 2):
+                            adjPos = adjacentBlockPos(BlockPos(xIdx, yIdx, zIdx), faceIdx)
+                            if (adjPos.x < 0 or 16 <= adjPos.x
+                                or adjPos.z < 0 or 16 <= adjPos.z):
+                            
+                                needUpdates.add(thisPos)
+                                break
+                            elif not self.coordsOccupied(adjPos, isOpaque):
+                                needUpdates.add(thisPos)
+                                break
+                    
             if allAreDark:
                 break
             
-            # Then, propogate light inwards
-            visited = []
-            queue = [(-l, i) for (i, l) in np.ndenumerate(self.lightLevels[:,yIdx,:])]
-            heapq.heapify(queue)
-            
-            while len(queue) > 0:
-                (level, pos) = heapq.heappop(queue)
-                level *= -1
-                visited.append(pos)
-                newLevel = max(level - 1, 0)
-                for (dx, dz) in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                    newPos = (pos[0] + dx, pos[1] + dz)
-                    if newPos in visited: continue
-                    if newPos[0] < 0 or 16 <= newPos[0]: continue
-                    if newPos[1] < 0 or 16 <= newPos[1]: continue
-                    if self.lightLevels[newPos[0], yIdx, newPos[1]] < newLevel:
-                        self.lightLevels[newPos[0], yIdx, newPos[1]] = newLevel
-                        heapq.heappush(queue, (-newLevel, newPos))
+        for xIdx in range(16):
+            for yIdx in range(256):
+                for zIdx in range(16):
+                    blockId = self.blocks[xIdx, yIdx, zIdx]
+                    if getLuminance(blockId) != 0:
+                        needUpdates.add(self._globalBlockPos(BlockPos(xIdx, yIdx, zIdx)))
+    
+        print(f'Found {len(needUpdates)} blocks that needed updates')
+
+        world.dirtySources |= needUpdates
     
     @timed()
     def updateAllBuried(self, world: 'World'):
@@ -958,7 +982,7 @@ class Chunk:
         
         self.updateAllBuried(world)
         
-        self.doFirstLighting()
+        self.doFirstLighting(world)
             
         self.worldgenStage = WorldgenStage.OPTIMIZED
     
@@ -1440,7 +1464,6 @@ class OverworldGen(TerrainGen):
         self.caveChecked = set()
         self.caves = {}
 
-
     @timed()
     def generate(self, chunk: Chunk, world: 'World', instData,  seed):
         cavePositions = self.caves.values()
@@ -1536,13 +1559,20 @@ class NetherGen(TerrainGen):
                     s = simplex.getSimplexFractal(gpos.x, gpos.y, gpos.z, 1.0 / 256.0, 4, 0)
 
                     if s < 0.0:
-                        chunk.blocks[xIdx, yIdx, zIdx] = 'air'
+                        if yIdx < 30:
+                            chunk.blocks[xIdx, yIdx, zIdx] = 'flowing_lava'
+                            chunk.blockStates[xIdx, yIdx, zIdx] = { 'level': '0' }
+                        else:
+                            chunk.blocks[xIdx, yIdx, zIdx] = 'air'
                     else:
                         chunk.blocks[xIdx, yIdx, zIdx] = 'netherrack'
 
         chunk.blocks[:, 0, :] = 'bedrock'
         chunk.blocks[:, 128, :] = 'bedrock'
-        chunk.blocks[:, 68:72, :] = 'air'
+
+        chunk.setAllBlocks(world, instData)
+
+        chunk.worldgenStage = WorldgenStage.GENERATED
 
     def checkCavesAround(self, centerPos: ChunkPos, seed):
         pass
@@ -1565,6 +1595,7 @@ class World:
     serverChunks: dict[ChunkPos, ChunkDataS2C]
 
     dirtyLights: set[BlockPos]
+    dirtySources: set[BlockPos]
 
     generator: TerrainGen
 
@@ -1586,6 +1617,8 @@ class World:
         self.serverChunks = {}
 
         self.dirtyLights = set()
+
+        self.dirtySources = set()
 
         self.local = True
 
@@ -1743,6 +1776,15 @@ class World:
                 break
     
     def flushLightChanges(self):
+        if self.dirtySources != set():
+            try:
+                self.propogateLight(self.dirtySources, False, False)
+                self.propogateLight(self.dirtySources, True, False)
+            except Exception as e:
+                print(f'Ignoring exception in flushLightChanges {e}')
+            
+            self.dirtySources = set()
+
         if self.dirtyLights != set():
             try:
                 self.updateLight2(self.dirtyLights, False)
@@ -1845,7 +1887,7 @@ class World:
     
     def canLoadChunk(self, pos: ChunkPos):
         if self.local:
-            return True
+            return pos.y == 0
         else:
             return pos in self.serverChunks
     
@@ -2196,7 +2238,9 @@ class World:
             for faceIdx in range(0, 12, 2):
                 nextPos = adjacentBlockPos(currentPos, faceIdx)
 
-                if self.coordsOccupied(nextPos, isOpaque):
+                if nextPos.y >= CHUNK_HEIGHT or nextPos.y < 0:
+                    continue
+                elif self.coordsOccupied(nextPos, isOpaque):
                     cost = 15
                 elif faceIdx == 8 and isSky:
                     cost = 0

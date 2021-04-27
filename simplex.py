@@ -109,8 +109,3 @@ def getSimplexFractal(x, y, z, baseFreq: float, octaves: int, seed):
         totalscale += amplitude
     
     return total / totalscale * 100
-
-for i in range(80):
-    y = i
-    s = getSimplexFractal(23, y, 74, 1.0 / 32.0, 1, 0)
-    print(f'{y:.4f} -> {s:.6f}')
