@@ -234,6 +234,20 @@ def sendUseItem(app, hand: int):
 
                 if not player.creative:
                     heldSlot.stack.item = 'bucket'
+        elif heldSlot.stack.item == 'flint_and_steel':
+            block = wld.lookedAtBlock(player.reach, cameraPos,
+                player.headPitch, player.headYaw)
+
+            if block is not None:
+                (pos, face) = block
+                faceIdx = ['left', 'right', 'back', 'front', 'bottom', 'top'].index(face) * 2
+                pos2 = world.adjacentBlockPos(pos, faceIdx)
+
+                portals = findPortalFrame(server, server.getLocalDimension(), pos2)
+                if portals is not None:
+                    instData = (app.textures, app.cube, app.textureIndices)
+                    for p in portals:
+                        server.getLocalDimension().world.setBlock(instData, p, 'nether_portal', { 'axis': 'x' })
     else:
         network.c2sQueue.put(network.UseItemC2S(hand))
 
@@ -402,7 +416,7 @@ def sendClientStatus(app, status: int):
         '''
     else:
         network.c2sQueue.put(network.ClientStatusC2S(status))
-
+    
 def sendHeldItemChange(app, newSlot: int):
     if hasattr(app, 'server'):
         player = app.server.getLocalPlayer()
@@ -491,7 +505,7 @@ def updateBlockBreaking(app, server: ServerState):
         if droppedItem is not None:
             stack = Stack(droppedItem, 1)
 
-            entityId = getNextEntityId()
+            entityId = server.getEntityId()
 
             xVel = ((random.random() - 0.5) * 0.1)
             yVel = ((random.random() - 0.5) * 0.1)
@@ -515,12 +529,70 @@ def updateBlockBreaking(app, server: ServerState):
 
             server.getLocalDimension().entities.append(ent)
 
-entityIdNum = 10_000
+def findPortalFrame(server: ServerState, dim: Dimension, pos: BlockPos) -> Optional[List[BlockPos]]:
+    print(f'searching for portal frame at {pos}')
 
-def getNextEntityId() -> int:
-    global entityIdNum
-    entityIdNum += 1
-    return entityIdNum
+    bottomPos1 = None
+    topPos1 = None
+
+    for i in range(1, 4):
+        p = BlockPos(pos.x, pos.y - i, pos.z)
+        if dim.world.getBlock(p) == 'obsidian':
+            bottomPos1 = p
+            break
+    
+    if bottomPos1 is None:
+        return None
+
+    for i in range(1, 4):
+        p = BlockPos(pos.x, pos.y + i, pos.z)
+        if dim.world.getBlock(p) == 'obsidian':
+            topPos1 = p
+            break
+    
+    if topPos1 is None:
+        return None
+    
+    if topPos1.y - bottomPos1.y != 4:
+        return None
+    
+    for dx, dz in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+        bottomPos2 = BlockPos(bottomPos1.x + dx, bottomPos1.y, bottomPos1.z + dz) 
+        topPos2 = BlockPos(topPos1.x + dx, topPos1.y, topPos1.z + dz)
+
+        # Need 2 blocks on top, 2 blocks on bottom
+        if dim.world.getBlock(bottomPos2) != 'obsidian':
+            continue
+        if dim.world.getBlock(topPos2) != 'obsidian':
+            continue
+
+        answer = []
+
+        ok = True
+
+        for i in range(3):
+            backSidePos = BlockPos(bottomPos1.x - dx, bottomPos1.y + 1 + i, bottomPos1.z - dz)
+            backMidPos = BlockPos(bottomPos1.x, bottomPos1.y + 1 + i, bottomPos1.z)
+            frontMidPos = BlockPos(bottomPos2.x, bottomPos2.y + 1 + i, bottomPos2.z)
+            frontSidePos = BlockPos(bottomPos2.x + dx, bottomPos2.y + 1 + i, bottomPos2.z + dz)
+
+            if (dim.world.getBlock(backSidePos) != 'obsidian'
+                or dim.world.getBlock(frontSidePos) != 'obsidian'
+                or dim.world.getBlock(backMidPos) != 'air'
+                or dim.world.getBlock(frontMidPos) != 'air'):
+
+                ok = False
+                break
+
+            answer.append(backMidPos)
+            answer.append(frontMidPos)
+        
+        if ok:
+            return answer
+    
+    return None
+
+    
 
 def clientTick(client: ClientState, instData):
     startTime = time.time()
