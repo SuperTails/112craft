@@ -8,9 +8,11 @@ from entity import Entity
 from player import Player
 from client import ClientState
 from server import ServerState, Window
+from dimension import Dimension
 from util import BlockPos, roundHalfUp, ChunkPos
 import util
 import world
+from world import World
 import time
 import math
 import config
@@ -87,7 +89,7 @@ def getSlotsInWindow(server: ServerState, windowId: int) -> Tuple[Stack, List[Sl
             raise Exception(f'Window click from nonexistent player {window.playerId}')
         
         if window.kind == 'furnace':
-            (chunk, localPos) = server.world.getChunk(window.pos)
+            (chunk, localPos) = server.getLocalDimension().world.getChunk(window.pos)
             furnace: world.Furnace = chunk.tileEntities[localPos]
 
             baseSlots = [furnace.inputSlot, furnace.fuelSlot, furnace.outputSlot] 
@@ -186,6 +188,8 @@ def sendUseItem(app, hand: int):
     if hasattr(app, 'server'):
         server: ServerState = app.server
         player: Player = server.getLocalPlayer()
+
+        wld = server.getLocalDimension().world
         
         heldSlot = player.inventory[player.hotbarIdx]
         if heldSlot.stack.isEmpty():
@@ -195,25 +199,25 @@ def sendUseItem(app, hand: int):
         cameraPos = (player.pos[0], player.pos[1] + player.height, player.pos[2])
 
         if heldSlot.stack.item == 'bucket':
-            block = server.world.lookedAtBlock(player.reach, cameraPos,
+            block = wld.lookedAtBlock(player.reach, cameraPos,
                 player.headPitch, player.headYaw, useFluids=True)
 
             if block is not None:
                 (pos, _) = block
 
-                blockId = server.world.getBlock(pos)
-                blockState = server.world.getBlockState(pos)
+                blockId = wld.getBlock(pos)
+                blockState = wld.getBlockState(pos)
 
                 if blockId in ('water', 'flowing_water') and blockState['level'] == '0':
-                    server.world.setBlock((app.textures, app.cube, app.textureIndices), pos, 'air', {})
+                    wld.setBlock((app.textures, app.cube, app.textureIndices), pos, 'air', {})
                     if not player.creative:
                         heldSlot.stack.item = 'water_bucket'
                 elif blockId in ('lava', 'flowing_lava') and blockState['level'] == '0':
-                    server.world.setBlock((app.textures, app.cube, app.textureIndices), pos, 'air', {})
+                    wld.setBlock((app.textures, app.cube, app.textureIndices), pos, 'air', {})
                     if not player.creative:
                         heldSlot.stack.item = 'lava_bucket'
         elif heldSlot.stack.item == 'water_bucket' or heldSlot.stack.item == 'lava_bucket':
-            block = server.world.lookedAtBlock(player.reach, cameraPos,
+            block = wld.lookedAtBlock(player.reach, cameraPos,
                 player.headPitch, player.headYaw, useFluids=False)
             
             if block is not None:
@@ -226,7 +230,7 @@ def sendUseItem(app, hand: int):
                 else:
                     blockId = 'flowing_lava'
 
-                server.world.setBlock((app.textures, app.cube, app.textureIndices), pos2, blockId, { 'level': '0' })
+                wld.setBlock((app.textures, app.cube, app.textureIndices), pos2, blockId, { 'level': '0' })
 
                 if not player.creative:
                     heldSlot.stack.item = 'bucket'
@@ -262,7 +266,7 @@ def sendPlayerPlacement(app, hand: int, location: BlockPos, face: int, cx: float
         server: ServerState = app.server
         player: Player = server.getLocalPlayer()
 
-        blockId = server.world.getBlock(location)
+        blockId = server.getLocalDimension().world.getBlock(location)
         if blockId == 'crafting_table':
             windowId = server.getWindowId()
             kind = util.REGISTRY.encode('minecraft:menu', 'minecraft:crafting')
@@ -295,13 +299,16 @@ def sendChatMessage(app, text: str):
 
             server: ServerState = app.server
 
+            dim = server.getLocalDimension()
+            wld, entities = dim.world, dim.entities
+
             print(f"COMMAND {text}")
 
             if parts[0] == 'pathfind':
                 player: Player = server.getLocalPlayer()
                 target = player.getBlockPos()
-                for ent in server.entities:
-                    ent.updatePath(server.world, target)
+                for ent in entities:
+                    ent.updatePath(wld, target)
             elif parts[0] == 'give':
                 itemId = parts[1]
                 if len(parts) == 3:
@@ -338,7 +345,7 @@ def sendChatMessage(app, text: str):
 
                 pos = world.nearestBlockPos(player.pos[0], player.pos[1], player.pos[2])
 
-                server.world.explodeAt(pos, power, (app.textures, app.cube, app.textureIndices))
+                wld.explodeAt(pos, power, (app.textures, app.cube, app.textureIndices))
             elif parts[0] == 'tp':
                 # TODO:
                 '''
@@ -391,7 +398,9 @@ def sendInteractEntity(app, entityId, kind, *, x=None, y=None, z=None, hand=None
         server: ServerState = app.server
         player = server.getLocalPlayer()
 
-        for ent in server.entities:
+        entities = server.getLocalDimension().entities
+
+        for ent in entities:
             if ent.entityId == entityId:
                 if kind == network.InteractKind.ATTACK:
                     knockX = ent.pos[0] - player.pos[0]
@@ -423,9 +432,11 @@ def updateBlockBreaking(app, server: ServerState):
 
     if server.breakingBlock == 0.0:
         return
+    
+    wld = server.getLocalDimension().world
 
-    blockId = server.world.getBlock(pos)
-    blockState = server.world.getBlockState(pos)
+    blockId = wld.getBlock(pos)
+    blockState = wld.getBlockState(pos)
 
     # HACK:
     player = server.getLocalPlayer()
@@ -456,7 +467,7 @@ def updateBlockBreaking(app, server: ServerState):
 
         resources.getDigSound(app, blockId).play()
 
-        server.world.setBlock((app.textures, app.cube, app.textureIndices), pos, 'air')
+        wld.setBlock((app.textures, app.cube, app.textureIndices), pos, 'air')
 
         server.breakingBlock = 0.0
 
@@ -484,7 +495,8 @@ def updateBlockBreaking(app, server: ServerState):
             ent = Entity(app, 1, 'item', pos.x, pos.y, pos.z)
             ent.extra.stack = stack
             ent.velocity = [xVel, yVel, zVel]
-            server.entities.append(ent)
+
+            server.getLocalDimension().entities.append(ent)
 
 entityIdNum = 10_000
 
@@ -531,14 +543,14 @@ def clientTick(client: ClientState, instData):
 
         #player.tick(app, app.world, app.entities, 0.0, 0.0)
         
-        collideY(client, player)
+        collideY(client.world, player)
         if player.onGround:
             player.velocity[0] = x
             player.velocity[2] = z
         else:
             player.velocity[0] += x / 10.0
             player.velocity[2] += z / 10.0
-        collideXZ(client, player)
+        collideXZ(client.world, player)
     
     client.cameraPos = copy.copy(player.pos)
     client.cameraPos[1] += player.height
@@ -568,15 +580,16 @@ def serverTick(app, server: ServerState):
 
     instData = (app.textures, app.cube, app.textureIndices)
 
-    server.world.loadUnloadChunks(server.getLocalPlayer().pos, (app.textures, app.cube, app.textureIndices))
-    server.world.addChunkDetails(instData)
-    #server.world.tickChunks((app.textures, app.cube, app.textureIndices))
-    server.world.tickChunks(app)
+    for dim in server.dimensions:
+        dim.world.loadUnloadChunks(server.getLocalPlayer().pos, (app.textures, app.cube, app.textureIndices))
+        dim.world.addChunkDetails(instData)
+        dim.world.tickChunks(app)
 
     updateBlockBreaking(app, server)
 
-    doMobSpawning(app, server)
-    doMobDespawning(app, server)
+    for dim in server.dimensions:
+        doMobSpawning(app, server, dim)
+        doMobDespawning(app, server, dim)
 
     # Ticking is done in stages so that collision detection works as expected:
     # First we update the player's Y position and resolve Y collisions,
@@ -591,13 +604,13 @@ def serverTick(app, server: ServerState):
     # Likewise for side to side movement
     x = float(app.client.d) - float(app.client.a)
 
-    # FIXME:
-    player: Player = server.getLocalPlayer()
+    for player in server.players:
+        playerChunkPos = world.toChunkLocal(player.getBlockPos())[0]
+        playerChunkPos = ChunkPos(playerChunkPos.x, 0, playerChunkPos.z)
 
-    playerChunkPos = world.toChunkLocal(player.getBlockPos())[0]
-    playerChunkPos = ChunkPos(playerChunkPos.x, 0, playerChunkPos.z)
+        dim = server.getDimensionOf(player)
 
-    player.tick(app, server.world, server.entities, 0.0, 0.0)
+        player.tick(app, dim.world, dim.entities, 0.0, 0.0)
     
     '''
     collideY(app, player)
@@ -611,42 +624,48 @@ def serverTick(app, server: ServerState):
     '''
 
     # FIXME: types???
-    entities = server.entities + server.players #type:ignore
+    entities = server.getLocalDimension().entities + server.players #type:ignore
 
-    for entity in server.entities:
-        entChunkPos = world.toChunkLocal(entity.getBlockPos())[0]
-        entChunkPos = ChunkPos(entChunkPos.x, 0, entChunkPos.z)
+    # FIXME:
+    player = server.getLocalPlayer()
 
-        if entChunkPos not in server.world.chunks or not server.world.chunks[entChunkPos].isTicking:
-            continue
+    for dim in server.dimensions:
+        for entity in dim.entities:
+            entChunkPos = world.toChunkLocal(entity.getBlockPos())[0]
+            entChunkPos = ChunkPos(entChunkPos.x, 0, entChunkPos.z)
 
-        againstWall = collide(server, entity) #type:ignore
+            if entChunkPos not in dim.world.chunks or not dim.world.chunks[entChunkPos].isTicking:
+                continue
 
-        if againstWall and entity.onGround:
-            entity.velocity[1] = 0.40
-        
-        entity.tick(app, server.world, entities, player.pos[0], player.pos[2])
+            againstWall = collide(dim.world, entity)
 
-        if entity.kind.name == 'item':
-            dx = (player.pos[0] - entity.pos[0])**2
-            dy = (player.pos[1] - entity.pos[1])**2
-            dz = (player.pos[2] - entity.pos[2])**2
-            if math.sqrt(dx + dy + dz) < 2.0 and entity.extra.pickupDelay == 0:
-                player.pickUpItem(app, entity.extra.stack)
-                entity.health = 0.0
+            if againstWall and entity.onGround:
+                entity.velocity[1] = 0.40
             
-        if entity.pos[1] < -64.0:
-            entity.hit(app, 10.0, (0.0, 0.0))
+            entity.tick(app, dim.world, entities, player.pos[0], player.pos[2])
+
+            if entity.kind.name == 'item':
+                dx = (player.pos[0] - entity.pos[0])**2
+                dy = (player.pos[1] - entity.pos[1])**2
+                dz = (player.pos[2] - entity.pos[2])**2
+                if math.sqrt(dx + dy + dz) < 2.0 and entity.extra.pickupDelay == 0:
+                    player.pickUpItem(app, entity.extra.stack)
+                    entity.health = 0.0
+                
+            if entity.pos[1] < -64.0:
+                entity.hit(app, 10.0, (0.0, 0.0))
     
     if player.pos[1] < -64.0:
         player.hit(app, 10.0, (0.0, 0.0))
     
     network.s2cQueue.put(network.TimeUpdateS2C(0, server.time))
     
-    # HACK:
-    for ent1, ent2 in zip(server.entities, app.client.entities):
-        ent1.variables = copy.copy(ent2.variables)
-    app.client.entities = copy.deepcopy(server.entities)
+    for dim in server.dimensions:
+        # HACK:
+        for ent1, ent2 in zip(dim.entities, app.client.entities):
+            ent1.variables = copy.copy(ent2.variables)
+
+    app.client.entities = copy.deepcopy(server.getLocalDimension().entities)
     app.client.player.inventory = copy.deepcopy(server.getLocalPlayer().inventory)
     
     endTime = time.time()
@@ -666,39 +685,39 @@ def syncClient(app):
     #client.breakingBlock = app.breakingBlock
     #client.breakingBlockPos = app.breakingBlockPos
 
-def doMobDespawning(app, server: ServerState):
+def doMobDespawning(app, server: ServerState, dim: Dimension):
     # HACK:
     player = server.players[0]
 
     toDelete = []
 
     idx = 0
-    while idx < len(server.entities):
-        [x, y, z] = server.entities[idx].pos
+    while idx < len(dim.entities):
+        [x, y, z] = dim.entities[idx].pos
         dist = math.sqrt((x-player.pos[0])**2 + (y-player.pos[1])**2 + (z-player.pos[2])**2)
 
         maxDist = 128.0
 
-        if dist > maxDist or server.entities[idx].health <= 0.0:
-            toDelete.append(server.entities[idx].entityId)
-            server.entities.pop(idx)
+        if dist > maxDist or dim.entities[idx].health <= 0.0:
+            toDelete.append(dim.entities[idx].entityId)
+            dim.entities.pop(idx)
         else:
             idx += 1
     
     network.s2cQueue.put(network.DestroyEntitiesS2C(toDelete))
 
-def doMobSpawning(app, server: ServerState):
-    mobCap = len(server.world.chunks) / 4
+def doMobSpawning(app, server: ServerState, dim: Dimension):
+    mobCap = len(dim.world.chunks) / 4
 
     random.seed(time.time())
 
     # HACK:
     player = server.players[0]
 
-    for (chunkPos, chunk) in server.world.chunks.items():
+    for (chunkPos, chunk) in dim.world.chunks.items():
         chunk: world.Chunk
         if chunk.isTicking:
-            if len(server.entities) > mobCap:
+            if len(dim.entities) > mobCap:
                 return
 
             # FIXME: Random tick speed?
@@ -713,7 +732,7 @@ def doMobSpawning(app, server: ServerState):
             if dist < minSpawnDist:
                 continue
 
-            if not isValidSpawnLocation(app, BlockPos(x, y, z)): continue
+            if not isValidSpawnLocation(app, dim, BlockPos(x, y, z)): continue
 
             mob = random.choice(['creeper', 'zombie', 'skeleton'])
 
@@ -721,40 +740,41 @@ def doMobSpawning(app, server: ServerState):
             for _ in range(packSize):
                 x += random.randint(-2, 2)
                 z += random.randint(-2, 2)
-                if isValidSpawnLocation(app, BlockPos(x, y, z)):
-                    # FIXME: IDs
-                    server.entities.append(Entity(app, 1, mob, x, y, z))
+                if isValidSpawnLocation(app, dim, BlockPos(x, y, z)):
+                    dim.entities.append(Entity(app, server.getEntityId(), mob, x, y, z))
 
-def isValidSpawnLocation(app, pos: BlockPos):
+def isValidSpawnLocation(app, dim: Dimension, pos: BlockPos):
     server: ServerState = app.server
 
     floor = BlockPos(pos.x, pos.y - 1, pos.z)
     feet = pos
     head = BlockPos(pos.x, pos.y + 1, pos.z)
 
-    light = server.world.getTotalLight(app.time, pos)
+    light = dim.world.getTotalLight(app.time, pos)
 
-    isOk = (server.world.coordsOccupied(floor)
-        and not server.world.coordsOccupied(feet)
-        and not server.world.coordsOccupied(head)
+    isOk = (dim.world.coordsOccupied(floor)
+        and not dim.world.coordsOccupied(feet)
+        and not dim.world.coordsOccupied(head)
         and light < 8)
     
     return isOk
 
-def collideY(client: ClientState, entity: Entity):
+GRAVITY = 0.1
+
+def collideY(wld: World, entity: Entity):
     entity.pos[1] += entity.velocity[1]
 
     if entity.onGround:
-        if not client.world.hasBlockBeneath(entity):
+        if not wld.hasBlockBeneath(entity):
             entity.onGround = False
     else:
         #if not hasattr(entity, 'flying') or not entity.flying: #type:ignore
-        entity.velocity[1] -= client.gravity
+        entity.velocity[1] -= GRAVITY
         [_, yPos, _] = entity.pos
         #yPos -= entity.height
         yPos -= 0.1
         feetPos = roundHalfUp(yPos)
-        if client.world.hasBlockBeneath(entity): 
+        if wld.hasBlockBeneath(entity): 
             entity.onGround = True
             if hasattr(entity, 'flying'): entity.flying = False #type:ignore
             entity.velocity[1] = 0.0
@@ -766,18 +786,18 @@ def collideY(client: ClientState, entity: Entity):
             for z in [entity.pos[2] - entity.radius * 0.99, entity.pos[2] + entity.radius * 0.99]:
                 hiYCoord = roundHalfUp(entity.pos[1] + entity.height)
 
-                if client.world.coordsOccupied(BlockPos(round(x), hiYCoord, round(z)), world.isSolid):
+                if wld.coordsOccupied(BlockPos(round(x), hiYCoord, round(z)), world.isSolid):
                     yEdge = hiYCoord - 0.55
                     entity.pos[1] = yEdge - entity.height
                     if entity.velocity[1] > 0.0:
                         entity.velocity[1] = 0.0
 
 
-def collide(client: ClientState, entity: Entity):
-    collideY(client, entity)
-    return collideXZ(client, entity)
+def collide(wld: World, entity: Entity):
+    collideY(wld, entity)
+    return collideXZ(wld, entity)
 
-def collideXZ(client: ClientState, entity: Entity):
+def collideXZ(wld: World, entity: Entity):
     hitWall = False
 
     minY = roundHalfUp((entity.pos[1]))
@@ -795,12 +815,12 @@ def collideXZ(client: ClientState, entity: Entity):
             hiXBlockCoord = round((x + entity.radius))
             loXBlockCoord = round((x - entity.radius))
 
-            if client.world.coordsOccupied(BlockPos(hiXBlockCoord, y, round(z)), world.isSolid):
+            if wld.coordsOccupied(BlockPos(hiXBlockCoord, y, round(z)), world.isSolid):
                 # Collision on the right, so move to the left
                 xEdge = (hiXBlockCoord - 0.5)
                 entity.pos[0] = xEdge - entity.radius
                 hitWall = True
-            elif client.world.coordsOccupied(BlockPos(loXBlockCoord, y, round(z)), world.isSolid):
+            elif wld.coordsOccupied(BlockPos(loXBlockCoord, y, round(z)), world.isSolid):
                 # Collision on the left, so move to the right
                 xEdge = (loXBlockCoord + 0.5)
                 entity.pos[0] = xEdge + entity.radius
@@ -815,11 +835,11 @@ def collideXZ(client: ClientState, entity: Entity):
             hiZBlockCoord = round((z + entity.radius))
             loZBlockCoord = round((z - entity.radius))
 
-            if client.world.coordsOccupied(BlockPos(round(x), y, hiZBlockCoord), world.isSolid):
+            if wld.coordsOccupied(BlockPos(round(x), y, hiZBlockCoord), world.isSolid):
                 zEdge = (hiZBlockCoord - 0.5)
                 entity.pos[2] = zEdge - entity.radius
                 hitWall = True
-            elif client.world.coordsOccupied(BlockPos(round(x), y, loZBlockCoord), world.isSolid):
+            elif wld.coordsOccupied(BlockPos(round(x), y, loZBlockCoord), world.isSolid):
                 zEdge = (loZBlockCoord + 0.5)
                 entity.pos[2] = zEdge + entity.radius
                 hitWall = True

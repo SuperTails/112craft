@@ -125,7 +125,7 @@ class WorldLoadMode(Mode):
             app.server = ServerState.open(worldName, seed, importPath, app)
             self.centerPos = [16.0 * app.server.preloadPos.x, 0.0, 16.0 * app.server.preloadPos.z]
 
-            app.client.world = app.server.world
+            app.client.world = app.server.getLocalDimension().world
         else:
             if hasattr(app, 'server'):
                 delattr(app, 'server')
@@ -138,7 +138,7 @@ class WorldLoadMode(Mode):
             network.c2sQueue.put((worldName, 25565))
         
     def timerFired(self, app):
-        loader = app.server if app.client.local else app.client
+        loader = app.server.getLocalDimension() if app.client.local else app.client
 
         if self.loadStage < 10:
             loader.world.loadUnloadChunks(self.centerPos, (app.textures, app.cube, app.textureIndices))

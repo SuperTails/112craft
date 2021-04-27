@@ -19,8 +19,7 @@ class Window:
     kind: str
 
 class ServerState:
-    world: World
-    entities: List[Entity]
+    dimensions: List[Dimension]
     players: List[Player]
 
     preloadPos: ChunkPos
@@ -90,22 +89,43 @@ class ServerState:
                 return player
         raise Exception("No local player")
     
+    def getLocalDimension(self) -> Dimension:
+        player = self.getLocalPlayer()
+        return self.getDimensionOf(player)
+    
+    def getDimensionOf(self, player: Player) -> Dimension:
+        if player.dimension != 'overworld':
+            # TODO:
+            raise Exception()
+        else:
+            return self.dimensions[0]
+    
+    def getDimension(self, name: str) -> Dimension:
+        if name != 'overworld':
+            # TODO:
+            raise Exception()
+        else:
+            return self.dimensions[0]
+    
     def save(self):
         self.saveWorld()
         self.saveEntities()
         self.savePlayers()
     
     def saveWorld(self):
-        self.world.save()
+        for dim in self.dimensions:
+            dim.world.save()
     
     def saveEntities(self):
-        path = self.saveFolderPath() + '/entities.dat'
+        for dim in self.dimensions:
+            # FIXME:
+            path = self.saveFolderPath() + '/entities.dat'
 
-        nbtfile = nbt.NBTFile()
-        nbtfile.name = 'Entities'
-        # FIXME:
-        nbtfile.tags.append(entity.toNbt(self.entities)) #type:ignore
-        nbtfile.write_file(path)
+            nbtfile = nbt.NBTFile()
+            nbtfile.name = 'Entities'
+            # FIXME:
+            nbtfile.tags.append(entity.toNbt(dim.entities))
+            nbtfile.write_file(path)
 
     def savePlayers(self):
         os.makedirs(self.saveFolderPath() + '/playerdata', exist_ok=True)
@@ -143,16 +163,19 @@ class ServerState:
 
         server.saveName = worldName
 
-        server.world = World(server.saveFolderPath() + '/region', seed, importPath=importPath)
+        overworld = Dimension()
+        overworld.world = World(server.saveFolderPath() + '/region', seed, importPath=importPath)
 
         try:
             path = server.saveFolderPath() + '/entities.dat'
 
             nbtfile = nbt.NBTFile(path)
 
-            server.entities = [entity.Entity(app, server.getEntityId(), nbt=tag) for tag in nbtfile["Entities"][1:]]
+            overworld.entities = [entity.Entity(app, server.getEntityId(), nbt=tag) for tag in nbtfile["Entities"][1:]]
         except FileNotFoundError:
-            server.entities = [entity.Entity(app, server.getEntityId(), 'fox', 5.0, 75.0, 3.0)]
+            overworld.entities = [entity.Entity(app, server.getEntityId(), 'fox', 5.0, 75.0, 3.0)]
+        
+        server.dimensions = [overworld]
 
         server.addPlayer(app)
         preloadPos = server.players[0].pos
@@ -163,6 +186,6 @@ class ServerState:
 
         server.preloadPos = ChunkPos(cx, cy, cz)
 
-        server.world.loadChunk((app.textures, app.cube, app.textureIndices), server.preloadPos)
+        overworld.world.loadChunk((app.textures, app.cube, app.textureIndices), server.preloadPos)
 
         return server

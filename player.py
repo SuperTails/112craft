@@ -27,6 +27,8 @@ class Player(Entity):
     flying: bool
 
     inventory: List[Slot]
+    
+    dimension: str
 
     def __init__(self, app, creative: bool = False, tag: Optional[nbt.TAG_Compound] = None):
         # FIXME: ID
@@ -36,6 +38,8 @@ class Player(Entity):
 
         self.creative = creative
         self.flying = False
+
+        self.dimension = 'overworld'
         
         if self.creative:
             if len(app.itemTextures) > 36:
@@ -63,6 +67,8 @@ class Player(Entity):
                 raise Exception(f'Invalid game mode {gameMode}')
 
             self.flying = tag['abilities']['flying'].value != 0
+
+            self.dimension = tag['dimension'].value.removeprefix('minecraft:')
         
     def toNbt(self) -> nbt.TAG_Compound:
         tag = super().toNbt()
@@ -83,6 +89,8 @@ class Player(Entity):
         abilities.tags.append(nbt.TAG_Byte(int(self.flying), 'flying'))
 
         tag.tags.append(abilities)
+
+        tag.tags.append(nbt.TAG_String('minecraft:' + self.dimension, 'dimension'))
 
         return tag
     
