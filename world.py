@@ -584,6 +584,26 @@ class Chunk:
             elif blockId == 'redstone_wire':
                 updateRedstoneWire(self._globalBlockPos(blockPos), world, instData)
                 world.updateRedstone([self._globalBlockPos(blockPos)], instData)
+            elif blockId == 'nether_portal':
+                blockState = self.blockStates[blockPos.x, blockPos.y, blockPos.z]
+
+                validBlocks = 0
+
+                for da, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                    if blockState['axis'] == 'x':
+                        dx = da
+                        dz = 0
+                    else:
+                        dx = 0
+                        dz = da
+
+                    adjPos = self._globalBlockPos(BlockPos(blockPos.x + dx, blockPos.y + dy, blockPos.z + dz))
+
+                    if world.getBlock(adjPos) in ('obisidian', 'nether_portal'):
+                        validBlocks += 1
+                
+                if validBlocks != 4:
+                    self.setBlock(world, instData, blockPos, 'air', {})
         elif priority == 3:
             if blockId in ('redstone_torch', 'redstone_wall_torch'):
                 for (_, p) in self.scheduledTicks:

@@ -32,7 +32,7 @@ class ServerState:
 
     localPlayer: int
 
-    teleportId: int
+    nextTeleportId: int
     nextEntityId: int
 
     nextWindowId: int
@@ -54,7 +54,7 @@ class ServerState:
     saveName: str
 
     def __init__(self):
-        self.teleportId = 1
+        self.nextTeleportId = 1
         self.nextEntityId = 2
         self.nextWindowId = 1
         self.breakingBlock = 0.0
@@ -82,6 +82,10 @@ class ServerState:
     def getEntityId(self):
         self.nextEntityId += 1
         return self.nextEntityId
+    
+    def getTeleportId(self):
+        self.nextTeleportId += 1
+        return self.nextTeleportId
 
     def getLocalPlayer(self) -> Player:
         for player in self.players:

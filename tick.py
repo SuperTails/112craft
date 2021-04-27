@@ -12,7 +12,7 @@ from dimension import Dimension
 from util import BlockPos, roundHalfUp, ChunkPos
 import util
 import world
-from world import World
+from world import World, isSolid
 import time
 import math
 import config
@@ -245,9 +245,10 @@ def sendUseItem(app, hand: int):
 
                 portals = findPortalFrame(server, server.getLocalDimension(), pos2)
                 if portals is not None:
+                    portals, axis = portals
                     instData = (app.textures, app.cube, app.textureIndices)
                     for p in portals:
-                        server.getLocalDimension().world.setBlock(instData, p, 'nether_portal', { 'axis': 'x' })
+                        server.getLocalDimension().world.setBlock(instData, p, 'nether_portal', { 'axis': axis }, doBlockUpdates=False)
     else:
         network.c2sQueue.put(network.UseItemC2S(hand))
 
@@ -371,6 +372,8 @@ def sendChatMessage(app, text: str):
                     raise Exception(player.dimension)
                 
                 import quarry.types.nbt as quarrynbt
+
+                player.portalCooldown = 80
                 
                 # TODO:
                 network.s2cQueue.put(network.RespawnS2C(
@@ -404,10 +407,8 @@ def sendClientStatus(app, status: int):
 
         network.s2cQueue.put(network.PlayerPositionAndLookS2C(
             player.pos[0], player.pos[1], player.pos[2], 0.0, 0.0,
-            False, False, False, True, True, server.teleportId
+            False, False, False, True, True, server.getTeleportId()
         ))
-
-        server.teleportId += 1
 
         '''
         for ent in server.entities:
@@ -539,9 +540,7 @@ def updateBlockBreaking(app, server: ServerState):
 
             server.getLocalDimension().entities.append(ent)
 
-def findPortalFrame(server: ServerState, dim: Dimension, pos: BlockPos) -> Optional[List[BlockPos]]:
-    print(f'searching for portal frame at {pos}')
-
+def findPortalFrame(server: ServerState, dim: Dimension, pos: BlockPos) -> Optional[Tuple[List[BlockPos], str]]:
     bottomPos1 = None
     topPos1 = None
 
@@ -575,7 +574,7 @@ def findPortalFrame(server: ServerState, dim: Dimension, pos: BlockPos) -> Optio
             continue
         if dim.world.getBlock(topPos2) != 'obsidian':
             continue
-
+    
         answer = []
 
         ok = True
@@ -598,11 +597,100 @@ def findPortalFrame(server: ServerState, dim: Dimension, pos: BlockPos) -> Optio
             answer.append(frontMidPos)
         
         if ok:
-            return answer
+            return (answer, 'x' if dx != 0 else 'z')
     
     return None
 
+def getDestination(app, world: World, searchPos: BlockPos, maxHeight: int) -> BlockPos:
+    existing = findPortalNear(world, searchPos, maxHeight)
+    if existing is not None:
+        return existing
     
+    spot = findSpaceForPortal(world, searchPos, maxHeight)
+
+    if spot is not None:
+        createPortalAt(app, world, spot, clearNearby=False)
+        return BlockPos(spot.x, spot.y + 1, spot.z)
+    
+    forcedPos = BlockPos(searchPos.x, maxHeight - 20, searchPos.z)
+    
+    createPortalAt(app, world, forcedPos, clearNearby=True)
+    return BlockPos(forcedPos.x, forcedPos.y + 1, forcedPos.z)
+    
+def findPortalNear(world: World, blockPos: BlockPos, maxHeight: int) -> Optional[BlockPos]:
+    for totalDist in range(16):
+        for xDist in range(totalDist):
+            zDist = totalDist - xDist
+            
+            for y in range(maxHeight):
+                if world.getBlock(BlockPos(blockPos.x + xDist, y, blockPos.z + zDist)) == 'nether_portal':
+                    return BlockPos(blockPos.x + xDist, y, blockPos.z + zDist)
+                if world.getBlock(BlockPos(blockPos.x + xDist, y, blockPos.z - zDist)) == 'nether_portal':
+                    return BlockPos(blockPos.x + xDist, y, blockPos.z + zDist)
+                if world.getBlock(BlockPos(blockPos.x - xDist, y, blockPos.z + zDist)) == 'nether_portal':
+                    return BlockPos(blockPos.x + xDist, y, blockPos.z + zDist)
+                if world.getBlock(BlockPos(blockPos.x - xDist, y, blockPos.z - zDist)) == 'nether_portal':
+                    return BlockPos(blockPos.x + xDist, y, blockPos.z + zDist)
+    
+    return None
+
+def createPortalAt(app, world: World, blockPos: BlockPos, clearNearby: bool):
+    instData = (app.textures, app.cube, app.textureIndices)
+
+    for dx in (-1, 0, 1, 2):
+        world.setBlock(instData, BlockPos(blockPos.x + dx, blockPos.y, blockPos.z), 'obsidian', {})
+        world.setBlock(instData, BlockPos(blockPos.x + dx, blockPos.y + 4, blockPos.z), 'obsidian', {})
+    
+    for dy in (1, 2, 3):
+        world.setBlock(instData, BlockPos(blockPos.x - 1, blockPos.y + dy, blockPos.z), 'obsidian', {})
+        world.setBlock(instData, BlockPos(blockPos.x + 2, blockPos.y + dy, blockPos.z), 'obsidian', {})
+    
+    for dx in (0, 1):
+        for dy in (1, 2, 3):
+            world.setBlock(instData, BlockPos(blockPos.x + dx, blockPos.y + dy, blockPos.z), 'nether_portal', { 'axis': 'x' }, doBlockUpdates=False)
+        
+    if clearNearby:
+        for dz in (-1, 1):
+            for dx in (-1, 0, 1, 2):
+                for dy in (0, 1, 2, 3):
+                    if dx in (0, 1) and dy == 0:
+                        blockId = 'obsidian'
+                        blockState = {}
+                    else:
+                        blockId = 'air'
+                        blockState = {}
+
+                    world.setBlock(instData, BlockPos(blockPos.x + dx, blockPos.y + dy, blockPos.z + dz), blockId, blockState)
+
+def findSpaceForPortal(world: World, blockPos: BlockPos, maxHeight: int) -> Optional[BlockPos]:
+    def isValidPos(pos: BlockPos):
+        for dy in range(0, 4):
+            for dx in range(-1, 4):
+                blockId = world.getBlock(BlockPos(pos.x + dx, pos.y + dy, pos.z))
+                if dy == 0:
+                    if blockId == 'air':
+                        return False
+                else:
+                    if not isSolid(blockId):
+                        return False
+        
+        return True
+
+    for totalDist in range(16):
+        for xDist in range(totalDist):
+            zDist = totalDist - xDist
+            
+            for y in range(maxHeight - 4):
+                if isValidPos(BlockPos(blockPos.x + xDist, y, blockPos.z + zDist)):
+                    return BlockPos(blockPos.x + xDist, y, blockPos.z + zDist)
+                if isValidPos(BlockPos(blockPos.x + xDist, y, blockPos.z - zDist)):
+                    return BlockPos(blockPos.x + xDist, y, blockPos.z - zDist)
+                if isValidPos(BlockPos(blockPos.x - xDist, y, blockPos.z + zDist)):
+                    return BlockPos(blockPos.x - xDist, y, blockPos.z + zDist)
+                if isValidPos(BlockPos(blockPos.x - xDist, y, blockPos.z - zDist)):
+                    return BlockPos(blockPos.x - xDist, y, blockPos.z - zDist)
+    
+    return None
 
 def clientTick(client: ClientState, instData):
     startTime = time.time()
@@ -721,14 +809,24 @@ def serverTick(app, server: ServerState):
                     player.dimension = 'overworld'
                 else:
                     raise Exception(player.dimension)
+        
+                player.portalCooldown = 80
+
+                destDim = server.getDimension(player.dimension)
+
+                dest = getDestination(app, destDim.world, player.getBlockPos(), 128)
 
                 # TODO:
                 network.s2cQueue.put(network.RespawnS2C(
                     quarrynbt.TagCompound({}), 'minecraft:' + player.dimension,
                     0, 0, None, False, False, True
                 ))
+
+                network.s2cQueue.put(network.PlayerPositionAndLookS2C(
+                    dest.x, dest.y, dest.z, 0.0, 0.0, False, False, False, False, False, server.getTeleportId()
+                ))
             else:
-                player.portalCooldown = 100
+                player.portalCooldown = 80
 
     '''
     collideY(app, player)

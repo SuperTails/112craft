@@ -39,6 +39,8 @@ class Player(Entity):
         self.creative = creative
         self.flying = False
 
+        self.portalCooldown = 80
+
         self.dimension = 'overworld'
         
         if self.creative:
