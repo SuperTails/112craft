@@ -564,9 +564,9 @@ class PlayingMode(Mode):
             app.yawSpeed *= 0.95
         
         if player.flying:
-            if app.space:
+            if app.client.space:
                 player.velocity[1] = 0.2
-            elif app.shift:
+            elif app.client.shift:
                 player.velocity[1] = -0.2
             else:
                 player.velocity[1] = 0.0

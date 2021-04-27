@@ -775,6 +775,7 @@ def serverTick(app, server: ServerState):
 
     app.client.entities = copy.deepcopy(server.getLocalDimension().entities)
     app.client.player.inventory = copy.deepcopy(server.getLocalPlayer().inventory)
+    app.client.player.creative = server.getLocalPlayer().creative
     
     endTime = time.time()
     server.tickTimes[server.tickTimeIdx] = (endTime - startTime)

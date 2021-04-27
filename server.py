@@ -196,6 +196,6 @@ class ServerState:
 
         server.preloadPos = ChunkPos(cx, cy, cz)
 
-        overworld.world.loadChunk((app.textures, app.cube, app.textureIndices), server.preloadPos)
+        server.getLocalDimension().world.loadChunk((app.textures, app.cube, app.textureIndices), server.preloadPos)
 
         return server

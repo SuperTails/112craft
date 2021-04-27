@@ -1525,11 +1525,24 @@ class OverworldGen(TerrainGen):
 
                     self.caves[pos] = generateCaveCenter(caveStart, seed)
 
+import simplex
+
 class NetherGen(TerrainGen):
     def generate(self, chunk: Chunk, world: 'World', instData, seed):
+        for xIdx in range(16):
+            for yIdx in range(128):
+                for zIdx in range(16):
+                    gpos = chunk._globalBlockPos(BlockPos(xIdx, yIdx, zIdx))
+                    s = simplex.getSimplexFractal(gpos.x, gpos.y, gpos.z, 1.0 / 256.0, 4, 0)
+
+                    if s < 0.0:
+                        chunk.blocks[xIdx, yIdx, zIdx] = 'air'
+                    else:
+                        chunk.blocks[xIdx, yIdx, zIdx] = 'netherrack'
+
         chunk.blocks[:, 0, :] = 'bedrock'
         chunk.blocks[:, 128, :] = 'bedrock'
-        chunk.blocks[:, 1:70, :] = 'netherrack'
+        chunk.blocks[:, 68:72, :] = 'air'
 
     def checkCavesAround(self, centerPos: ChunkPos, seed):
         pass
