@@ -1486,10 +1486,11 @@ def getRegionCoords(pos: ChunkPos) -> Tuple[int, int]:
 class World:
     chunks: dict[ChunkPos, Chunk]
     seed: int
-    name: str
 
     regions: dict[Tuple[int, int], anvil.Region]
     importPath: str
+
+    savePath: str
     
     caveChecked: set[ChunkPos]
     caves: dict[ChunkPos, List[BlockPos]]
@@ -1506,11 +1507,12 @@ class World:
                 return y
         return 0
     
-    def __init__(self, name: str, seed=None, importPath=''):
+    def __init__(self, savePath: str, seed=None, importPath=''):
         self.chunks = {}
-        self.name = name
         self.importPath = importPath
         self.regions = {}
+
+        self.savePath = savePath
 
         self.serverChunks = {}
 
@@ -1526,7 +1528,7 @@ class World:
 
         self.emu = None
 
-        os.makedirs(f'saves/{self.name}', exist_ok=True)
+        os.makedirs(self.savePath, exist_ok=True)
 
         if seed is not None:
             if not isinstance(seed, int):
@@ -1554,7 +1556,7 @@ class World:
         print(f"Opened world with seed {self.seed}")
 
     def saveMetaFile(self):
-        with open(f"saves/{self.name}/meta.txt", "w") as f:
+        with open(f"{self.savePath}/meta.txt", "w") as f:
             f.write(f"seed={self.seed}\n")
             if self.importPath != '':
                 f.write(f"importPath={self.importPath}\n")
@@ -1742,12 +1744,8 @@ class World:
                 
         return (totalCount, genCount, popCount, optCount, comCount)
 
-    
-    def saveFolderPath(self) -> str:
-        return f'saves/{self.name}'
-    
     def chunkFileName(self, pos: ChunkPos) -> str:
-        return f'saves/{self.name}/c_{pos.x}_{pos.y}_{pos.z}.npz'
+        return f'{self.savePath}/c_{pos.x}_{pos.y}_{pos.z}.npz'
     
     def save(self):
         print("Saving world... ", end='')

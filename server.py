@@ -52,6 +52,8 @@ class ServerState:
 
     preloadProgress: int
 
+    saveName: str
+
     def __init__(self):
         self.teleportId = 1
         self.nextEntityId = 2
@@ -97,7 +99,7 @@ class ServerState:
         self.world.save()
     
     def saveEntities(self):
-        path = self.world.saveFolderPath() + '/entities.dat'
+        path = self.saveFolderPath() + '/entities.dat'
 
         nbtfile = nbt.NBTFile()
         nbtfile.name = 'Entities'
@@ -106,19 +108,19 @@ class ServerState:
         nbtfile.write_file(path)
 
     def savePlayers(self):
-        os.makedirs(self.world.saveFolderPath() + '/playerdata', exist_ok=True)
+        os.makedirs(self.saveFolderPath() + '/playerdata', exist_ok=True)
 
         for player in self.players:
             # FIXME:
-            path = self.world.saveFolderPath() + '/playerdata/player.dat'
+            path = self.saveFolderPath() + '/playerdata/player.dat'
 
             nbtfile = nbt.NBTFile()
             nbtfile.name = 'Player'
             nbtfile.tags = player.toNbt().tags
             nbtfile.write_file(path)
-    
+        
     def addPlayer(self, app):
-        path = self.world.saveFolderPath() + '/playerdata/player.dat'
+        path = self.saveFolderPath() + '/playerdata/player.dat'
 
         try:
             nbtfile = nbt.NBTFile(filename=path)
@@ -132,14 +134,19 @@ class ServerState:
         self.players.append(player)
         self.localPlayer = player.entityId
     
+    def saveFolderPath(self):
+        return f'saves/{self.saveName}'
+    
     @classmethod
     def open(cls, worldName, seed, importPath, app):
         server = cls()
 
-        server.world = World(worldName, seed, importPath=importPath)
+        server.saveName = worldName
+
+        server.world = World(server.saveFolderPath() + '/region', seed, importPath=importPath)
 
         try:
-            path = server.world.saveFolderPath() + '/entities.dat'
+            path = server.saveFolderPath() + '/entities.dat'
 
             nbtfile = nbt.NBTFile(path)
 
