@@ -497,6 +497,8 @@ class Chunk:
     blockLightLevels: ndarray
     instances: List[Any]
 
+    biomes: ndarray
+
     tileEntities: dict[BlockPos, Any]
 
     meshVaos: List[int]
@@ -522,6 +524,8 @@ class Chunk:
         self.lightLevels = np.full((16, CHUNK_HEIGHT, 16), 0)
         self.blockLightLevels = np.full((16, CHUNK_HEIGHT, 16), 0)
         self.instances = [None] * self.blocks.size
+
+        self.biomes = np.full((16, CHUNK_HEIGHT // 4, 16), 'void', dtype=object)
 
         self.tickIdx = 0
         self.scheduledTicks = deque()

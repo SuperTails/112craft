@@ -7,8 +7,11 @@ import decimal
 import math
 from typing import NamedTuple, Tuple, Optional, Any
 from quarry.types.registry import LookupRegistry
+from dimregistry import DimensionCodec
 
 REGISTRY: LookupRegistry
+
+DIMENSION_CODEC: DimensionCodec
 
 def getSkylightFactor(gameTime: float) -> float: 
     dayFrac = ((gameTime % 24000) / 24000.0) - 0.75;

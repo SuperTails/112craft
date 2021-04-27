@@ -12,6 +12,8 @@ from util import BlockPos
 from quarry.types.buffer import BufferUnderrun
 from quarry.types.chat import Message
 from quarry.types.chunk import PackedArray
+from quarry.types import nbt
+from dimregistry import DimensionCodec
 import math
 
 c2sQueue = SimpleQueue()
@@ -746,8 +748,8 @@ class JoinGameS2C:
     gamemode: int
     prevGamemode: Optional[int]
     worldNames: List[str]
-    dimensionCodec: Any
-    dimension: Any
+    dimensionCodec: DimensionCodec
+    dimension: nbt.TagCompound
     worldName: str
     seedHash: int
     maxPlayers: int
@@ -765,7 +767,7 @@ class JoinGameS2C:
 
         worldNames = [buf.unpack_string() for _ in range(buf.unpack_varint())]
 
-        dimensionCodec = buf.unpack_nbt()
+        dimensionCodec = DimensionCodec.fromNbt(buf.unpack_nbt())
         dimension = buf.unpack_nbt()
         worldName = buf.unpack_string()
         seedHash = buf.unpack('q')

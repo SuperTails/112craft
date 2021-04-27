@@ -1036,9 +1036,11 @@ def handleS2CPackets(mode, app, client: ClientState):
             app.client.chat.append((time.time(), packet.data))
         elif isinstance(packet, network.JoinGameS2C):
             app.client.player.entityId = packet.entityId
+
             # TODO:
             print(packet.dimension)
-            pass
+
+            util.DIMENSION_CODEC = packet.dimensionCodec
         elif isinstance(packet, network.RespawnS2C):
             print(f'RESPAWN: {packet.worldName}, {packet.dimension}')
             if hasattr(app, 'server'):
@@ -1381,7 +1383,7 @@ def appStarted(app):
     #def makeTitleMode(app, _player): return TitleMode(app)
     #app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
     def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'world', True, makePlayingMode, seed=random.randint(0, 2**31))
+    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     # ---------------
