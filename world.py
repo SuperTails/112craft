@@ -50,6 +50,8 @@ from util import *
 from OpenGL.GL import * #type:ignore
 from network import ChunkDataS2C
 from dimregistry import BiomeEntry
+from voronoi import VoronoiGen, UnitSeeder, BinarySeeder
+from numpy.lib.stride_tricks import sliding_window_view
 
 # Places a tree with its bottommost log at the given position in the world.
 # If `doUpdates` is True, this recalculates the lighting and block visibility.
@@ -1488,18 +1490,71 @@ class NullGen(TerrainGen):
     def checkCavesAround(self, centerPos: ChunkPos, seed):
         pass
 
+OCEAN_SIZE = 30
+
+TERRAIN_BLEND_SIZE = 5
+
 class OverworldGen(TerrainGen):
     caveChecked: set[ChunkPos]
     caves: dict[ChunkPos, List[BlockPos]]
+
+    oceanGen: VoronoiGen
 
     def __init__(self):
         self.caveChecked = set()
         self.caves = {}
 
+        self.oceanGen = VoronoiGen(OCEAN_SIZE, BinarySeeder())
+    
+    def getBiome(self, x: int, z: int, seed):
+        if self.oceanGen.sample(x, z, seed):
+            biome = 'minecraft:ocean'
+        else:
+            biome = 'minecraft:forest'
+        
+        return util.DIMENSION_CODEC.getBiome(biome)
+    
+    def getCenter(self, biome):
+        if biome.name == 'minecraft:ocean':
+            return 30
+        else:
+            return 72
+    
+    def getFactor(self, biome):
+        if biome.name == 'minecraft:ocean':
+            return 20
+        else:
+            return 20
+    
+    def getParamsNear(self, pos: ChunkPos, world: 'World', seed) -> ndarray:
+        result = []
+
+        loX = pos.x * 16 - TERRAIN_BLEND_SIZE
+        hiX = (pos.x + 1) * 16 + TERRAIN_BLEND_SIZE
+
+        loZ = pos.z * 16 - TERRAIN_BLEND_SIZE
+        hiZ = (pos.z + 1) * 16 + TERRAIN_BLEND_SIZE
+
+        for x in range(loX, hiX):
+            for z in range(loZ, hiZ):
+                biome = self.getBiome(x, z, seed)
+                
+                result.append([self.getFactor(biome), self.getCenter(biome)])
+        
+        result = np.array(result)
+        result.shape = (hiX - loX, hiZ - loZ, 2)
+
+        return result
+    
     @timed()
     def generate(self, chunk: Chunk, world: 'World', instData,  seed):
-        chunk.biomes[:, :, :] = util.DIMENSION_CODEC.getBiome('minecraft:forest')
-
+        for biomeX in range(4):
+            for biomeZ in range(4):
+                chunk.biomes[biomeX, :, biomeZ] = self.getBiome(
+                    chunk.pos.x * 16 + biomeX * 4 + 2,
+                    chunk.pos.z * 16 + biomeZ * 4 + 2,
+                    seed)
+        
         cavePositions = self.caves.values()
 
         positions = []
@@ -1526,14 +1581,34 @@ class OverworldGen(TerrainGen):
                 
         print(f"{len(positions)}-many positions")
 
+        params = self.getParamsNear(chunk.pos, world, seed)
+
+        #windows = sliding_window_view(params, (TERRAIN_BLEND_SIZE * 2 + 1, TERRAIN_BLEND_SIZE * 2 + 1), axis=(0, 1))
+
+        amt = (TERRAIN_BLEND_SIZE * 2 + 1)**2
+
         for xIdx in range(0, 16):
+            totalFactor, totalCenter = np.sum(params[xIdx:TERRAIN_BLEND_SIZE * 2 + 1 + xIdx, :TERRAIN_BLEND_SIZE * 2 + 1, :], axis=(0, 1))
+
             for zIdx in range(0, 16):
+                if zIdx != 0:
+                    # Currently I am working on blending terrain generation between biomes
+                    fdiff, cdiff = np.sum(params[xIdx:TERRAIN_BLEND_SIZE * 2 + 1 + xIdx, zIdx - 1, :], axis=(0))
+                    totalFactor -= fdiff
+                    totalCenter -= cdiff
+                    fadd, cadd = np.sum(params[xIdx:TERRAIN_BLEND_SIZE * 2 + 1 + xIdx, zIdx + TERRAIN_BLEND_SIZE * 2, :], axis=(0))
+                    totalFactor += fadd
+                    totalCenter += cadd
+
                 globalPos = chunk._globalBlockPos(BlockPos(xIdx, 0, zIdx))
 
                 noise = perlin.getPerlinFractal(globalPos.x, globalPos.z, 1.0 / 256.0, 4, seed)
 
-                factor = 20
-                center = 72
+                #factor = 20
+                #center = 72
+
+                factor = totalFactor / amt
+                center = totalCenter / amt
 
                 topY = int(noise * factor + center)
                 
