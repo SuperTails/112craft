@@ -945,12 +945,16 @@ def loadResources(app):
         'redstone_wire': { 'all': 'redstone_dust_cross' },
         'redstone_torch': { 'all': 'redstone_torch_on' },
         'redstone_wall_torch': { 'all': 'redstone_torch_on' },
+        'sand': { 'all': 'sand' },
+        'sandstone': { 'up': 'sandstone_top', 'side': 'sandstone_normal', 'down': 'sandstone_bottom', },
     }
 
     app.hardnesses = {
         'grass': ('shovel', 1.0),
         'dirt': ('shovel', 0.8),
+        'sand': ('shovel', 0.8),
         'stone': ('pickaxe', 5.0),
+        'sandstone': ('pickaxe', 3.0),
         'furnace': ('pickaxe', 5.0),
         'glowstone': ('pickaxe', 2.0),
         'coal_ore': ('pickaxe', 6.0),
@@ -1002,6 +1006,8 @@ def loadResources(app):
         'redstone_torch': { '': 'redstone_torch' },
         'redstone_wall_torch': { '': 'redstone_torch' },
         'redstone_wire': { '': 'redstone' },
+        'sand': { '': 'sand' },
+        'sandstone': { 'pickaxe': 'sandstone' },
     }
 
     loadTkTextures(app)

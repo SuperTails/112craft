@@ -1490,7 +1490,9 @@ class NullGen(TerrainGen):
     def checkCavesAround(self, centerPos: ChunkPos, seed):
         pass
 
-OCEAN_SIZE = 30
+OCEAN_SIZE = 200
+
+BIOME_SIZE = 50
 
 TERRAIN_BLEND_SIZE = 5
 
@@ -1505,28 +1507,47 @@ class OverworldGen(TerrainGen):
         self.caves = {}
 
         self.oceanGen = VoronoiGen(OCEAN_SIZE, BinarySeeder())
+        self.biomeGen = VoronoiGen(BIOME_SIZE, UnitSeeder())
     
     def getBiome(self, x: int, z: int, seed):
         if self.oceanGen.sample(x, z, seed):
             biome = 'minecraft:ocean'
         else:
-            biome = 'minecraft:forest'
+            sample = self.biomeGen.sample(x, z, seed)
+            if sample < 0.5:
+                biome = 'minecraft:desert'
+            elif sample < 0.8:
+                biome = 'minecraft:plains'
+            else:
+                biome = 'minecraft:forest'
         
         return util.DIMENSION_CODEC.getBiome(biome)
     
     def getCenter(self, biome):
         if biome.name == 'minecraft:ocean':
             return 30
-        else:
+        elif biome.name == 'minecraft:forest':
             return 72
+        elif biome.name == 'minecraft:plains':
+            return 70
+        elif biome.name == 'minecraft:desert':
+            return 68
+        else:
+            raise Exception(biome.name)
     
     def getFactor(self, biome):
         if biome.name == 'minecraft:ocean':
             return 20
-        else:
+        elif biome.name == 'minecraft:forest':
             return 20
+        elif biome.name == 'minecraft:plains':
+            return 10
+        elif biome.name == 'minecraft:desert':
+            return 30
+        else:
+            raise Exception(biome.name)
     
-    def getParamsNear(self, pos: ChunkPos, world: 'World', seed) -> ndarray:
+    def getBiomesNear(self, pos: ChunkPos, world: 'World', seed) -> ndarray:
         result = []
 
         loX = pos.x * 16 - TERRAIN_BLEND_SIZE
@@ -1537,15 +1558,28 @@ class OverworldGen(TerrainGen):
 
         for x in range(loX, hiX):
             for z in range(loZ, hiZ):
-                biome = self.getBiome(x, z, seed)
-                
-                result.append([self.getFactor(biome), self.getCenter(biome)])
+                result.append(self.getBiome(x, z, seed))
         
         result = np.array(result)
-        result.shape = (hiX - loX, hiZ - loZ, 2)
+        result.shape = (hiX - loX, hiZ - loZ)
 
         return result
     
+    def biomesToParams(self, arr: ndarray) -> ndarray:
+        oldShape = arr.shape
+
+        arr.shape = (arr.size, )
+
+        def getParams(b):
+            return [self.getFactor(b), self.getCenter(b)]
+
+        result = np.array(list(map(getParams, arr)))
+
+        result.shape = oldShape + (2, )
+        arr.shape = oldShape
+
+        return result
+
     @timed()
     def generate(self, chunk: Chunk, world: 'World', instData,  seed):
         for biomeX in range(4):
@@ -1581,9 +1615,8 @@ class OverworldGen(TerrainGen):
                 
         print(f"{len(positions)}-many positions")
 
-        params = self.getParamsNear(chunk.pos, world, seed)
-
-        #windows = sliding_window_view(params, (TERRAIN_BLEND_SIZE * 2 + 1, TERRAIN_BLEND_SIZE * 2 + 1), axis=(0, 1))
+        biomes = self.getBiomesNear(chunk.pos, world, seed)
+        params = self.biomesToParams(biomes)
 
         amt = (TERRAIN_BLEND_SIZE * 2 + 1)**2
 
@@ -1592,7 +1625,6 @@ class OverworldGen(TerrainGen):
 
             for zIdx in range(0, 16):
                 if zIdx != 0:
-                    # Currently I am working on blending terrain generation between biomes
                     fdiff, cdiff = np.sum(params[xIdx:TERRAIN_BLEND_SIZE * 2 + 1 + xIdx, zIdx - 1, :], axis=(0))
                     totalFactor -= fdiff
                     totalCenter -= cdiff
@@ -1604,17 +1636,23 @@ class OverworldGen(TerrainGen):
 
                 noise = perlin.getPerlinFractal(globalPos.x, globalPos.z, 1.0 / 256.0, 4, seed)
 
-                #factor = 20
-                #center = 72
-
                 factor = totalFactor / amt
                 center = totalCenter / amt
 
                 topY = int(noise * factor + center)
-                
+
                 chunk.blocks[xIdx, :topY - 3, zIdx] = 'stone'
-                chunk.blocks[xIdx, topY - 3:topY, zIdx] = 'dirt'
-                chunk.blocks[xIdx, topY, zIdx] = 'grass'
+
+                columnBiome = biomes[xIdx + TERRAIN_BLEND_SIZE, zIdx + TERRAIN_BLEND_SIZE]
+            
+                if columnBiome.name == 'minecraft:ocean':
+                    chunk.blocks[xIdx, topY - 3:topY + 1, zIdx] = 'dirt'
+                elif columnBiome.name == 'minecraft:desert':
+                    chunk.blocks[xIdx, topY - 2:topY + 1, zIdx] = 'sand'
+                    chunk.blocks[xIdx, topY - 3, zIdx] = 'sandstone'
+                else:
+                    chunk.blocks[xIdx, topY - 3:topY, zIdx] = 'dirt'
+                    chunk.blocks[xIdx, topY, zIdx] = 'grass'
 
         for pos in positions:
             chunk.blocks[pos.x, pos.y, pos.z] = 'air'
@@ -1638,6 +1676,9 @@ class OverworldGen(TerrainGen):
         for treeIdx in range(4):
             treeX = random.randint(0, 15)
             treeZ = random.randint(0, 15)
+
+            if chunk.biomes[treeX // 4, 0, treeZ // 4].name != 'minecraft:forest':
+                continue
 
             for prevPos in treePos:
                 dist = abs(prevPos[0] - treeX) + abs(prevPos[1] - treeZ)

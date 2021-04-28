@@ -191,7 +191,8 @@ class ServerState:
         except FileNotFoundError:
             nether.entities = []
         
-        server.dimensions = [overworld, nether]
+        #server.dimensions = [overworld, nether]
+        server.dimensions = [overworld]
 
         server.addPlayer(app)
         preloadPos = server.players[0].pos
