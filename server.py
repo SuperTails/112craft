@@ -167,6 +167,7 @@ class ServerState:
 
         overworld = Dimension()
         overworld.world = World(server.saveFolderPath() + '/region', world.OverworldGen(), seed, importPath=importPath)
+        overworld.world.hasSkyLight = True
 
         try:
             path = server.saveFolderPath() + '/entities.dat'
@@ -179,6 +180,7 @@ class ServerState:
         
         nether = Dimension()
         nether.world = World(server.saveFolderPath() + '/DIM-1/region', world.NetherGen(), seed, importPath=importPath)
+        nether.world.hasSkyLight = False
 
         try:
             path = server.saveFolderPath() + '/DIM-1/entities.dat'

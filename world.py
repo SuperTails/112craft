@@ -754,6 +754,7 @@ class Chunk:
             blockStates=self.blockStates,
             lightLevels=self.lightLevels,
             blockLightLevels=self.blockLightLevels,
+            biomes=self.biomes,
         )
     
     @timed()
@@ -852,6 +853,7 @@ class Chunk:
             self.blockStates = npz['blockStates']
             self.lightLevels = npz['lightLevels']
             self.blockLightLevels = npz['blockLightLevels']
+            self.biomes = npz['biomes']
             self.setAllBlocks(world, instData)
         
         file = nbt.NBTFile(path+'.nbt')
@@ -861,85 +863,45 @@ class Chunk:
 
         self.worldgenStage = WorldgenStage.POPULATED
 
-    def disperseOre(self, world: 'World', instData, seed, ore: BlockId, frequency: int, maxHeight: int):
-        for _ in range(frequency):
-            x = random.randrange(0, 16)
-            y = random.randrange(0, maxHeight)
-            z = random.randrange(0, 16)
-
-            for x in range(x, min(x + 2, 16)):
-                for y in range(y, min(y + 2, CHUNK_HEIGHT)):
-                    for z in range(z, min(z + 2, 16)):
-                        if self.blocks[x, y, z] == 'stone':
-                            self.setBlock(world, instData, BlockPos(x, y, z), ore, doUpdateLight=False, doUpdateBuried=False, doUpdateMesh=False, doBlockUpdates=False)
-    
-    def populate(self, world: 'World', instData, seed):
-        random.seed(hash((self.pos, seed)))
-
-        self.disperseOre(world, instData, seed, 'coal_ore', 20, CHUNK_HEIGHT // 2)
-        self.disperseOre(world, instData, seed, 'iron_ore', 20, CHUNK_HEIGHT // 4)
-        self.disperseOre(world, instData, seed, 'diamond_ore', 1, CHUNK_HEIGHT // 16)
-
-        treePos = []
-
-        for treeIdx in range(4):
-            treeX = random.randint(0, 15)
-            treeZ = random.randint(0, 15)
-
-            for prevPos in treePos:
-                dist = abs(prevPos[0] - treeX) + abs(prevPos[1] - treeZ)
-                if dist <= 4:
-                    continue
-            
-            treePos.append((treeX, treeZ))
-
-            baseY = CHUNK_HEIGHT - 1
-            for yIdx in range(CHUNK_HEIGHT - 1, 0, -1):
-                block = self.blocks[treeX, yIdx, treeZ]
-                if block == 'grass':
-                    baseY = yIdx + 1
-                elif block == 'stone':
-                    break
-            
-            globalPos = self._globalBlockPos(BlockPos(treeX, baseY, treeZ))
-        
-            if globalPos.y < CHUNK_HEIGHT - 6:
-                generateTree(world, instData, globalPos, doUpdates=False)
-        
-        self.worldgenStage = WorldgenStage.POPULATED
     
     @timed()
     def doFirstLighting(self, world: 'World'):
         needUpdates = set()
 
-        for yIdx in range(CHUNK_HEIGHT - 1, -1, -1):
-            allAreDark = True
+        anyOccupied = False
 
-            if yIdx == CHUNK_HEIGHT - 1:
-                self.lightLevels[:, yIdx, :] = 15
-            else:
-                self.lightLevels
+        if world.hasSkyLight:
+            for yIdx in range(CHUNK_HEIGHT - 1, -1, -1):
+                allAreDark = True
 
-            for xIdx in range(16):
-                for zIdx in range(16):
-                    thisPos = BlockPos(xIdx, yIdx, zIdx)
-                    if self.coordsOccupied(thisPos, isOpaque):
-                        lightLevel = 0
-                    else:
-                        allAreDark = False
-                        for faceIdx in range(8, 2):
-                            adjPos = adjacentBlockPos(BlockPos(xIdx, yIdx, zIdx), faceIdx)
-                            if (adjPos.x < 0 or 16 <= adjPos.x
-                                or adjPos.z < 0 or 16 <= adjPos.z):
-                            
-                                needUpdates.add(thisPos)
-                                break
-                            elif not self.coordsOccupied(adjPos, isOpaque):
-                                needUpdates.add(thisPos)
-                                break
-                    
-            if allAreDark:
-                break
+                if yIdx == CHUNK_HEIGHT - 1:
+                    self.lightLevels[:, yIdx, :] = 15
+                else:
+                    self.lightLevels[:, yIdx, :] = self.lightLevels[:, yIdx + 1, :]
+
+                for xIdx in range(16):
+                    for zIdx in range(16):
+                        thisPos = BlockPos(xIdx, yIdx, zIdx)
+                        if self.coordsOccupied(thisPos, isOpaque):
+                            anyOccupied = True
+                            self.lightLevels[xIdx, yIdx, zIdx] = 0
+                        elif self.lightLevels[xIdx, yIdx, zIdx] != 0:
+                            allAreDark = False
+                            if anyOccupied:
+                                if xIdx == 0 or xIdx == 15 or zIdx == 0 or zIdx == 15:
+                                    needUpdates.add(self._globalBlockPos(thisPos))
+                                else:
+                                    for faceIdx in range(0, 8, 2):
+                                        adjPos = adjacentBlockPos(BlockPos(xIdx, yIdx, zIdx), faceIdx)
+
+                                        if not self.coordsOccupied(adjPos, isOpaque) and self.lightLevels[adjPos.x, adjPos.y, adjPos.z] != 15:
+                                            needUpdates.add(self._globalBlockPos(thisPos))
+                                            break
+                        
+                if allAreDark:
+                    break
+        
+        skyCount = len(needUpdates)
             
         for xIdx in range(16):
             for yIdx in range(256):
@@ -948,7 +910,7 @@ class Chunk:
                     if getLuminance(blockId) != 0:
                         needUpdates.add(self._globalBlockPos(BlockPos(xIdx, yIdx, zIdx)))
     
-        print(f'Found {len(needUpdates)} blocks that needed updates')
+        print(f'Found {len(needUpdates)} ({skyCount} sky, {len(needUpdates) - skyCount} block) blocks that needed updates')
 
         world.dirtySources |= needUpdates
     
@@ -1479,11 +1441,18 @@ class TerrainGen(ABC):
         pass
 
     @abstractmethod
+    def populate(self, chunk: Chunk, world: 'World', instData, seed):
+        pass
+
+    @abstractmethod
     def checkCavesAround(self, centerPos: ChunkPos, seed):
         pass
 
 class NullGen(TerrainGen):
     def generate(self, chunk: Chunk, world: 'World', instData, seed):
+        pass
+
+    def populate(self, chunk: Chunk, world: 'World', instData, seed):
         pass
 
     def checkCavesAround(self, centerPos: ChunkPos, seed):
@@ -1499,11 +1468,9 @@ class OverworldGen(TerrainGen):
 
     @timed()
     def generate(self, chunk: Chunk, world: 'World', instData,  seed):
-        cavePositions = self.caves.values()
+        chunk.biomes[:, :, :] = util.DIMENSION_CODEC.getBiome('minecraft:forest')
 
-        # x and y and z
-        minVal = 100.0
-        maxVal = -100.0
+        cavePositions = self.caves.values()
 
         positions = []
 
@@ -1535,15 +1502,10 @@ class OverworldGen(TerrainGen):
 
                 noise = perlin.getPerlinFractal(globalPos.x, globalPos.z, 1.0 / 256.0, 4, seed)
 
-                if noise < minVal: minVal = noise
-                if noise > maxVal: maxVal = noise
+                factor = 20
+                center = 72
 
-                if CHUNK_HEIGHT == 16: #type:ignore
-                    factor = 2
-                else:
-                    factor = 10
-
-                topY = int(noise * factor + 8 + ((CHUNK_HEIGHT - 16) / 240) * (72 - 8))
+                topY = int(noise * factor + center)
 
                 for yIdx in range(0, topY):
                     if BlockPos(xIdx, yIdx, zIdx) in positions:
@@ -1563,6 +1525,53 @@ class OverworldGen(TerrainGen):
         #chunk.setBlock(world, instData, BlockPos(xIdx, yIdx, zIdx), blockId, doUpdateLight=False, doUpdateBuried=False, doBlockUpdates=False)
         
         chunk.worldgenStage = WorldgenStage.GENERATED
+    
+    def populate(self, chunk: Chunk, world: 'World', instData, seed):
+        random.seed(hash((chunk.pos, seed)))
+
+        self.disperseOre(chunk, world, instData, seed, 'coal_ore', 20, CHUNK_HEIGHT // 2)
+        self.disperseOre(chunk, world, instData, seed, 'iron_ore', 20, CHUNK_HEIGHT // 4)
+        self.disperseOre(chunk, world, instData, seed, 'diamond_ore', 1, CHUNK_HEIGHT // 16)
+
+        treePos = []
+
+        for treeIdx in range(4):
+            treeX = random.randint(0, 15)
+            treeZ = random.randint(0, 15)
+
+            for prevPos in treePos:
+                dist = abs(prevPos[0] - treeX) + abs(prevPos[1] - treeZ)
+                if dist <= 4:
+                    continue
+            
+            treePos.append((treeX, treeZ))
+
+            baseY = CHUNK_HEIGHT - 1
+            for yIdx in range(CHUNK_HEIGHT - 1, 0, -1):
+                block = chunk.blocks[treeX, yIdx, treeZ]
+                if block == 'grass':
+                    baseY = yIdx + 1
+                elif block == 'stone':
+                    break
+            
+            globalPos = chunk._globalBlockPos(BlockPos(treeX, baseY, treeZ))
+        
+            if globalPos.y < CHUNK_HEIGHT - 6:
+                generateTree(world, instData, globalPos, doUpdates=False)
+        
+        chunk.worldgenStage = WorldgenStage.POPULATED
+    
+    def disperseOre(self, chunk: Chunk, world: 'World', instData, seed, ore: BlockId, frequency: int, maxHeight: int):
+        for _ in range(frequency):
+            x = random.randrange(0, 16)
+            y = random.randrange(0, maxHeight)
+            z = random.randrange(0, 16)
+
+            for x in range(x, min(x + 2, 16)):
+                for y in range(y, min(y + 2, CHUNK_HEIGHT)):
+                    for z in range(z, min(z + 2, 16)):
+                        if chunk.blocks[x, y, z] == 'stone':
+                            chunk.setBlock(world, instData, BlockPos(x, y, z), ore, doUpdateLight=False, doUpdateBuried=False, doUpdateMesh=False, doBlockUpdates=False)
     
     def checkCavesAround(self, centerPos: ChunkPos, seed):
         dist = math.ceil(MAX_CAVE_DISP / 16)
@@ -1606,6 +1615,9 @@ class NetherGen(TerrainGen):
         chunk.setAllBlocks(world, instData)
 
         chunk.worldgenStage = WorldgenStage.GENERATED
+        
+    def populate(self, chunk: Chunk, world: 'World', instData, seed):
+        chunk.worldgenStage = WorldgenStage.POPULATED
 
     def checkCavesAround(self, centerPos: ChunkPos, seed):
         pass
@@ -1617,6 +1629,8 @@ def getRegionCoords(pos: ChunkPos) -> Tuple[int, int]:
 class World:
     chunks: dict[ChunkPos, Chunk]
     seed: int
+
+    hasSkyLight: bool
 
     regions: dict[Tuple[int, int], anvil.Region]
     importPath: str
@@ -1783,7 +1797,7 @@ class World:
             chunk: Chunk = self.chunks[chunkPos]
             (adj, gen, pop, opt, com) = self.countLoadedAdjacentChunks(chunkPos, 1)
             if chunk.worldgenStage == WorldgenStage.GENERATED and gen == 8:
-                chunk.populate(self, instData, self.seed)
+                self.generator.populate(chunk, self, instData, self.seed)
                 if time.perf_counter() - startTime > maxTime:
                     keepGoing = False
                 
@@ -1812,7 +1826,8 @@ class World:
         if self.dirtySources != set():
             try:
                 self.propogateLight(self.dirtySources, False, False)
-                self.propogateLight(self.dirtySources, True, False)
+                if self.hasSkyLight:
+                    self.propogateLight(self.dirtySources, True, False)
             except Exception as e:
                 print(f'Ignoring exception in flushLightChanges {e}')
             
@@ -1821,7 +1836,8 @@ class World:
         if self.dirtyLights != set():
             try:
                 self.updateLight2(self.dirtyLights, False)
-                self.updateLight2(self.dirtyLights, True)
+                if self.hasSkyLight:
+                    self.updateLight2(self.dirtyLights, True)
             except Exception as e:
                 print(f'Ignoring exception in flushLightChanges {e}')
                 

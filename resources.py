@@ -23,7 +23,11 @@ from OpenGL.GL import * #type:ignore
 import json
 import requests
 import random
+from nbt import nbt
 from quarry.types.registry import LookupRegistry
+from quarry.types import nbt as quarrynbt
+from dimregistry import DimensionCodec
+
 
 class Recipe:
     inputs: List[List[Optional[ItemId]]]
@@ -891,6 +895,11 @@ def loadResources(app):
     }
 
     util.REGISTRY = getRegistry()
+
+    # Default dimension codec from https://wiki.vg/
+    nbtfile = quarrynbt.NBTFile.load('assets/default_codec.nbt')
+    assert(nbtfile.root_tag is not None)
+    util.DIMENSION_CODEC = DimensionCodec.fromNbt(nbtfile.root_tag)
 
     app.hardnesses = {}
 
