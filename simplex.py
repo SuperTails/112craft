@@ -2,7 +2,7 @@ import math
 from numba import jit
 
 @jit(nopython=True) #type:ignore
-def simplex(x, y, z):
+def simplex(x, y, z, seed):
     def skew(x, y, z):
         f = (math.sqrt(3 + 1) - 1) / 3
 
@@ -51,7 +51,7 @@ def simplex(x, y, z):
     vectors = [(1,1,0),(-1,1,0),(1,-1,0),(-1,-1,0),(1,0,1),(-1,0,1),(1,0,-1),
             (-1,0,-1),(0,1,1),(0,-1,1),(0,1,-1),(0,-1,-1)]
     
-    def combine(gx, gy, gz): return hash((gx, gy, gz))
+    def combine(gx, gy, gz): return hash((gx, gy, gz, seed))
 
     def getGrad(gx, gy, gz): return vectors[combine(gx, gy, gz) % len(vectors)]
 
@@ -105,7 +105,7 @@ def getSimplexFractal(x, y, z, baseFreq: float, octaves: int, seed):
 
         xs, ys, zs = x * freq, y * freq, z * freq
 
-        total += amplitude * simplex(xs, ys, zs)
+        total += amplitude * simplex(xs, ys, zs, seed)
         totalscale += amplitude
     
     return total / totalscale * 100

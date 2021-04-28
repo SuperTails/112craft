@@ -1600,7 +1600,7 @@ class NetherGen(TerrainGen):
                     gpos = chunk._globalBlockPos(BlockPos(xIdx, yIdx, zIdx))
                     s = simplex.getSimplexFractal(gpos.x, gpos.y, gpos.z, 1.0 / 256.0, 4, 0)
 
-                    if s < 0.0:
+                    if s < -0.2:
                         if yIdx < 30:
                             chunk.blocks[xIdx, yIdx, zIdx] = 'flowing_lava'
                             chunk.blockStates[xIdx, yIdx, zIdx] = { 'level': '0' }

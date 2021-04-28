@@ -604,11 +604,13 @@ def findPortalFrame(server: ServerState, dim: Dimension, pos: BlockPos) -> Optio
 def getDestination(app, world: World, searchPos: BlockPos, maxHeight: int) -> BlockPos:
     existing = findPortalNear(world, searchPos, maxHeight)
     if existing is not None:
+        print(f'Found existing portal at {existing}')
         return existing
     
     spot = findSpaceForPortal(world, searchPos, maxHeight)
 
     if spot is not None:
+        print(f'Found space for portal at {spot}')
         createPortalAt(app, world, spot, clearNearby=False)
         return BlockPos(spot.x, spot.y + 1, spot.z)
     
@@ -618,7 +620,7 @@ def getDestination(app, world: World, searchPos: BlockPos, maxHeight: int) -> Bl
     return BlockPos(forcedPos.x, forcedPos.y + 1, forcedPos.z)
     
 def findPortalNear(world: World, blockPos: BlockPos, maxHeight: int) -> Optional[BlockPos]:
-    for totalDist in range(16):
+    for totalDist in range(32):
         for xDist in range(totalDist):
             zDist = totalDist - xDist
             
@@ -671,7 +673,7 @@ def findSpaceForPortal(world: World, blockPos: BlockPos, maxHeight: int) -> Opti
                     if blockId == 'air':
                         return False
                 else:
-                    if not isSolid(blockId):
+                    if isSolid(blockId):
                         return False
         
         return True
@@ -680,13 +682,16 @@ def findSpaceForPortal(world: World, blockPos: BlockPos, maxHeight: int) -> Opti
         for xDist in range(totalDist):
             zDist = totalDist - xDist
             
-            for y in range(maxHeight - 4):
+            for y in range(10, maxHeight - 4):
                 if isValidPos(BlockPos(blockPos.x + xDist, y, blockPos.z + zDist)):
                     return BlockPos(blockPos.x + xDist, y, blockPos.z + zDist)
+                    
                 if isValidPos(BlockPos(blockPos.x + xDist, y, blockPos.z - zDist)):
                     return BlockPos(blockPos.x + xDist, y, blockPos.z - zDist)
+                    
                 if isValidPos(BlockPos(blockPos.x - xDist, y, blockPos.z + zDist)):
                     return BlockPos(blockPos.x - xDist, y, blockPos.z + zDist)
+
                 if isValidPos(BlockPos(blockPos.x - xDist, y, blockPos.z - zDist)):
                     return BlockPos(blockPos.x - xDist, y, blockPos.z - zDist)
     
