@@ -496,7 +496,7 @@ class Chunk:
     blockStates: ndarray
     lightLevels: ndarray
     blockLightLevels: ndarray
-    instances: List[Any]
+    instances: List[Optional[List[Any]]]
 
     biomes: ndarray
 
@@ -923,6 +923,11 @@ class Chunk:
             thisInst[1] = True
             thisInst[0].visibleFaces = [True] * 12
         
+        negXChunk = world.chunks[ChunkPos(self.pos.x - 1, self.pos.y, self.pos.z)]
+        posXChunk = world.chunks[ChunkPos(self.pos.x + 1, self.pos.y, self.pos.z)]
+        negZChunk = world.chunks[ChunkPos(self.pos.x, self.pos.y, self.pos.z - 1)]
+        posZChunk = world.chunks[ChunkPos(self.pos.x, self.pos.y, self.pos.z + 1)]
+        
         for i, thisInst in filter(okFilter, enumerate(self.instances)):
             x, y, z = self._coordsFromIdx(i)
             thisInst = thisInst[0]
@@ -937,7 +942,24 @@ class Chunk:
 
                     thisInst.visibleFaces[0] = False
                     thisInst.visibleFaces[1] = False
-            
+            else:
+                thatIdx = i + 16 * 15
+                if negXChunk.instances[thatIdx] is not None:
+                    negXChunk.instances[thatIdx][0].visibleFaces[2] = False
+                    negXChunk.instances[thatIdx][0].visibleFaces[3] = False
+
+                    thisInst.visibleFaces[0] = False
+                    thisInst.visibleFaces[1] = False
+                
+            if x == 15:
+                thatIdx = i - 16 * 15
+                if posXChunk.instances[thatIdx] is not None:
+                    posXChunk.instances[thatIdx][0].visibleFaces[0] = False
+                    posXChunk.instances[thatIdx][0].visibleFaces[1] = False
+
+                    thisInst.visibleFaces[2] = False
+                    thisInst.visibleFaces[3] = False
+
             if z > 0:
                 thatIdx = i - 1
                 #thatIdx = self._coordsToIdx(BlockPos(x, y, z - 1))
@@ -948,8 +970,24 @@ class Chunk:
 
                     thisInst.visibleFaces[4] = False
                     thisInst.visibleFaces[5] = False
+            else:
+                thatIdx = i + 1 * 15
+                if negZChunk.instances[thatIdx] is not None:
+                    negZChunk.instances[thatIdx][0].visibleFaces[6] = False
+                    negZChunk.instances[thatIdx][0].visibleFaces[7] = False
+
+                    thisInst.visibleFaces[4] = False
+                    thisInst.visibleFaces[5] = False
             
-            
+            if z == 15:
+                thatIdx = i - 1 * 15
+                if posZChunk.instances[thatIdx] is not None:
+                    posZChunk.instances[thatIdx][0].visibleFaces[4] = False
+                    posZChunk.instances[thatIdx][0].visibleFaces[5] = False
+
+                    thisInst.visibleFaces[6] = False
+                    thisInst.visibleFaces[7] = False
+
             if y > 0:
                 #thatIdx = self._coordsToIdx(BlockPos(x, y - 1, z))
                 thatIdx = i - 256
@@ -964,14 +1002,6 @@ class Chunk:
         for i, thisInst in filter(okFilter, enumerate(self.instances)):
             thisInst[1] = any(thisInst[0].visibleFaces)
         
-        for y in range(CHUNK_HEIGHT):
-            for foo in range(16):
-                self.updateBuriedStateAt(world, BlockPos(0, y, foo))
-                self.updateBuriedStateAt(world, BlockPos(15, y, foo))
-
-                self.updateBuriedStateAt(world, BlockPos(foo, y, 0))
-                self.updateBuriedStateAt(world, BlockPos(foo, y, 15))
-    
     def lightAndOptimize(self, world: 'World'):
         print(f"Lighting and optimizing chunk at {self.pos}")
         
@@ -1506,20 +1536,15 @@ class OverworldGen(TerrainGen):
                 center = 72
 
                 topY = int(noise * factor + center)
+                
+                chunk.blocks[xIdx, :topY - 3, zIdx] = 'stone'
+                chunk.blocks[xIdx, topY - 3:topY, zIdx] = 'dirt'
+                chunk.blocks[xIdx, topY, zIdx] = 'grass'
 
-                for yIdx in range(0, topY):
-                    if BlockPos(xIdx, yIdx, zIdx) in positions:
-                        blockId = 'air'
-                    elif yIdx == 0:
-                        blockId = 'bedrock'
-                    elif yIdx == topY - 1:
-                        blockId = 'grass'
-                    elif topY - yIdx < 3:
-                        blockId = 'dirt'
-                    else:
-                        blockId = 'stone'
-                    chunk.blocks[xIdx, yIdx, zIdx] = blockId
-                    chunk.blockStates[xIdx, yIdx, zIdx] = {}
+        for pos in positions:
+            chunk.blocks[pos.x, pos.y, pos.z] = 'air'
+        
+        chunk.blocks[:, 0, :] = 'bedrock'
             
         chunk.setAllBlocks(world, instData)
         #chunk.setBlock(world, instData, BlockPos(xIdx, yIdx, zIdx), blockId, doUpdateLight=False, doUpdateBuried=False, doBlockUpdates=False)

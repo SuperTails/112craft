@@ -6,9 +6,9 @@ used for the height of terrain during worldgen.
 """
 
 import random, math
-from functools import lru_cache
+from numba import jit
 
-@lru_cache
+@jit(nopython=True) #type:ignore
 def getPerlinVectors(gridX, gridY, seed):
     # Vectors from https://mrl.cs.nyu.edu/~perlin/paper445.pdf 
 
@@ -17,20 +17,19 @@ def getPerlinVectors(gridX, gridY, seed):
     
     def combine(gx, gy): return hash((gx, gy, seed))
 
-    random.seed(combine(gridX, gridY))
-    vtl = random.choice(vectors)
+    def getVector(gx, gy): return vectors[combine(gx, gy) % len(vectors)]
 
-    random.seed(combine(gridX + 1, gridY))
-    vtr = random.choice(vectors)
+    vtl = getVector(gridX, gridY)
 
-    random.seed(combine(gridX, gridY + 1))
-    vbl = random.choice(vectors)
+    vtr = getVector(gridX + 1, gridY)
 
-    random.seed(combine(gridX + 1, gridY + 1))
-    vbr = random.choice(vectors)
+    vbl = getVector(gridX, gridY + 1)
+
+    vbr = getVector(gridX + 1, gridY + 1)
 
     return (vtl, vtr, vbl, vbr)
 
+@jit(nopython=True) #type:ignore
 def getPerlinValue(x, y, width, seed):
     """Returns a single sample of perlin noise.
 
