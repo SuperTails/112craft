@@ -149,7 +149,7 @@ class WorldLoadMode(Mode):
         if self.loadStage < 10:
             loader.world.loadUnloadChunks((app.textures, app.cube, app.textureIndices))
         elif self.loadStage < 20:
-            loader.world.addChunkDetails((app.textures, app.cube, app.textureIndices), maxTime=5.0)
+            loader.world.addChunkDetails((app.textures, app.cube, app.textureIndices), maxTime=5.0, needUrgent=False)
         else:
             app.mode = self.nextMode(app, Player(app))
             

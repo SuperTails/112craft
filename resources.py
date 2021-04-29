@@ -903,6 +903,15 @@ def loadResources(app):
 
     app.hardnesses = {}
 
+    app.iconSheet = app.rePack.getImg('textures/gui/icons.png')
+
+    CLIENT_DATA.guiTextures = {
+        'heart_outline': app.iconSheet.crop((16, 0, 16 + 9, 9)),
+        'heart_outline_hurt': app.iconSheet.crop((16 + 9, 0, 16 + 9*2, 9)),
+        'heart': app.iconSheet.crop((16 + 9 * 4, 0, 16 + 9 * 5, 9)),
+        'heart_half': app.iconSheet.crop((16 + 9 * 5, 0, 16 + 9 * 6, 9)),
+    }
+
     app.texturePaths = {
         'grass': { 'down': 'dirt', 'up': 'grass_top', 'side': 'grass_side_carried' },
         'dirt': { 'all': 'dirt' },

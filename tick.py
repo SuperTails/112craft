@@ -707,7 +707,7 @@ def clientTick(client: ClientState, instData):
         client.world.tickets[chunkPos] = 1
 
         client.world.loadUnloadChunks(instData)
-        client.world.addChunkDetails(instData)
+        client.world.addChunkDetails(instData, needUrgent=False)
     
     client.world.flushLightChanges()
 

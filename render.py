@@ -712,6 +712,23 @@ def drawMainInventory(client: ClientState, canvas):
 
         drawSlot(client, canvas, x, y, slot)
 
+def drawHealthbar(client: ClientState, canvas):
+    slotWidth = CLIENT_DATA.itemTextures['air'].width + 7
+
+    leftX = -4 * slotWidth + client.width / 2
+
+    margin = 10
+
+    for i in range(10):
+        x = leftX + 9 * i
+        y = client.height - margin - 3 * slotWidth / 2
+
+        canvas.create_image(x, y, image=CLIENT_DATA.guiTextures['heart_outline'])
+
+        if (i + 1) * 2 <= math.ceil(client.player.health):
+            canvas.create_image(x, y, image=CLIENT_DATA.guiTextures['heart'])
+        elif (i + 1) * 2 + 1 <= math.ceil(client.player.health):
+            canvas.create_image(x, y, image=CLIENT_DATA.guiTextures['heart_half'])
 
 def drawHotbar(client: ClientState, canvas):
     # FIXME: 
@@ -769,6 +786,8 @@ def drawHud(client: ClientState, canvas, startTime):
     # Indicates the center of the screen
     canvas.create_oval(client.width / 2 - 1, client.height / 2 - 1, 
         client.width / 2 + 1, client.height / 2 + 1)
+
+    drawHealthbar(client, canvas)
 
     drawHotbar(client, canvas)
 

@@ -6,6 +6,7 @@ from world import World, nearestBlockCoord
 from entity import Entity, EntityModel, Animation, EntityRenderData, AnimController
 from player import Player
 from util import BlockPos, rayAABBIntersect
+from PIL import Image
 import math
 from math import sin, cos
 
@@ -23,6 +24,8 @@ class ClientData:
 
     sunTex: Any
     skyboxVao: Any
+
+    guiTextures: dict[str, Image.Image]
 
     entityRenderData: dict[str, EntityRenderData]
     entityModels: dict[str, EntityModel]

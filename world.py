@@ -1961,7 +1961,7 @@ class World:
         
         return False
     
-    def addChunkDetails(self, instData, maxTime=0.030):
+    def addChunkDetails(self, instData, maxTime=0.030, needUrgent=True):
         startTime = time.perf_counter()
 
         keepGoing = True
@@ -1970,13 +1970,15 @@ class World:
 
         while not urgentOk:
             urgentOk = True
-            for ticketPos in self.tickets:
-                if self.chunks[ticketPos].worldgenStage < WorldgenStage.POPULATED:
-                    urgentOk = False
 
-                for chunkPos in adjacentChunks(ticketPos, 2):
-                    if self.chunks[chunkPos].worldgenStage < WorldgenStage.POPULATED:
+            if needUrgent:
+                for ticketPos in self.tickets:
+                    if self.chunks[ticketPos].worldgenStage < WorldgenStage.POPULATED:
                         urgentOk = False
+
+                    for chunkPos in adjacentChunks(ticketPos, 2):
+                        if self.chunks[chunkPos].worldgenStage < WorldgenStage.POPULATED:
+                            urgentOk = False
 
             for chunkPos in self.chunks:
                 chunk: Chunk = self.chunks[chunkPos]
@@ -2057,7 +2059,8 @@ class World:
                 dist = max(abs(ux - x), abs(uz - z))
                 if dist <= chunkLoadDistance + 1:
                     # This chunk is still in range, so don't unload it
-                    shouldUnload.remove(unloadChunkPos)
+                    if unloadChunkPos in shouldUnload:
+                        shouldUnload.remove(unloadChunkPos)
 
         for unloadChunkPos in shouldUnload:
             self.unloadChunk(unloadChunkPos)
