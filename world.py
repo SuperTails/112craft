@@ -1510,13 +1510,27 @@ class OverworldGen(TerrainGen):
         self.biomeGen = VoronoiGen(BIOME_SIZE, UnitSeeder())
     
     def getBiome(self, x: int, z: int, seed):
-        if self.oceanGen.sample(x, z, seed):
+        (p1, d1), (p2, d2) = self.oceanGen.sample2(x, z, seed)
+
+        if p1 == p2:
+            useD1 = True
+        else:
+            if abs(d1 - d2) < 10:
+                return util.DIMENSION_CODEC.getBiome('minecraft:beach')
+            elif d1 < d2:
+                useD1 = True
+            else:
+                useD1 = False
+
+        isOcean = p1 if useD1 else p2
+
+        if isOcean:
             biome = 'minecraft:ocean'
         else:
-            sample = self.biomeGen.sample(x, z, seed)
-            if sample < 0.5:
+            sample = self.biomeGen.sample(x, z, seed)[0]
+            if sample < 0.3:
                 biome = 'minecraft:desert'
-            elif sample < 0.8:
+            elif sample < 0.6:
                 biome = 'minecraft:plains'
             else:
                 biome = 'minecraft:forest'
@@ -1526,10 +1540,12 @@ class OverworldGen(TerrainGen):
     def getCenter(self, biome):
         if biome.name == 'minecraft:ocean':
             return 30
+        elif biome.name == 'minecraft:beach':
+            return 64
         elif biome.name == 'minecraft:forest':
-            return 72
+            return 66
         elif biome.name == 'minecraft:plains':
-            return 70
+            return 66
         elif biome.name == 'minecraft:desert':
             return 68
         else:
@@ -1538,6 +1554,8 @@ class OverworldGen(TerrainGen):
     def getFactor(self, biome):
         if biome.name == 'minecraft:ocean':
             return 20
+        elif biome.name == 'minecraft:beach':
+            return 5
         elif biome.name == 'minecraft:forest':
             return 20
         elif biome.name == 'minecraft:plains':
@@ -1641,12 +1659,19 @@ class OverworldGen(TerrainGen):
 
                 topY = int(noise * factor + center)
 
-                chunk.blocks[xIdx, :topY - 3, zIdx] = 'stone'
-
                 columnBiome = biomes[xIdx + TERRAIN_BLEND_SIZE, zIdx + TERRAIN_BLEND_SIZE]
+
+                if columnBiome.name in ('minecraft:ocean', 'minecraft:beach'):
+                    chunk.blocks[xIdx, :64, zIdx] = 'flowing_water'
+                    for y in range(64):
+                        chunk.blockStates[xIdx, y, zIdx] = { 'level': '0' }
+
+                chunk.blocks[xIdx, :topY - 3, zIdx] = 'stone'
             
                 if columnBiome.name == 'minecraft:ocean':
                     chunk.blocks[xIdx, topY - 3:topY + 1, zIdx] = 'dirt'
+                elif columnBiome.name == 'minecraft:beach':
+                    chunk.blocks[xIdx, topY - 3:topY + 1, zIdx] = 'sand'
                 elif columnBiome.name == 'minecraft:desert':
                     chunk.blocks[xIdx, topY - 2:topY + 1, zIdx] = 'sand'
                     chunk.blocks[xIdx, topY - 3, zIdx] = 'sandstone'

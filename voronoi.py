@@ -1,6 +1,9 @@
 import random
 import perlin
+import heapq
+import math
 from functools import lru_cache
+from typing import Tuple, List, Any
 
 class BinarySeeder:
     def sample(self, cellX: int, cellY: int, seed: int):
@@ -20,32 +23,31 @@ class VoronoiGen:
         self.seeder = seeder
     
     @lru_cache
-    def sample(self, x: int, y: int, seed):
+    def sample2(self, x: int, y: int, seed) -> List[Tuple[Any, float]]:
         xOff = int(perlin.getPerlinFractal(x, y, 1 / self.cellSize, 2, seed) * self.cellSize / 3)
         yOff = int(perlin.getPerlinFractal(x, y, 1 / self.cellSize, 2, seed) * self.cellSize / 3)
 
-        return self.getNearestSeed(x + xOff, y + yOff, seed)
+        return self.getNearestSeeds(x + xOff, y + yOff, seed)
     
-    def getNearestSeed(self, x: int, y: int, seed):
+    def sample(self, x: int, y: int, seed) -> Tuple[Any, float]:
+        return self.sample2(x, y, seed)[0]
+    
+    def getNearestSeeds(self, x: int, y: int, seed):
         cellX = x // self.cellSize
         cellY = y // self.cellSize
 
-        nearestDist = float('inf')
-        nearestPoint = (-1, -1)
-        nearestSeed = 0
+        points = []
 
-        for otherCellX in (cellX - 1, cellX, cellX + 1):
-            for otherCellY in (cellY - 1, cellY, cellY + 1):
+        def dist(p):
+            return p[1]
+
+        for otherCellX in (cellX - 2, cellX - 1, cellX, cellX + 1, cellX + 2):
+            for otherCellY in (cellY - 2, cellY - 1, cellY, cellY + 1, cellY + 2):
                 cellSeed, otherX, otherY = self.cellSeedAndPos(otherCellX, otherCellY, seed)
 
-                dist = (otherX - x)**2 + (otherY - y)**2
-
-                if nearestDist > dist:
-                    nearestDist = dist
-                    nearestPoint = (otherX, otherY)
-                    nearestSeed = cellSeed
-        
-        return nearestSeed
+                points.append((cellSeed, math.sqrt((otherX - x)**2 + (otherY - y)**2)))
+            
+        return heapq.nsmallest(2, points, key=dist)
     
     @lru_cache
     def cellSeedAndPos(self, cellX: int, cellY: int, seed):
