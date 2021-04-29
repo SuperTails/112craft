@@ -34,6 +34,8 @@ import config
 import OpenGL
 OpenGL.ERROR_CHECKING = config.OPENGL_ERROR_CHECKING
 
+import faulthandler
+
 import openglapp
 from PIL import Image
 from PIL import ImageDraw
@@ -140,8 +142,12 @@ class WorldLoadMode(Mode):
     def timerFired(self, app):
         loader = app.server.getLocalDimension() if app.client.local else app.client
 
+        centerPos, _ = world.toChunkLocal(world.nearestBlockPos(self.centerPos[0], self.centerPos[1], self.centerPos[2]))
+
+        loader.world.tickets[centerPos] = 1
+
         if self.loadStage < 10:
-            loader.world.loadUnloadChunks(self.centerPos, (app.textures, app.cube, app.textureIndices))
+            loader.world.loadUnloadChunks((app.textures, app.cube, app.textureIndices))
         elif self.loadStage < 20:
             loader.world.addChunkDetails((app.textures, app.cube, app.textureIndices), maxTime=5.0)
         else:
@@ -1345,6 +1351,9 @@ def appStarted(app):
     client.tickTimes = [0.0] * 10
     client.tickTimeIdx = 0
 
+    client.serverTickTimes = [0.0] * 10
+    client.serverTickTimeIdx = 0
+
     client.lastTickTime = time.time()
 
     client.gravity = app.gravity
@@ -1579,6 +1588,8 @@ import threading
 from time import sleep
 
 if __name__ == '__main__':
+    faulthandler.enable()
+    
     gameThread = threading.Thread(target=main)
     gameThread.start()
 

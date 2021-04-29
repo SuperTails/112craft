@@ -1764,7 +1764,7 @@ class NetherGen(TerrainGen):
             for yIdx in range(128):
                 for zIdx in range(16):
                     gpos = chunk._globalBlockPos(BlockPos(xIdx, yIdx, zIdx))
-                    s = simplex.getSimplexFractal(gpos.x, gpos.y, gpos.z, 1.0 / 256.0, 4, 0)
+                    s = simplex.getSimplexFractal(gpos.x, gpos.y, gpos.z, 1.0 / 256.0, 4, seed)
 
                     if s < -0.2:
                         if yIdx < 30:
@@ -1812,6 +1812,8 @@ class World:
 
     generator: TerrainGen
 
+    tickets: dict[ChunkPos, int]
+
     def getHighestBlock(self, x: int, z: int) -> int:
         for y in range(CHUNK_HEIGHT - 1, -1, -1):
             if self.getBlock(BlockPos(x, y, z)) != 'air':
@@ -1832,6 +1834,8 @@ class World:
         self.dirtyLights = set()
 
         self.dirtySources = set()
+
+        self.tickets = {}
 
         self.local = True
 
@@ -1872,6 +1876,9 @@ class World:
             f.write(f"seed={self.seed}\n")
             if self.importPath != '':
                 f.write(f"importPath={self.importPath}\n")
+    
+    def addTicket(self, pos: ChunkPos, life: int):
+        self.tickets[pos] = life
     
     def setBlock(self, instData, blockPos: BlockPos, blockId: BlockId, blockState: Optional[BlockState] = None, doUpdateLight=True, doUpdateBuried=True, doUpdateMesh=False, doBlockUpdates=True):
         (chunk, ckLocal) = self.getChunk(blockPos)
@@ -1959,34 +1966,46 @@ class World:
 
         keepGoing = True
 
-        for chunkPos in self.chunks:
-            chunk: Chunk = self.chunks[chunkPos]
-            (adj, gen, pop, opt, com) = self.countLoadedAdjacentChunks(chunkPos, 1)
-            if chunk.worldgenStage == WorldgenStage.GENERATED and gen == 8:
-                self.generator.populate(chunk, self, instData, self.seed)
-                if time.perf_counter() - startTime > maxTime:
-                    keepGoing = False
+        urgentOk = False
+
+        while not urgentOk:
+            urgentOk = True
+            for ticketPos in self.tickets:
+                if self.chunks[ticketPos].worldgenStage < WorldgenStage.POPULATED:
+                    urgentOk = False
+
+                for chunkPos in adjacentChunks(ticketPos, 2):
+                    if self.chunks[chunkPos].worldgenStage < WorldgenStage.POPULATED:
+                        urgentOk = False
+
+            for chunkPos in self.chunks:
+                chunk: Chunk = self.chunks[chunkPos]
+                (adj, gen, pop, opt, com) = self.countLoadedAdjacentChunks(chunkPos, 1)
+                if chunk.worldgenStage == WorldgenStage.GENERATED and gen == 8:
+                    self.generator.populate(chunk, self, instData, self.seed)
+                    if time.perf_counter() - startTime > maxTime:
+                        keepGoing = not urgentOk
+                    
+                if keepGoing and chunk.worldgenStage == WorldgenStage.POPULATED and pop == 8:
+                    chunk.lightAndOptimize(self)
+                    if time.perf_counter() - startTime > maxTime:
+                        keepGoing = not urgentOk
+
+                if keepGoing and chunk.worldgenStage == WorldgenStage.OPTIMIZED and opt == 8:
+                    while keepGoing and chunk.createNextMesh(self, instData):
+                        if time.perf_counter() - startTime > maxTime:
+                            keepGoing = not urgentOk
                 
-            if keepGoing and chunk.worldgenStage == WorldgenStage.POPULATED and pop == 8:
-                chunk.lightAndOptimize(self)
-                if time.perf_counter() - startTime > maxTime:
-                    keepGoing = False
+                if keepGoing and chunk.worldgenStage == WorldgenStage.COMPLETE:
+                    while keepGoing and chunk.createNextMesh(self, instData):
+                        if time.perf_counter() - startTime > maxTime:
+                            keepGoing = not urgentOk
 
-            if keepGoing and chunk.worldgenStage == WorldgenStage.OPTIMIZED and opt == 8:
-                while keepGoing and chunk.createNextMesh(self, instData):
-                    if time.perf_counter() - startTime > maxTime:
-                        keepGoing = False
-            
-            if keepGoing and chunk.worldgenStage == WorldgenStage.COMPLETE:
-                while keepGoing and chunk.createNextMesh(self, instData):
-                    if time.perf_counter() - startTime > maxTime:
-                        keepGoing = False
+                chunk.isVisible = chunk.worldgenStage == WorldgenStage.COMPLETE
+                chunk.isTicking = chunk.isVisible and adj == 8
 
-            chunk.isVisible = chunk.worldgenStage == WorldgenStage.COMPLETE
-            chunk.isTicking = chunk.isVisible and adj == 8
-
-            if not keepGoing:
-                break
+                if not keepGoing:
+                    break
     
     def flushLightChanges(self):
         if self.dirtySources != set():
@@ -2015,38 +2034,49 @@ class World:
                 chunk.tick(app, self)
         
         self.flushLightChanges()
-        
-    def loadUnloadChunks(self, centerPos, instData):
-        (chunkPos, _) = toChunkLocal(nearestBlockPos(centerPos[0], centerPos[1], centerPos[2]))
-        (x, _, z) = chunkPos
 
+        toRemove = []
+        for ticket in self.tickets:
+            self.tickets[ticket] -= 1
+            if self.tickets[ticket] <= 0:
+                toRemove.append(ticket)
+        
+        for r in toRemove:
+            del self.tickets[r]
+        
+    def loadUnloadChunks(self, instData):
         chunkLoadDistance = math.ceil(config.CHUNK_LOAD_DISTANCE / 16)
 
         # Unload chunks
-        shouldUnload = []
+        shouldUnload = set(self.chunks)
         for unloadChunkPos in self.chunks:
-            (ux, _, uz) = unloadChunkPos
-            dist = max(abs(ux - x), abs(uz - z))
-            if dist > chunkLoadDistance + 1:
-                # Unload chunk
-                shouldUnload.append(unloadChunkPos)
+            for ticket in self.tickets:
+                (x, _, z) = ticket
+
+                (ux, _, uz) = unloadChunkPos
+                dist = max(abs(ux - x), abs(uz - z))
+                if dist <= chunkLoadDistance + 1:
+                    # This chunk is still in range, so don't unload it
+                    shouldUnload.remove(unloadChunkPos)
 
         for unloadChunkPos in shouldUnload:
             self.unloadChunk(unloadChunkPos)
 
+        possibleLoads = {}
+        for ticket in self.tickets:
+            possibleLoads[ticket] = 0
+            for chunk in adjacentChunks(ticket, chunkLoadDistance):
+                dist = max(abs(chunk.x - ticket.x), abs(chunk.z - ticket.z))
+                if chunk not in possibleLoads or possibleLoads[chunk] > dist:
+                    possibleLoads[chunk] = dist
+
         loadedChunks = 0
 
-        #queuedForLoad = []
-
-        for loadChunkPos in itertools.chain(adjacentChunks(chunkPos, chunkLoadDistance), (chunkPos, )):
+        for loadChunkPos, dist in possibleLoads.items():
             if loadChunkPos not in self.chunks:
-                (ux, _, uz) = loadChunkPos
-                dist = max(abs(ux - x), abs(uz - z))
-
-                urgent = dist <= 2
+                urgent = dist <= 3
 
                 if (urgent or (loadedChunks < 1)) and self.canLoadChunk(loadChunkPos):
-                    #queuedForLoad.append((app.world, (app.textures, app.cube), loadChunkPos))
                     loadedChunks += 1
                     self.loadChunk(instData, loadChunkPos)
 

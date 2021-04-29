@@ -73,6 +73,9 @@ class ClientState:
     tickTimes: List[float]
     tickTimeIdx: int
 
+    serverTickTimes: List[float]
+    serverTickTimeIdx: int
+
     csToCanvasMat: Any
 
     gravity: float

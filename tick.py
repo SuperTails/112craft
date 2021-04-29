@@ -524,7 +524,7 @@ def updateBlockBreaking(app, server: ServerState):
 
             # TODO: UUID
             network.s2cQueue.put(network.SpawnEntityS2C(entityId, None, 37,
-                pos.x, pos.y, pos.z, 0.0, 0.0, 1,
+                float(pos.x), float(pos.y), float(pos.z), 0.0, 0.0, 1,
                 int(xVel * 8000), int(yVel * 8000), int(zVel * 8000)))
 
             itemId = util.REGISTRY.encode('minecraft:item', 'minecraft:' + stack.item)
@@ -533,8 +533,7 @@ def updateBlockBreaking(app, server: ServerState):
                 entityId, { (6, 7): { 'item': itemId, 'count': stack.amount } }
             ))
             
-            # FIXME: IDs
-            ent = Entity(app, 1, 'item', pos.x, pos.y, pos.z)
+            ent = Entity(app, entityId, 'item', float(pos.x), float(pos.y), float(pos.z))
             ent.extra.stack = stack
             ent.velocity = [xVel, yVel, zVel]
 
@@ -670,10 +669,10 @@ def findSpaceForPortal(world: World, blockPos: BlockPos, maxHeight: int) -> Opti
             for dx in range(-1, 4):
                 blockId = world.getBlock(BlockPos(pos.x + dx, pos.y + dy, pos.z))
                 if dy == 0:
-                    if blockId == 'air':
+                    if not isSolid(blockId):
                         return False
                 else:
-                    if isSolid(blockId):
+                    if blockId != 'air':
                         return False
         
         return True
@@ -703,7 +702,11 @@ def clientTick(client: ClientState, instData):
     client.time += 1
 
     if not client.local:
-        client.world.loadUnloadChunks(client.player.pos, instData)
+        chunkPos, _ = world.toChunkLocal(client.player.getBlockPos())
+
+        client.world.tickets[chunkPos] = 1
+
+        client.world.loadUnloadChunks(instData)
         client.world.addChunkDetails(instData)
     
     client.world.flushLightChanges()
@@ -765,6 +768,19 @@ def clientTick(client: ClientState, instData):
 
     client.lastTickTime = endTime
 
+def getServerTickets(app, server: ServerState):
+    tickets = [[], []]
+
+    for player in server.players:
+        chunkPos, _ = world.toChunkLocal(player.getBlockPos())
+
+        if player.dimension == 'overworld':
+            tickets[0].append(chunkPos)
+        elif player.dimension == 'nether':
+            tickets[1].append(chunkPos)
+    
+    return tickets
+
 def serverTick(app, server: ServerState):
     startTime = time.time()
 
@@ -772,8 +788,15 @@ def serverTick(app, server: ServerState):
 
     instData = (app.textures, app.cube, app.textureIndices)
 
-    for dim in server.dimensions:
-        dim.world.loadUnloadChunks(server.getLocalPlayer().pos, (app.textures, app.cube, app.textureIndices))
+    for i, dim in enumerate(server.dimensions):
+        player = server.getLocalPlayer()
+        chunkPos, _ = world.toChunkLocal(player.getBlockPos())
+        if i == 0 and player.dimension == 'overworld':
+            dim.world.addTicket(chunkPos, 1)
+        elif i == 1 and player.dimension == 'nether':
+            dim.world.addTicket(chunkPos, 1)
+
+        dim.world.loadUnloadChunks((app.textures, app.cube, app.textureIndices))
         dim.world.addChunkDetails(instData)
         dim.world.tickChunks(app)
 
@@ -818,6 +841,9 @@ def serverTick(app, server: ServerState):
                 player.portalCooldown = 80
 
                 destDim = server.getDimension(player.dimension)
+                destDim.world.addTicket(world.toChunkLocal(player.getBlockPos())[0], 300)
+                destDim.world.loadUnloadChunks(instData)
+                destDim.world.addChunkDetails(instData)
 
                 dest = getDestination(app, destDim.world, player.getBlockPos(), 128)
 
@@ -894,6 +920,9 @@ def serverTick(app, server: ServerState):
     server.tickTimes[server.tickTimeIdx] = (endTime - startTime)
     server.tickTimeIdx += 1
     server.tickTimeIdx %= len(server.tickTimes)
+
+    app.client.serverTickTimes = server.tickTimes
+    app.client.serverTickTimeIdx = server.tickTimeIdx
 
 def syncClient(app):
     # TODO: Copy

@@ -772,9 +772,10 @@ def drawHud(client: ClientState, canvas, startTime):
 
     drawHotbar(client, canvas)
 
-    tickTime = sum(client.tickTimes) / len(client.tickTimes) * 1000.0
+    clientTickTime = sum(client.tickTimes) / len(client.tickTimes) * 1000.0
+    serverTickTime = sum(client.serverTickTimes) / len(client.serverTickTimes) * 1000.0
 
-    drawTextOutlined(canvas, 10, 30, text=f'Tick Time: {tickTime:.2f}ms', anchor='nw')
+    drawTextOutlined(canvas, 10, 30, text=f'Tick: (C) {clientTickTime:.2f}ms (S) {serverTickTime:.2f}ms', anchor='nw')
     
     global frameTimes
     global frameTimeIdx
