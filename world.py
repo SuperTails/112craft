@@ -49,7 +49,7 @@ import util
 from util import *
 from OpenGL.GL import * #type:ignore
 from network import ChunkDataS2C
-from dimregistry import BiomeEntry
+from dimregistry import BiomeEntry, DimensionType
 from voronoi import VoronoiGen, UnitSeeder, BinarySeeder
 from numpy.lib.stride_tricks import sliding_window_view
 
@@ -586,8 +586,10 @@ class Chunk:
                             self.setBlock(world, instData, blockPos, 'obsidian')
                         else:
                             self.setBlock(world, instData, blockPos, 'cobblestone')
+                        
+                delay = 5 if world.dimTy.hasCeiling else 30
                 
-                self.requestScheduledTick(blockPos, 30)
+                self.requestScheduledTick(blockPos, delay)
             elif blockId == 'redstone_wire':
                 updateRedstoneWire(self._globalBlockPos(blockPos), world, instData)
                 world.updateRedstone([self._globalBlockPos(blockPos)], instData)
@@ -635,7 +637,7 @@ class Chunk:
                 liquid = ('water', 'flowing_water')
                 liquidOrAir = ('water', 'flowing_water', 'air')
             else:
-                levelChange = 2
+                levelChange = 2 if world.dimTy.hasCeiling else 1
                 flowingName = 'flowing_lava'
                 liquid = ('lava', 'flowing_lava')
                 liquidOrAir = ('lava', 'flowing_lava', 'air')
@@ -872,7 +874,7 @@ class Chunk:
 
         anyOccupied = False
 
-        if world.hasSkyLight:
+        if world.dimTy.hasSkyLight:
             for yIdx in range(CHUNK_HEIGHT - 1, -1, -1):
                 allAreDark = True
 
@@ -1796,7 +1798,7 @@ class World:
     chunks: dict[ChunkPos, Chunk]
     seed: int
 
-    hasSkyLight: bool
+    dimTy: DimensionType
 
     regions: dict[Tuple[int, int], anvil.Region]
     importPath: str
@@ -2013,7 +2015,7 @@ class World:
         if self.dirtySources != set():
             try:
                 self.propogateLight(self.dirtySources, False, False)
-                if self.hasSkyLight:
+                if self.dimTy.hasSkyLight:
                     self.propogateLight(self.dirtySources, True, False)
             except Exception as e:
                 print(f'Ignoring exception in flushLightChanges {e}')
@@ -2023,7 +2025,7 @@ class World:
         if self.dirtyLights != set():
             try:
                 self.updateLight2(self.dirtyLights, False)
-                if self.hasSkyLight:
+                if self.dimTy.hasSkyLight:
                     self.updateLight2(self.dirtyLights, True)
             except Exception as e:
                 print(f'Ignoring exception in flushLightChanges {e}')

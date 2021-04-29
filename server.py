@@ -4,6 +4,7 @@ from world import World
 import entity
 import math
 import os
+import util
 from entity import Entity
 from player import Player
 from util import BlockPos, ChunkPos
@@ -101,9 +102,9 @@ class ServerState:
         return self.getDimension(player.dimension)
     
     def getDimension(self, name: str) -> Dimension:
-        if name == 'overworld':
+        if name == 'minecraft:overworld':
             return self.dimensions[0]
-        elif name == 'nether':
+        elif name == 'minecraft:the_nether':
             return self.dimensions[1]
         else:
             # TODO:
@@ -167,7 +168,7 @@ class ServerState:
 
         overworld = Dimension()
         overworld.world = World(server.saveFolderPath() + '/region', world.OverworldGen(), seed, importPath=importPath)
-        overworld.world.hasSkyLight = True
+        overworld.world.dimTy = util.DIMENSION_CODEC.getDimension('minecraft:overworld').ty
 
         try:
             path = server.saveFolderPath() + '/entities.dat'
@@ -180,7 +181,7 @@ class ServerState:
         
         nether = Dimension()
         nether.world = World(server.saveFolderPath() + '/DIM-1/region', world.NetherGen(), seed, importPath=importPath)
-        nether.world.hasSkyLight = False
+        nether.world.dimTy = util.DIMENSION_CODEC.getDimension('minecraft:the_nether').ty
 
         try:
             path = server.saveFolderPath() + '/DIM-1/entities.dat'

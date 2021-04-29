@@ -41,7 +41,7 @@ class Player(Entity):
 
         self.portalCooldown = 80
 
-        self.dimension = 'overworld'
+        self.dimension = 'minecraft:overworld'
         
         if self.creative:
             if len(app.itemTextures) > 36:
@@ -70,7 +70,7 @@ class Player(Entity):
 
             self.flying = tag['abilities']['flying'].value != 0
 
-            self.dimension = tag['dimension'].value.removeprefix('minecraft:')
+            self.dimension = tag['dimension'].value
         
     def toNbt(self) -> nbt.TAG_Compound:
         tag = super().toNbt()
@@ -92,7 +92,7 @@ class Player(Entity):
 
         tag.tags.append(abilities)
 
-        tag.tags.append(nbt.TAG_String('minecraft:' + self.dimension, 'dimension'))
+        tag.tags.append(nbt.TAG_String(self.dimension, 'dimension'))
 
         return tag
     

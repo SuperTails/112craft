@@ -13,7 +13,7 @@ from quarry.types.buffer import BufferUnderrun
 from quarry.types.chat import Message
 from quarry.types.chunk import PackedArray
 from quarry.types import nbt
-from dimregistry import DimensionCodec
+from dimregistry import DimensionCodec, DimensionType
 import math
 
 c2sQueue = SimpleQueue()
@@ -725,23 +725,6 @@ class SpawnPlayerS2C:
         return cls(entityId, playerUUID, x-0.5, y-0.5, -(z+0.5), yaw, pitch)
  
 @dataclass
-class DimensionType:
-    piglinSafe: bool
-    natural: bool
-    ambientLight: float
-    fixedTime: Optional[int]
-    infiniburn: str
-    respawnAnchorWorks: bool
-    hasSkylight: bool
-    bedWorks: bool
-    effects: str
-    hasRaids: bool
-    logicalHeight: int
-    coordScale: float
-    ultrawarm: bool
-    hasCeiling: bool
-
-@dataclass
 class JoinGameS2C:
     entityId: int
     hardcore: bool
@@ -749,7 +732,7 @@ class JoinGameS2C:
     prevGamemode: Optional[int]
     worldNames: List[str]
     dimensionCodec: DimensionCodec
-    dimension: nbt.TagCompound
+    dimension: DimensionType
     worldName: str
     seedHash: int
     maxPlayers: int
@@ -768,7 +751,7 @@ class JoinGameS2C:
         worldNames = [buf.unpack_string() for _ in range(buf.unpack_varint())]
 
         dimensionCodec = DimensionCodec.fromNbt(buf.unpack_nbt())
-        dimension = buf.unpack_nbt()
+        dimension = DimensionType.fromNbt(buf.unpack_nbt().body)
         worldName = buf.unpack_string()
         seedHash = buf.unpack('q')
         maxPlayers = buf.unpack_varint()

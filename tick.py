@@ -364,10 +364,10 @@ def sendChatMessage(app, text: str):
             elif parts[0] == 'dimension':
                 player = server.getLocalPlayer()
                 
-                if player.dimension == 'overworld':
-                    player.dimension = 'nether'
-                elif player.dimension == 'nether':
-                    player.dimension = 'overworld'
+                if player.dimension == 'minecraft:overworld':
+                    player.dimension = 'minecraft:the_nether'
+                elif player.dimension == 'minecraft:the_nether':
+                    player.dimension = 'minecraft:overworld'
                 else:
                     raise Exception(player.dimension)
                 
@@ -377,7 +377,7 @@ def sendChatMessage(app, text: str):
                 
                 # TODO:
                 network.s2cQueue.put(network.RespawnS2C(
-                    quarrynbt.TagCompound({}), 'minecraft:' + player.dimension,
+                    quarrynbt.TagCompound({}), player.dimension,
                     0, 0, None, False, False, True
                 ))
             elif parts[0] == 'chunkstates':
@@ -768,19 +768,6 @@ def clientTick(client: ClientState, instData):
 
     client.lastTickTime = endTime
 
-def getServerTickets(app, server: ServerState):
-    tickets = [[], []]
-
-    for player in server.players:
-        chunkPos, _ = world.toChunkLocal(player.getBlockPos())
-
-        if player.dimension == 'overworld':
-            tickets[0].append(chunkPos)
-        elif player.dimension == 'nether':
-            tickets[1].append(chunkPos)
-    
-    return tickets
-
 def serverTick(app, server: ServerState):
     startTime = time.time()
 
@@ -791,9 +778,9 @@ def serverTick(app, server: ServerState):
     for i, dim in enumerate(server.dimensions):
         player = server.getLocalPlayer()
         chunkPos, _ = world.toChunkLocal(player.getBlockPos())
-        if i == 0 and player.dimension == 'overworld':
+        if i == 0 and player.dimension == 'minecraft:overworld':
             dim.world.addTicket(chunkPos, 1)
-        elif i == 1 and player.dimension == 'nether':
+        elif i == 1 and player.dimension == 'minecraft:the_nether':
             dim.world.addTicket(chunkPos, 1)
 
         dim.world.loadUnloadChunks((app.textures, app.cube, app.textureIndices))
@@ -831,10 +818,10 @@ def serverTick(app, server: ServerState):
             if player.portalCooldown == 0:
                 import quarry.types.nbt as quarrynbt
 
-                if player.dimension == 'overworld':
-                    player.dimension = 'nether'
-                elif player.dimension == 'nether':
-                    player.dimension = 'overworld'
+                if player.dimension == 'minecraft:overworld':
+                    player.dimension = 'minecraft:the_nether'
+                elif player.dimension == 'minecraft:the_nether':
+                    player.dimension = 'minecraft:overworld'
                 else:
                     raise Exception(player.dimension)
         
@@ -845,11 +832,11 @@ def serverTick(app, server: ServerState):
                 destDim.world.loadUnloadChunks(instData)
                 destDim.world.addChunkDetails(instData)
 
-                dest = getDestination(app, destDim.world, player.getBlockPos(), 128)
+                dest = getDestination(app, destDim.world, player.getBlockPos(), destDim.world.dimTy.logicalHeight)
 
                 # TODO:
                 network.s2cQueue.put(network.RespawnS2C(
-                    quarrynbt.TagCompound({}), 'minecraft:' + player.dimension,
+                    quarrynbt.TagCompound({}), player.dimension,
                     0, 0, None, False, False, True
                 ))
 

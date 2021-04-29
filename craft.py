@@ -68,6 +68,7 @@ from player import Player, Slot, Stack
 import inventory
 import resources
 from resources import loadResources, getHardnessAgainst, getBlockDrop, getAttackDamage
+from dimregistry import DimensionType
 from nbt import nbt
 from dataclasses import dataclass
 import network
@@ -1043,10 +1044,8 @@ def handleS2CPackets(mode, app, client: ClientState):
         elif isinstance(packet, network.JoinGameS2C):
             app.client.player.entityId = packet.entityId
 
-            # TODO:
-            print(packet.dimension)
-
             util.DIMENSION_CODEC = packet.dimensionCodec
+            app.client.world.dimTy = packet.dimension
         elif isinstance(packet, network.RespawnS2C):
             print(f'RESPAWN: {packet.worldName}, {packet.dimension}')
             if hasattr(app, 'server'):
@@ -1054,6 +1053,7 @@ def handleS2CPackets(mode, app, client: ClientState):
             else:
                 app.client.world.chunks = {}
                 app.client.world.serverChunks = {}
+                app.client.world.dimTy = DimensionType.fromNbt(packet.dimension.body)
         elif packet is None:
             raise Exception("Disconnected")
 
@@ -1392,7 +1392,7 @@ def appStarted(app):
     #def makeTitleMode(app, _player): return TitleMode(app)
     #app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
     def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'world', True, makePlayingMode, seed=random.randint(0, 2**31))
+    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     # ---------------
