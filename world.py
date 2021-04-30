@@ -743,15 +743,17 @@ class Chunk:
                 if (level + levelChange) // 8 == level // 8:
                     for faceIdx in range(0, 8, 2):
                         adjPos = adjacentBlockPos(gp, faceIdx)
-                        blockId = world.getBlock(adjPos)
+
                         shouldFlow = False
+
+                        adjBlockId = world.getBlock(adjPos)
                         nextLevel = (level % 8) + levelChange
-                        if blockId in liquid:
-                            blockState = world.getBlockState(adjPos)
-                            oldLevel = int(blockState['level'])
+                        if adjBlockId in liquid:
+                            adjBlockState = world.getBlockState(adjPos)
+                            oldLevel = int(adjBlockState['level'])
                             if (oldLevel % 8) > nextLevel:
                                 shouldFlow = True
-                        elif blockId == 'air':
+                        elif adjBlockId == 'air':
                             shouldFlow = True
                         else:
                             shouldFlow = False
@@ -761,10 +763,10 @@ class Chunk:
             
             for faceIdx in range(0, 8, 2):
                 adjPos = adjacentBlockPos(gp, faceIdx)
-                blockId = world.getBlock(adjPos)
-                if blockId in liquid:
-                    blockState = world.getBlockState(adjPos)
-                    oldLevel = int(blockState['level'])
+                adjBlockId = world.getBlock(adjPos)
+                if adjBlockId in liquid:
+                    adjBlockState = world.getBlockState(adjPos)
+                    oldLevel = int(adjBlockState['level'])
                     
                     if (oldLevel % 8) < (level % 8):
                         sideHigher = True
@@ -773,8 +775,9 @@ class Chunk:
             aboveHigher = self.blocks[blockPos.x, blockPos.y+1, blockPos.z] in liquid
 
             if level != 0:
-                if level == 8 and not aboveHigher:
-                    setIfChanged(blockPos, flowingName, { 'level': '1' }, isLocal=True)
+                if level == 8:
+                    if not aboveHigher:
+                        setIfChanged(blockPos, flowingName, { 'level': '1' }, isLocal=True)
                 elif (level + levelChange) // 8 != level // 8:
                     setIfChanged(blockPos, 'air', {}, isLocal=True)
                 elif not sideHigher:
@@ -996,15 +999,14 @@ class Chunk:
             x, y, z = self._coordsFromIdx(i)
             thisInst = thisInst[0]
 
-            if not isOpaque(self.blocks[x, y, z]):
-                continue
+            thisOpaque = isOpaque(self.blocks[x, y, z])
 
             if x > 0:
                 thatIdx = i - 16
                 #thatIdx = self._coordsToIdx(BlockPos(x - 1, y, z))
 
                 if self.instances[thatIdx] is not None:
-                    if isOpaque(self.blocks[x - 1, y, z]):
+                    if thisOpaque == isOpaque(self.blocks[x - 1, y, z]):
                         self.instances[thatIdx][0].visibleFaces[2] = False
                         self.instances[thatIdx][0].visibleFaces[3] = False
 
@@ -1013,7 +1015,7 @@ class Chunk:
             else:
                 thatIdx = i + 16 * 15
                 if negXChunk.instances[thatIdx] is not None:
-                    if isOpaque(negXChunk.blocks[15, y, z]):
+                    if thisOpaque == isOpaque(negXChunk.blocks[15, y, z]):
                         negXChunk.instances[thatIdx][0].visibleFaces[2] = False
                         negXChunk.instances[thatIdx][0].visibleFaces[3] = False
 
@@ -1023,7 +1025,7 @@ class Chunk:
             if x == 15:
                 thatIdx = i - 16 * 15
                 if posXChunk.instances[thatIdx] is not None:
-                    if isOpaque(negXChunk.blocks[0, y, z]):
+                    if thisOpaque == isOpaque(negXChunk.blocks[0, y, z]):
                         posXChunk.instances[thatIdx][0].visibleFaces[0] = False
                         posXChunk.instances[thatIdx][0].visibleFaces[1] = False
 
@@ -1035,7 +1037,7 @@ class Chunk:
                 #thatIdx = self._coordsToIdx(BlockPos(x, y, z - 1))
 
                 if self.instances[thatIdx] is not None:
-                    if isOpaque(self.blocks[x, y, z - 1]):
+                    if thisOpaque == isOpaque(self.blocks[x, y, z - 1]):
                         self.instances[thatIdx][0].visibleFaces[6] = False
                         self.instances[thatIdx][0].visibleFaces[7] = False
 
@@ -1044,7 +1046,7 @@ class Chunk:
             else:
                 thatIdx = i + 1 * 15
                 if negZChunk.instances[thatIdx] is not None:
-                    if isOpaque(negZChunk.blocks[x, y, 15]):
+                    if thisOpaque == isOpaque(negZChunk.blocks[x, y, 15]):
                         negZChunk.instances[thatIdx][0].visibleFaces[6] = False
                         negZChunk.instances[thatIdx][0].visibleFaces[7] = False
 
@@ -1054,7 +1056,7 @@ class Chunk:
             if z == 15:
                 thatIdx = i - 1 * 15
                 if posZChunk.instances[thatIdx] is not None:
-                    if isOpaque(posZChunk.blocks[x, y, 0]):
+                    if thisOpaque == isOpaque(posZChunk.blocks[x, y, 0]):
                         posZChunk.instances[thatIdx][0].visibleFaces[4] = False
                         posZChunk.instances[thatIdx][0].visibleFaces[5] = False
 
@@ -1066,11 +1068,12 @@ class Chunk:
                 thatIdx = i - 256
 
                 if self.instances[thatIdx] is not None:
-                    self.instances[thatIdx][0].visibleFaces[10] = False
-                    self.instances[thatIdx][0].visibleFaces[11] = False
+                    if thisOpaque == isOpaque(self.blocks[x, y - 1, z]):
+                        self.instances[thatIdx][0].visibleFaces[10] = False
+                        self.instances[thatIdx][0].visibleFaces[11] = False
 
-                    thisInst.visibleFaces[8] = False
-                    thisInst.visibleFaces[9] = False
+                        thisInst.visibleFaces[8] = False
+                        thisInst.visibleFaces[9] = False
         
         for i, thisInst in filter(okFilter, enumerate(self.instances)):
             thisInst[1] = any(thisInst[0].visibleFaces)
