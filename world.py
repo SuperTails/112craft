@@ -996,61 +996,70 @@ class Chunk:
             x, y, z = self._coordsFromIdx(i)
             thisInst = thisInst[0]
 
+            if not isOpaque(self.blocks[x, y, z]):
+                continue
+
             if x > 0:
                 thatIdx = i - 16
                 #thatIdx = self._coordsToIdx(BlockPos(x - 1, y, z))
 
                 if self.instances[thatIdx] is not None:
-                    self.instances[thatIdx][0].visibleFaces[2] = False
-                    self.instances[thatIdx][0].visibleFaces[3] = False
+                    if isOpaque(self.blocks[x - 1, y, z]):
+                        self.instances[thatIdx][0].visibleFaces[2] = False
+                        self.instances[thatIdx][0].visibleFaces[3] = False
 
-                    thisInst.visibleFaces[0] = False
-                    thisInst.visibleFaces[1] = False
+                        thisInst.visibleFaces[0] = False
+                        thisInst.visibleFaces[1] = False
             else:
                 thatIdx = i + 16 * 15
                 if negXChunk.instances[thatIdx] is not None:
-                    negXChunk.instances[thatIdx][0].visibleFaces[2] = False
-                    negXChunk.instances[thatIdx][0].visibleFaces[3] = False
+                    if isOpaque(negXChunk.blocks[15, y, z]):
+                        negXChunk.instances[thatIdx][0].visibleFaces[2] = False
+                        negXChunk.instances[thatIdx][0].visibleFaces[3] = False
 
-                    thisInst.visibleFaces[0] = False
-                    thisInst.visibleFaces[1] = False
+                        thisInst.visibleFaces[0] = False
+                        thisInst.visibleFaces[1] = False
                 
             if x == 15:
                 thatIdx = i - 16 * 15
                 if posXChunk.instances[thatIdx] is not None:
-                    posXChunk.instances[thatIdx][0].visibleFaces[0] = False
-                    posXChunk.instances[thatIdx][0].visibleFaces[1] = False
+                    if isOpaque(negXChunk.blocks[0, y, z]):
+                        posXChunk.instances[thatIdx][0].visibleFaces[0] = False
+                        posXChunk.instances[thatIdx][0].visibleFaces[1] = False
 
-                    thisInst.visibleFaces[2] = False
-                    thisInst.visibleFaces[3] = False
+                        thisInst.visibleFaces[2] = False
+                        thisInst.visibleFaces[3] = False
 
             if z > 0:
                 thatIdx = i - 1
                 #thatIdx = self._coordsToIdx(BlockPos(x, y, z - 1))
 
                 if self.instances[thatIdx] is not None:
-                    self.instances[thatIdx][0].visibleFaces[6] = False
-                    self.instances[thatIdx][0].visibleFaces[7] = False
+                    if isOpaque(self.blocks[x, y, z - 1]):
+                        self.instances[thatIdx][0].visibleFaces[6] = False
+                        self.instances[thatIdx][0].visibleFaces[7] = False
 
-                    thisInst.visibleFaces[4] = False
-                    thisInst.visibleFaces[5] = False
+                        thisInst.visibleFaces[4] = False
+                        thisInst.visibleFaces[5] = False
             else:
                 thatIdx = i + 1 * 15
                 if negZChunk.instances[thatIdx] is not None:
-                    negZChunk.instances[thatIdx][0].visibleFaces[6] = False
-                    negZChunk.instances[thatIdx][0].visibleFaces[7] = False
+                    if isOpaque(negZChunk.blocks[x, y, 15]):
+                        negZChunk.instances[thatIdx][0].visibleFaces[6] = False
+                        negZChunk.instances[thatIdx][0].visibleFaces[7] = False
 
-                    thisInst.visibleFaces[4] = False
-                    thisInst.visibleFaces[5] = False
+                        thisInst.visibleFaces[4] = False
+                        thisInst.visibleFaces[5] = False
             
             if z == 15:
                 thatIdx = i - 1 * 15
                 if posZChunk.instances[thatIdx] is not None:
-                    posZChunk.instances[thatIdx][0].visibleFaces[4] = False
-                    posZChunk.instances[thatIdx][0].visibleFaces[5] = False
+                    if isOpaque(posZChunk.blocks[x, y, 0]):
+                        posZChunk.instances[thatIdx][0].visibleFaces[4] = False
+                        posZChunk.instances[thatIdx][0].visibleFaces[5] = False
 
-                    thisInst.visibleFaces[6] = False
-                    thisInst.visibleFaces[7] = False
+                        thisInst.visibleFaces[6] = False
+                        thisInst.visibleFaces[7] = False
 
             if y > 0:
                 #thatIdx = self._coordsToIdx(BlockPos(x, y - 1, z))
@@ -1182,13 +1191,10 @@ class Chunk:
                     elif blockId in ('water', 'flowing_water', 'lava', 'flowing_lava'):
                         level = int(blockState['level']) if 'level' in blockState else 0
 
-                        if level > 8:
-                            print(f'level: {level}')
-
-                        if level < 8:
-                            blockHeight = (8 - level) / 9
-                        else:
+                        if level >= 8 or (level == 0 and self.blocks[bx, by + 1, bz] in ('flowing_water', 'water', 'flowing_lava', 'lava')):
                             blockHeight = 1.0
+                        else:
+                            blockHeight = (8 - level) / 9
                         
                         vert = (vert * [1.0, blockHeight, 1.0, 1.0, 1.0] - [0.0, (1 - blockHeight) / 2, 0.0, 0.0, 0.0])
                     elif blockId == 'redstone_wire':
