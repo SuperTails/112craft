@@ -720,6 +720,58 @@ def findSpaceForPortal(world: World, blockPos: BlockPos, maxHeight: int) -> Opti
     
     return None
 
+def updatePlayerPos(client: ClientState):
+    player: Player = client.player
+
+    playerChunkPos = world.toChunkLocal(player.getBlockPos())[0]
+    playerChunkPos = ChunkPos(playerChunkPos.x, 0, playerChunkPos.z)
+
+    # W makes the player go forward, S makes them go backwards,
+    # and pressing both makes them stop!
+    z = float(client.w) - float(client.s)
+    # Likewise for side to side movement
+    x = float(client.d) - float(client.a)
+
+    ticks = min((time.perf_counter() - client.lastFrameTime) / 0.05, 2)
+
+    if playerChunkPos in client.world.chunks and client.world.chunks[playerChunkPos].isTicking:
+        if x != 0.0 or z != 0.0:
+            mag = math.sqrt(x*x + z*z)
+            x /= mag
+            z /= mag
+
+            newX = math.cos(client.cameraYaw) * x - math.sin(client.cameraYaw) * z
+            newZ = math.sin(client.cameraYaw) * x + math.cos(client.cameraYaw) * z
+
+            x, z = newX, newZ
+
+            x *= player.walkSpeed 
+            z *= player.walkSpeed
+
+        #player.tick(app, app.world, app.entities, 0.0, 0.0)
+        if player.flying:
+            if client.space:
+                player.velocity[1] = 0.2
+            elif client.shift:
+                player.velocity[1] = -0.2
+            else:
+                player.velocity[1] = 0.0
+        
+        collideY(client.world, player, ticks)
+        if player.onGround:
+            player.velocity[0] = x
+            player.velocity[2] = z
+        else:
+            player.velocity[0] += x / 10.0
+            player.velocity[2] += z / 10.0
+            player.velocity[0] *= 0.9
+            player.velocity[2] *= 0.9
+
+        collideXZ(client.world, player, ticks)
+    
+    client.cameraPos = copy.copy(player.pos)
+    client.cameraPos[1] += player.height
+
 def clientTick(client: ClientState, instData):
     startTime = time.time()
 
@@ -739,40 +791,6 @@ def clientTick(client: ClientState, instData):
 
     playerChunkPos = world.toChunkLocal(player.getBlockPos())[0]
     playerChunkPos = ChunkPos(playerChunkPos.x, 0, playerChunkPos.z)
-
-    # W makes the player go forward, S makes them go backwards,
-    # and pressing both makes them stop!
-    z = float(client.w) - float(client.s)
-    # Likewise for side to side movement
-    x = float(client.d) - float(client.a)
-
-    if playerChunkPos in client.world.chunks and client.world.chunks[playerChunkPos].isTicking:
-        if x != 0.0 or z != 0.0:
-            mag = math.sqrt(x*x + z*z)
-            x /= mag
-            z /= mag
-
-            newX = math.cos(client.cameraYaw) * x - math.sin(client.cameraYaw) * z
-            newZ = math.sin(client.cameraYaw) * x + math.cos(client.cameraYaw) * z
-
-            x, z = newX, newZ
-
-            x *= player.walkSpeed 
-            z *= player.walkSpeed
-
-        #player.tick(app, app.world, app.entities, 0.0, 0.0)
-        
-        collideY(client.world, player)
-        if player.onGround:
-            player.velocity[0] = x
-            player.velocity[2] = z
-        else:
-            player.velocity[0] += x / 10.0
-            player.velocity[2] += z / 10.0
-        collideXZ(client.world, player)
-    
-    client.cameraPos = copy.copy(player.pos)
-    client.cameraPos[1] += player.height
 
     for entity in client.entities:
         entChunkPos = world.toChunkLocal(entity.getBlockPos())[0]
@@ -1025,15 +1043,15 @@ def isValidSpawnLocation(app, dim: Dimension, pos: BlockPos):
 
 GRAVITY = 0.1
 
-def collideY(wld: World, entity: Entity):
-    entity.pos[1] += entity.velocity[1]
+def collideY(wld: World, entity: Entity, ticks=1.0):
+    entity.pos[1] += entity.velocity[1] * ticks
 
     if entity.onGround:
         if not wld.hasBlockBeneath(entity):
             entity.onGround = False
     else:
         #if not hasattr(entity, 'flying') or not entity.flying: #type:ignore
-        entity.velocity[1] -= GRAVITY
+        entity.velocity[1] -= GRAVITY * ticks
         [_, yPos, _] = entity.pos
         #yPos -= entity.height
         yPos -= 0.1
@@ -1061,7 +1079,7 @@ def collide(wld: World, entity: Entity):
     collideY(wld, entity)
     return collideXZ(wld, entity)
 
-def collideXZ(wld: World, entity: Entity):
+def collideXZ(wld: World, entity: Entity, ticks=1.0):
     hitWall = False
 
     minY = roundHalfUp((entity.pos[1]))
@@ -1070,7 +1088,7 @@ def collideXZ(wld: World, entity: Entity):
     lastX = entity.pos[0]
     lastZ = entity.pos[2]
 
-    entity.pos[0] += entity.velocity[0]
+    entity.pos[0] += entity.velocity[0] * ticks
 
     for y in range(minY, maxY + 1):
         for z in [entity.pos[2] - entity.radius * 0.99, entity.pos[2] + entity.radius * 0.99]:
@@ -1090,7 +1108,7 @@ def collideXZ(wld: World, entity: Entity):
                 entity.pos[0] = xEdge + entity.radius
                 hitWall = True
     
-    entity.pos[2] += entity.velocity[2]
+    entity.pos[2] += entity.velocity[2] * ticks
 
     for y in range(minY, maxY + 1):
         for x in [entity.pos[0] - entity.radius * 0.99, entity.pos[0] + entity.radius * 0.99]:

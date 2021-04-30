@@ -78,6 +78,7 @@ class ClientState:
     renderDistanceSq: int
 
     lastTickTime: float
+    lastFrameTime: float
 
     chat: List[Tuple[float, Any]]
 

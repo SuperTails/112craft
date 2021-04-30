@@ -529,6 +529,10 @@ class PlayingMode(Mode):
 
         if self.overlay is not None:
             self.overlay.redrawAll(app, window, canvas)
+        
+        tick.updatePlayerPos(app.client)
+        
+        app.client.lastFrameTime = time.perf_counter()
     
     def timerFired(self, app):
         self.lookedAtBlock = app.client.lookedAtBlock()
@@ -543,14 +547,6 @@ class PlayingMode(Mode):
             app.pitchSpeed *= 0.95
             app.yawSpeed *= 0.95
         
-        if player.flying:
-            if app.client.space:
-                player.velocity[1] = 0.2
-            elif app.client.shift:
-                player.velocity[1] = -0.2
-            else:
-                player.velocity[1] = 0.0
-
         updateBlockBreaking(app, self)
 
         handleS2CPackets(self, app, app.client)
@@ -1371,7 +1367,8 @@ def appStarted(app):
     client.serverTickTimes = [0.0] * 10
     client.serverTickTimeIdx = 0
 
-    client.lastTickTime = time.time()
+    client.lastTickTime = time.perf_counter()
+    client.lastFrameTime = time.perf_counter()
 
     client.gravity = app.gravity
 
