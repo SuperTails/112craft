@@ -93,6 +93,11 @@ def getSlotsInWindow(server: ServerState, windowId: int) -> Tuple[Stack, List[Sl
             furnace: world.Furnace = chunk.tileEntities[localPos]
 
             baseSlots = [furnace.inputSlot, furnace.fuelSlot, furnace.outputSlot] 
+        elif window.kind == 'crafting':
+            if player.entityId not in server.craftSlots:
+                server.craftSlots[player.entityId] = [Slot(canInput=False)] + [Slot() for _ in range(9)]
+            
+            baseSlots = server.craftSlots[player.entityId]
         else:
             raise Exception(f'Unknown window kind {window.kind}')
 
@@ -173,14 +178,15 @@ def sendCloseWindow(app, windowId: int):
     if hasattr(app, 'server'):
         server: ServerState = app.server
 
-        if windowId == 0:
-            player = server.getLocalPlayer()
-            if player.entityId in server.craftSlots:
-                craftSlots = server.craftSlots.pop(player.entityId)
-                for craftSlot in craftSlots[1:]:
-                    player.pickUpItem(app, craftSlot.stack)
-        else:
+        player = server.getLocalPlayer()
+
+        if windowId != 0:
             server.openWindows.pop(windowId)
+
+        if player.entityId in server.craftSlots:
+            craftSlots = server.craftSlots.pop(player.entityId)
+            for craftSlot in craftSlots[1:]:
+                player.pickUpItem(app, craftSlot.stack)
     else:
         network.c2sQueue.put(network.CloseWindowC2S(windowId))
 
