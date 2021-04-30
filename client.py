@@ -16,6 +16,12 @@ class ClientData:
     skyProgram: ShaderProgram
     entityProgram: ShaderProgram
     guiProgram: ShaderProgram
+    transProgram: ShaderProgram
+
+    fullscreenVao: int
+    
+    transColorTex: int
+    transDepthTex: int
 
     textureAtlas: Any
     atlasWidth: int
@@ -36,6 +42,8 @@ class ClientData:
     glTextures: dict[Any, Any]
 
     itemTextures: Any
+
+    translucentFb: int
 
 CLIENT_DATA = ClientData()
 

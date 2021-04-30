@@ -727,6 +727,44 @@ def loadGlTextures(app):
     CLIENT_DATA.guiProgram = ShaderProgram('shaders/guiShader.vert', 'shaders/guiShader.frag')
     CLIENT_DATA.entityProgram = ShaderProgram('shaders/entityShader.vert', 'shaders/entityShader.frag')
     CLIENT_DATA.skyProgram = ShaderProgram('shaders/skyShader.vert', 'shaders/skyShader.frag')
+    CLIENT_DATA.transProgram = ShaderProgram('shaders/transShader.vert', 'shaders/transShader.frag')
+
+    vertices = np.array([
+        1.0,  1.0, 1.0, 0.0, # top right
+        1.0, -1.0, 1.0, 1.0, # bottom right
+        -1.0, -1.0, 0.0, 1.0, # bottom left
+        -1.0,  1.0, 0.0, 0.0, # top left 
+    ], dtype='float32')
+
+    indices = np.array([
+        0, 1, 3,
+        1, 2, 3,
+    ], dtype='uint32')
+
+    vao: int = glGenVertexArrays(1) #type:ignore
+    vbo: int = glGenBuffers(1) #type:ignore
+    ebo: int = glGenBuffers(1) #type:ignore
+
+    glBindVertexArray(vao)
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo)
+    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
+
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * 4, ctypes.c_void_p(0))
+    glEnableVertexAttribArray(0)
+
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * 4, ctypes.c_void_p(2 * 4))
+    glEnableVertexAttribArray(1)
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0)
+
+    glBindVertexArray(0)
+
+    CLIENT_DATA.fullscreenVao = vao
+
 
 #def createTk
 
@@ -1026,6 +1064,28 @@ def loadResources(app):
         CLIENT_DATA.textureAtlas = loadTextureAtlas(app)
         loadEntityTextures(app)
         loadEntityAnimations(app)
+
+        # https://learnopengl.com/Advanced-OpenGL/Framebuffers
+        CLIENT_DATA.translucentFb = glGenFramebuffers(1) #type:ignore
+        glBindFramebuffer(GL_FRAMEBUFFER, CLIENT_DATA.translucentFb)
+
+        CLIENT_DATA.transColorTex = glGenTextures(1) #type:ignore
+        glBindTexture(GL_TEXTURE_2D, CLIENT_DATA.transColorTex)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, app.width, app.height, 0, GL_RGB, GL_UNSIGNED_BYTE, ctypes.c_void_p(0)) #type:ignore
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CLIENT_DATA.transColorTex, 0)
+
+        CLIENT_DATA.transDepthTex = glGenTextures(1) #type:ignore
+        glBindTexture(GL_TEXTURE_2D, CLIENT_DATA.transDepthTex)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, app.width, app.height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, ctypes.c_void_p(0)) #type:ignore
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, CLIENT_DATA.transDepthTex, 0) #type:ignore
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0)
 
         sunPath = 'assets/Vanilla_Resource_Pack_1.16.220/textures/environment/sun.png' 
         moonPath = 'assets/Vanilla_Resource_Pack_1.16.220/textures/environment/moon_phases.png'

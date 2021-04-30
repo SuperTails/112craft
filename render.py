@@ -352,7 +352,7 @@ def renderInstancesGl(client: ClientState, canvas):
 
     #glBindVertexArray(app.cubeVao)
 
-    chunkVaos = []
+    chunkMeshes = []
 
     for (pos, chunk) in client.world.chunks.items():
         if not chunk.isVisible: continue 
@@ -362,9 +362,8 @@ def renderInstancesGl(client: ClientState, canvas):
         cy *= world.CHUNK_HEIGHT
         cz *= 16
 
-        if hasattr(chunk, 'meshVaos'):
-            for i in range(len(chunk.meshVaos)):
-                chunkVaos.append((chunk.meshVertexCounts[i], chunk.meshVaos[i], pos, i))
+        for i in range(len(chunk.meshes)):
+            chunkMeshes.append((chunk.meshes[i], chunk.transMeshes[i], pos, i))
     
     breakingBlockAmount = 0.0
 
@@ -408,18 +407,47 @@ def renderInstancesGl(client: ClientState, canvas):
     breakBlockIdx = lp.x * 16 * 16 + (lp.y % world.MESH_HEIGHT) * 16 + lp.z
     breakBlockLoc = CLIENT_DATA.chunkProgram.getUniformLocation("breakBlockIdx")
 
-    #print("drawing a chunk vao")
-    for amt, chunkVao, pos, i in chunkVaos:
+    glBindFramebuffer(GL_FRAMEBUFFER, CLIENT_DATA.translucentFb)
+    glViewport(0, 0, client.width, client.height)
+
+    glClearColor(0.2, 0.1, 0.1, 1.0)
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT) #type:ignore
+    
+    for _m, transMesh, pos, i in chunkMeshes:
+        if breakingBlockAmount > 0.0 and cp == pos and (lp.y // world.MESH_HEIGHT) == i:
+            glUniform1i(breakBlockLoc, breakBlockIdx)
+        else:
+            glUniform1i(breakBlockLoc, -1)
+        
+        glBindVertexArray(transMesh.vao)
+
+        glDrawArrays(GL_TRIANGLES, 0, transMesh.dataLen)
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, 0)
+
+    for mesh, _t, pos, i in chunkMeshes:
         if breakingBlockAmount > 0.0 and cp == pos and (lp.y // world.MESH_HEIGHT) == i:
             glUniform1i(breakBlockLoc, breakBlockIdx)
         else:
             glUniform1i(breakBlockLoc, -1)
 
+        glBindVertexArray(mesh.vao)
 
-        glBindVertexArray(chunkVao)
+        glDrawArrays(GL_TRIANGLES, 0, mesh.dataLen)
 
-        glDrawArrays(GL_TRIANGLES, 0, amt * 7)
-    
+    CLIENT_DATA.transProgram.useProgram()
+
+    glUniform1i(CLIENT_DATA.transProgram.getUniformLocation("transTexture"), 0)
+    glActiveTexture(GL_TEXTURE0)
+    glBindTexture(GL_TEXTURE_2D, CLIENT_DATA.transColorTex)
+
+    glUniform1i(CLIENT_DATA.transProgram.getUniformLocation("depthTexture"), 1)
+    glActiveTexture(GL_TEXTURE1)
+    glBindTexture(GL_TEXTURE_2D, CLIENT_DATA.transDepthTex)
+
+    glBindVertexArray(CLIENT_DATA.fullscreenVao)
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, ctypes.c_void_p(0)) #type:ignore
+
     drawEntities(client, view, projection)
 
     # https://learnopengl.com/Advanced-OpenGL/Cubemaps

@@ -498,6 +498,64 @@ def updateRedstoneWire(pos: BlockPos, world: 'World', instData):
     if connsChanged or powerChanged:
         world.setBlock(instData, pos, 'redstone_wire', state, doBlockUpdates=powerChanged)
 
+class Mesh:
+    vao: int
+    vbo: int
+    dataLen: int
+    dirty: bool
+
+    def __init__(self):
+        self.vao = 0
+        self.vbo = 0
+        self.dataLen = 0
+        self.dirty = True
+    
+    def setMesh(self, usedVertices: ndarray):
+        # FIXME: MEMORY LEAK
+        '''
+        if self.meshVaos[meshIdx] != 0:
+            glDeleteVertexArrays(1, np.array([self.meshVaos[meshIdx]])) #type:ignore
+            glDeleteBuffers(1, np.array([self.meshVbos[meshIdx]])) #type:ignore
+
+            self.meshVaos[meshIdx] = 0
+        '''
+
+        if self.vao == 0:
+            self.vao: int = glGenVertexArrays(1) #type:ignore
+            self.vbo: int = glGenBuffers(1) #type:ignore
+
+        glBindVertexArray(self.vao)
+
+        glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
+        glBufferData(GL_ARRAY_BUFFER, usedVertices.nbytes, usedVertices, GL_DYNAMIC_DRAW)
+
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(0))
+        glEnableVertexAttribArray(0)
+
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(3 * 4))
+        glEnableVertexAttribArray(1)
+
+        glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(5 * 4))
+        glEnableVertexAttribArray(2)
+
+        glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(6 * 4))
+        glEnableVertexAttribArray(3)
+
+        glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(7 * 4))
+        glEnableVertexAttribArray(4)
+
+        glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(8 * 4))
+        glEnableVertexAttribArray(5)
+
+        glVertexAttribPointer(6, 3, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(9 * 4))
+        glEnableVertexAttribArray(6)
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0)
+
+        glBindVertexArray(0)
+
+        self.dataLen = len(usedVertices)
+
 class Chunk:
     pos: ChunkPos
     blocks: ndarray
@@ -510,10 +568,8 @@ class Chunk:
 
     tileEntities: dict[BlockPos, Any]
 
-    meshVaos: List[int]
-    meshVbos: List[int]
-    meshVertexCounts: List[int]
-    meshDirtyFlags: List[bool]
+    meshes: List[Mesh]
+    transMeshes: List[Mesh]
 
     worldgenStage: WorldgenStage = WorldgenStage.NOT_STARTED
 
@@ -544,10 +600,8 @@ class Chunk:
 
         self.tileEntities = dict()
 
-        self.meshVaos = [0] * (CHUNK_HEIGHT // MESH_HEIGHT)
-        self.meshVbos = [0] * (CHUNK_HEIGHT // MESH_HEIGHT)
-        self.meshVertexCounts = [0] * (CHUNK_HEIGHT // MESH_HEIGHT)
-        self.meshDirtyFlags = [True] * (CHUNK_HEIGHT // MESH_HEIGHT)
+        self.meshes = [Mesh() for _ in range(CHUNK_HEIGHT // MESH_HEIGHT)]
+        self.transMeshes = [Mesh() for _ in range(CHUNK_HEIGHT // MESH_HEIGHT)]
     
     def tick(self, app, world: 'World'):
         for (pos, entity) in self.tileEntities.items():
@@ -1024,33 +1078,38 @@ class Chunk:
     def createNextMesh(self, world: 'World', instData) -> bool:
         """Returns True if any meshes were actually changed"""
 
-        for i in range(len(self.meshVaos)):
-            if self.meshDirtyFlags[i]:
+        for i in range(len(self.meshes)):
+            if self.meshes[i].dirty:
                 self.createOneMesh(i, world, instData)
                 return True
             
         return False
 
     def createMesh(self, world: 'World', instData):
-        for i in range(len(self.meshVaos)):
+        for i in range(len(self.meshes)):
             self.createOneMesh(i, world, instData)
         
         self.worldgenStage = WorldgenStage.COMPLETE
     
+    def setMeshDirty(self, idx: int):
+        self.meshes[idx].dirty = True
+    
     def createOneMesh(self, i: int, world: 'World', instData):
-        if self.meshDirtyFlags[i]:
+        if self.meshes[i].dirty:
             self.createOneMeshUncached(i, world, instData)
-
-        if not any(self.meshDirtyFlags):
+        
+        if not any(map(lambda m: m.dirty, self.meshes)):
             self.worldgenStage = WorldgenStage.COMPLETE
     
     def createOneMeshUncached(self, meshIdx: int, world: 'World', instData):
-        self.meshDirtyFlags[meshIdx] = False
+        self.meshes[meshIdx].dirty = False
+        self.transMeshes[meshIdx].dirty = False
 
         if not config.USE_OPENGL_BACKEND:
             return
 
         usedVertices = []
+        usedVerticesTrans = []
 
         for i in range(meshIdx * 16 * 16 * MESH_HEIGHT, (meshIdx + 1) * 16 * 16 * MESH_HEIGHT):
             inst = self.instances[i]
@@ -1207,69 +1266,19 @@ class Chunk:
 
                 faceVertices.shape = (faceVertices.size, )
 
-                usedVertices += list(faceVertices)
+                if isTranslucent(blockId):
+                    usedVerticesTrans += list(faceVertices)
+                else:
+                    usedVertices += list(faceVertices)
         
         usedVertices = np.array(usedVertices, dtype='float32')
+        self.meshes[meshIdx].setMesh(usedVertices)
 
-        self.setMesh(meshIdx, usedVertices)
+        usedVerticesTrans = np.array(usedVerticesTrans, dtype='float32')
+        self.transMeshes[meshIdx].setMesh(usedVerticesTrans)
 
-        if not any(self.meshDirtyFlags):
+        if not any(map(lambda m: m.dirty, self.meshes)):
             self.worldgenStage = WorldgenStage.COMPLETE
-
-        #vao: int = glGenVertexArrays(1) #type:ignore
-        #vbo: int = glGenBuffers(1)
-
-    def setMesh(self, meshIdx: int, usedVertices: ndarray):
-        # FIXME: MEMORY LEAK
-        '''
-        if self.meshVaos[meshIdx] != 0:
-            glDeleteVertexArrays(1, np.array([self.meshVaos[meshIdx]])) #type:ignore
-            glDeleteBuffers(1, np.array([self.meshVbos[meshIdx]])) #type:ignore
-
-            self.meshVaos[meshIdx] = 0
-        '''
-
-        vao = self.meshVaos[meshIdx]
-        vbo = self.meshVbos[meshIdx]
-
-        if vao == 0:
-            vao: int = glGenVertexArrays(1) #type:ignore
-            vbo: int = glGenBuffers(1) #type:ignore
-
-        glBindVertexArray(vao)
-
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        glBufferData(GL_ARRAY_BUFFER, usedVertices.nbytes, usedVertices, GL_DYNAMIC_DRAW)
-
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(0))
-        glEnableVertexAttribArray(0)
-
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(3 * 4))
-        glEnableVertexAttribArray(1)
-
-        glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(5 * 4))
-        glEnableVertexAttribArray(2)
-
-        glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(6 * 4))
-        glEnableVertexAttribArray(3)
-
-        glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(7 * 4))
-        glEnableVertexAttribArray(4)
-
-        glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(8 * 4))
-        glEnableVertexAttribArray(5)
-
-        glVertexAttribPointer(6, 3, GL_FLOAT, GL_FALSE, 12 * 4, ctypes.c_void_p(9 * 4))
-        glEnableVertexAttribArray(6)
-
-        glBindBuffer(GL_ARRAY_BUFFER, 0)
-
-        glBindVertexArray(0)
-
-        self.meshVaos[meshIdx] = vao
-        self.meshVbos[meshIdx] = vbo
-        self.meshVertexCounts[meshIdx] = len(usedVertices) // 7
-
 
     def _coordsToIdx(self, pos: BlockPos) -> int:
         (xw, yw, zw) = self.blocks.shape
@@ -1327,7 +1336,8 @@ class Chunk:
         return block != 'air' and (predicate is None or predicate(block))
     
     def setAllBlocks(self, world, instData):
-        self.meshDirtyFlags = [True] * len(self.meshDirtyFlags)
+        for i in range(len(self.meshes)):
+            self.meshes[i].dirty = True
 
         (textures, cube, _) = instData
 
@@ -1370,7 +1380,7 @@ class Chunk:
             prevState = copy.deepcopy(self.blockStates[x, y, z])
 
         meshIdx = blockPos.y // MESH_HEIGHT
-        self.meshDirtyFlags[meshIdx] = True
+        self.meshes[meshIdx].dirty = True
 
         (textures, cube, _) = instData
         self.blocks[x, y, z] = blockId
@@ -2227,13 +2237,13 @@ class World:
         (chunk, (x, y, z)) = self.getChunk(blockPos)
         chunk.lightLevels[x, y, z] = level
         # FIXME:
-        chunk.meshDirtyFlags[y // MESH_HEIGHT] = True
+        chunk.meshes[y // MESH_HEIGHT].dirty = True
 
     def setBlockLightLevel(self, blockPos: BlockPos, level: int):
         (chunk, (x, y, z)) = self.getChunk(blockPos)
         chunk.blockLightLevels[x, y, z] = level
         # FIXME:
-        chunk.meshDirtyFlags[y // MESH_HEIGHT] = True
+        chunk.meshes[y // MESH_HEIGHT].dirty = True
     
     def isWeaklyPowered(self, pos: BlockPos) -> bool:
         if self.isStronglyPowered(pos):
@@ -2837,6 +2847,9 @@ def isSolid(block: BlockId):
 def isOpaque(block: BlockId):
     return block not in ['torch', 'wall_torch', 'redstone_torch', 'redstone_wall_torch', 'redstone_wire',
         'air', 'water', 'flowing_water', 'lava', 'flowing_lava', 'nether_portal']
+
+def isTranslucent(block: BlockId):
+    return block in ['water', 'flowing_water', 'nether_portal']
 
 def getLuminance(block: BlockId):
     if block in ('glowstone', 'lava', 'flowing_lava'):
