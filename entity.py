@@ -26,6 +26,7 @@ import molang
 import model 
 import functools
 import config
+from abc import ABC, abstractmethod
 from sound import Sound
 from inventory import Stack
 from util import BlockPos, roundHalfUp, ItemId
@@ -1110,9 +1111,18 @@ def toNbt(entities: List[Entity]) -> nbt.TAG_List:
     
     return result
 
+class Task(ABC):
+    @abstractmethod
+    def shouldStart(self, entity: Entity, world, entities: List[Entity]) -> bool:
+        pass
+
+    @abstractmethod
+    def tick(self, app, entity: Entity, world, entities: List[Entity]) -> bool:
+        pass
+
 class Ai:
     taskIdx: int
-    tasks: List[Any]
+    tasks: List[Task]
 
     def __init__(self, tasks):
         self.tasks = tasks
@@ -1133,9 +1143,9 @@ class Ai:
                 if self.tasks[lowTask].shouldStart(entity, world, entities):
                     self.taskIdx = lowTask
                     break
-
-class AttackTask:
-    def shouldStart(self, entity: Entity, world, entities: List[Entity]):
+    
+class AttackTask(Task):
+    def shouldStart(self, entity: Entity, world, entities: List[Entity]) -> bool:
         for other in entities:
             if other.kind.name == 'player':
                 dx = entity.pos[0] - other.pos[0]
@@ -1144,8 +1154,10 @@ class AttackTask:
                 dist = math.sqrt(dx**2 + dy**2 + dz**2)
                 if dist < 1.0:
                     return True
+        
+        return False
     
-    def tick(self, app, entity: Entity, world, entities: List[Entity]):
+    def tick(self, app, entity: Entity, world, entities: List[Entity]) -> bool:
         for other in entities:
             if other.kind.name == 'player':
                 dx = entity.pos[0] - other.pos[0]
@@ -1165,9 +1177,23 @@ class AttackTask:
                     return False
                 else:
                     return True
+        
+        return True
 
-class FollowTask:
+class FollowTask(Task):
+    recalcTimeLeft: int
+
+    def __init__(self):
+        self.recalcTimeLeft = 20
+
     def shouldStart(self, entity: Entity, world, entities: List[Entity]):
+        self.recalcTimeLeft -= 1
+
+        if self.recalcTimeLeft > 0:
+            return
+    
+        self.recalcTimeLeft = 20
+
         for other in entities:
             if other.kind.name == 'player' and not other.creative: #type:ignore
                 dx = entity.pos[0] - other.pos[0]
@@ -1177,9 +1203,17 @@ class FollowTask:
                 if dist < 16.0:
                     # FIXME: CHECK FOR VALID PATH
                     return True
+        
         return False
 
     def tick(self, app, entity: Entity, world, entities: List[Entity]):
+        self.recalcTimeLeft -= 1
+
+        if self.recalcTimeLeft > 0:
+            return
+        
+        self.recalcTimeLeft = 20
+
         for other in entities:
             if other.kind.name == 'player' and not other.creative: #type:ignore
                 dx = entity.pos[0] - other.pos[0]
@@ -1190,24 +1224,35 @@ class FollowTask:
                 if dist > 16.0:
                     return True
                 
-                if entity.path == [] and dist > 1.0:
+                if entity.path == []:
+                    shouldRecalc = dist > 1.0
+                else:
+                    lastBlock = entity.path[-1]
+                    dist = math.sqrt((lastBlock.x - other.pos[0])**2 + (lastBlock.y - other.pos[1])**2 + (lastBlock.z - other.pos[2])**2)
+                    shouldRecalc = dist > 1.0
+                
+                if shouldRecalc:
+                    #startPos = entity.getBlockPos() if entity.path == [] else entity.path[-1]
                     startPos = entity.getBlockPos()
                     endPos = other.getBlockPos()
                     path = findPath(startPos, endPos, world)
                     if path is None:
                         return True
                     else:
+                        #entity.path += path
                         entity.path = path
                         return False
+        
+        return True
 
-class NullTask:
+class NullTask(Task):
     def shouldStart(self, entity: Entity, world, entities):
         return True
 
     def tick(self, app, entity: Entity, world, entities):
         return False
 
-class WanderTask:
+class WanderTask(Task):
     def shouldStart(self, entity, world, entities):
         return True
 
@@ -1254,7 +1299,7 @@ def approxDistance(start: BlockPos, end: BlockPos):
     return (max(xDist, zDist) + yDist)
 
 
-def findPath(start: BlockPos, end: BlockPos, world, maxDist=1) -> Optional[List[BlockPos]]:
+def findPath(start: BlockPos, end: BlockPos, world, maxDist: int = 1) -> Optional[List[BlockPos]]:
     print(f"Start pos: {start} End pos: {end}")
 
     # https://en.wikipedia.org/wiki/A*_search_algorithm
