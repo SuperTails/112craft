@@ -1721,6 +1721,7 @@ class OverworldGen(TerrainGen):
 
         self.disperseOre(chunk, world, instData, seed, 'coal_ore', 20, CHUNK_HEIGHT // 2)
         self.disperseOre(chunk, world, instData, seed, 'iron_ore', 20, CHUNK_HEIGHT // 4)
+        self.disperseOre(chunk, world, instData, seed, 'redstone_ore', 20, CHUNK_HEIGHT // 16)
         self.disperseOre(chunk, world, instData, seed, 'diamond_ore', 1, CHUNK_HEIGHT // 16)
 
         treePos = []
@@ -2865,6 +2866,8 @@ def getLuminance(block: BlockId):
         return 15
     elif block in ('torch', 'wall_torch'):
         return 14
+    elif block == 'redstone_ore':
+        return 7
     else:
         return 0
 

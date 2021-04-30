@@ -913,6 +913,8 @@ def loadSounds(app):
         'furnace': 'stone',
         'coal_ore': 'stone',
         'iron_ore': 'stone',
+        'redstone_ore': 'stone',
+        'diamond_ore': 'stone',
         'oak_log': 'wood',
         'oak_planks': 'wood',
         'torch': 'wood',
@@ -956,6 +958,7 @@ def loadResources(app):
         'stone': { 'all': 'stone' },
         'coal_ore': { 'all': 'coal_ore' },
         'iron_ore': { 'all': 'iron_ore' },
+        'redstone_ore': { 'all': 'redstone_ore' },
         'diamond_ore': { 'all': 'diamond_ore' },
         'cobblestone': { 'all': 'cobblestone' },
         'oak_leaves': { 'all': 'leaves_oak_opaque' },
@@ -1006,6 +1009,7 @@ def loadResources(app):
         'glowstone': ('pickaxe', 2.0),
         'coal_ore': ('pickaxe', 6.0),
         'iron_ore': ('pickaxe', 6.0),
+        'redstone_ore': ('pickaxe', 6.0),
         'diamond_ore': ('pickaxe', 6.0),
         'cobblestone': ('pickaxe', 6.0),
         'obsidian': ('pickaxe', 20.0),
@@ -1034,6 +1038,7 @@ def loadResources(app):
         'stone': { '': None, 'pickaxe': 'cobblestone' },
         'coal_ore': { '': None, 'pickaxe': 'coal' },
         'iron_ore': { '': None, 'pickaxe': 'iron_ore' },
+        'redstone_ore': { '': None, 'pickaxe': 'redstone' },
         'diamond_ore': { '': None, 'pickaxe': 'diamond' },
         'cobblestone': { '': None, 'pickaxe': 'cobblestone' },
         'netherrack': { '': None, 'pickaxe': 'netherrack' },
@@ -1241,6 +1246,15 @@ def loadResources(app):
             Stack('iron_sword', 1),
             { 'p': 'iron_ingot', 's': 'stick' }
         ),
+        Recipe(
+            [
+                'r--',
+                's--',
+                's--',
+            ],
+            Stack('redstone_torch', 1),
+            { 'r': 'redstone', 's': 'stick' }
+        )
     ]
 
     commonItemTextures = {
