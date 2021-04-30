@@ -774,11 +774,11 @@ class Chunk:
 
             if level != 0:
                 if level == 8 and not aboveHigher:
-                    setIfChanged(blockPos, flowingName, { 'level': '1' }, isLocal=False)
+                    setIfChanged(blockPos, flowingName, { 'level': '1' }, isLocal=True)
                 elif (level + levelChange) // 8 != level // 8:
-                    setIfChanged(blockPos, 'air', {}, isLocal=False)
+                    setIfChanged(blockPos, 'air', {}, isLocal=True)
                 elif not sideHigher:
-                    setIfChanged(blockPos, flowingName, { 'level': str((level % 8) + 1) }, isLocal=False)
+                    setIfChanged(blockPos, flowingName, { 'level': str((level % 8) + 1) }, isLocal=True)
 
         elif blockId in ('redstone_torch', 'redstone_wall_torch'):
             if blockId == 'redstone_torch':
