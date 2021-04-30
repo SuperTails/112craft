@@ -64,6 +64,12 @@ def generateTree(world: 'World', instData, basePos: BlockPos, doUpdates=True):
     l = doUpdates
     b = doUpdates
 
+    def setOakLeaves(pos: BlockPos):
+        world.setBlock(instData, pos, 'oak_leaves', {
+            'distance': '7',
+            'persistent': 'false',
+        }, doUpdateLight=l, doUpdateBuried=b)
+
     # Place bottom logs
     world.setBlock(instData, basePos, 'oak_log', doUpdateLight=l, doUpdateBuried=b)
     y += 1
@@ -77,22 +83,22 @@ def generateTree(world: 'World', instData, basePos: BlockPos, doUpdates=True):
                 if abs(xOffset) == 2 and abs(zOffset) == 2: continue
                 if xOffset == 0 and zOffset == 0: continue
 
-                world.setBlock(instData, BlockPos(x + xOffset, y, z + zOffset), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
+                setOakLeaves(BlockPos(x + xOffset, y, z + zOffset))
     
     # Narrower top part
     y += 1
-    world.setBlock(instData, BlockPos(x - 1, y, z), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
-    world.setBlock(instData, BlockPos(x + 1, y, z), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
-    world.setBlock(instData, BlockPos(x, y, z - 1), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
-    world.setBlock(instData, BlockPos(x, y, z + 1), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
+    setOakLeaves(BlockPos(x - 1, y, z))
+    setOakLeaves(BlockPos(x + 1, y, z))
+    setOakLeaves(BlockPos(x, y, z - 1))
+    setOakLeaves(BlockPos(x, y, z + 1))
     world.setBlock(instData, BlockPos(x, y, z), 'oak_log', doUpdateLight=l, doUpdateBuried=b)
 
     # Top cap of just oak_leaves
     y += 1
-    world.setBlock(instData, BlockPos(x - 1, y, z), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
-    world.setBlock(instData, BlockPos(x + 1, y, z), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
-    world.setBlock(instData, BlockPos(x, y, z - 1), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
-    world.setBlock(instData, BlockPos(x, y, z + 1), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
+    setOakLeaves(BlockPos(x - 1, y, z))
+    setOakLeaves(BlockPos(x + 1, y, z))
+    setOakLeaves(BlockPos(x, y, z - 1))
+    setOakLeaves(BlockPos(x, y, z + 1))
     world.setBlock(instData, BlockPos(x, y, z), 'oak_leaves', doUpdateLight=l, doUpdateBuried=b)
 
 

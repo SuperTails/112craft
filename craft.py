@@ -686,6 +686,12 @@ class PlayingMode(Mode):
                             'west': 'none',
                             'power': '0',
                         }
+                    elif stack.item == 'oak_leaves':
+                        placedId = 'oak_leaves'
+                        placedState = {
+                            'distance': '7',
+                            'persistent': 'true',
+                        }
                     else:
                         placedId = stack.item
                         placedState = {}
@@ -1392,7 +1398,7 @@ def appStarted(app):
     #def makeTitleMode(app, _player): return TitleMode(app)
     #app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
     def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
+    app.mode = WorldLoadMode(app, 'world', True, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     # ---------------

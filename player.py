@@ -31,6 +31,8 @@ class Player(Entity):
     dimension: str
 
     def __init__(self, app, creative: bool = False, tag: Optional[nbt.TAG_Compound] = None):
+        self.dimension = 'minecraft:overworld'
+        
         # FIXME: ID
         super().__init__(app, 1, 'player', 0.0, 0.0, 0.0, nbt=tag)
 
@@ -41,8 +43,6 @@ class Player(Entity):
 
         self.portalCooldown = 80
 
-        self.dimension = 'minecraft:overworld'
-        
         if self.creative:
             if len(app.itemTextures) > 36:
                 # TODO:
