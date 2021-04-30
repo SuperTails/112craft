@@ -414,7 +414,6 @@ def sendChatMessage(app, text: str):
     else:
         network.c2sQueue.put(network.ChatMessageC2S(text))
 
-
 def sendClientStatus(app, status: int):
     # TODO: This isn't *really* a player joining packet, buuuut...
 
@@ -422,14 +421,18 @@ def sendClientStatus(app, status: int):
         server: ServerState = app.server
         player = server.getLocalPlayer()
 
-        network.s2cQueue.put(network.PlayerPositionAndLookS2C(
-            0.0, 72.0, 0.0, 0.0, 0.0,
-            False, False, False, True, True, server.getTeleportId()
-        ))
-
         if player.health <= 0.0:
             player.health = 20.0
             network.s2cQueue.put(network.UpdateHealthS2C(player.health, 20, 5.0))
+            network.s2cQueue.put(network.PlayerPositionAndLookS2C(
+                0.0, 72.0, 0.0, 0.0, 0.0,
+                False, False, False, True, True, server.getTeleportId()
+            ))
+        else:
+            network.s2cQueue.put(network.PlayerPositionAndLookS2C(
+                player.pos[0], player.pos[1], player.pos[2], 0.0, 0.0,
+                False, False, False, True, True, server.getTeleportId()
+            ))
 
         '''
         for ent in server.entities:
