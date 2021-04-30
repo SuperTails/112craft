@@ -701,6 +701,20 @@ class WindowPropertyS2C:
         return cls(windowId, property, value)
 
 @dataclass
+class UpdateHealthS2C:
+    health: float
+    food: int
+    saturation: float
+
+    @classmethod
+    def fromBuf(cls, buf):
+        health = buf.unpack('f')
+        food = buf.unpack_varint()
+        saturation = buf.unpack('f')
+
+        return cls(health, food, saturation)
+
+@dataclass
 class SpawnPlayerS2C:
     entityId: int
     playerUUID: Any
@@ -911,6 +925,10 @@ class MinecraftProtocol(ClientProtocol):
     
     def packet_entity_metadata(self, buf):
         s2cQueue.put(EntityMetadataS2C.fromBuf(buf))
+        buf.discard()
+    
+    def packet_update_health(self, buf):
+        s2cQueue.put(UpdateHealthS2C.fromBuf(buf))
         buf.discard()
     
     def packet_block_change(self, buf):

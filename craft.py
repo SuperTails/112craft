@@ -503,33 +503,6 @@ class ChatMode(Mode):
     def timerFired(self, app):
         self.submode.timerFired(app)
 
-class GameOverMode(Mode):
-    buttons: ButtonManager
-
-    def __init__(self, app):
-        setMouseCapture(app, False)
-
-        respawnButton = Button(app, 0.5, 0.5, 200, 40, "Respawn")
-
-        self.buttons = ButtonManager()
-        self.buttons.addButton("respawn", respawnButton)
-
-    def redrawAll(self, app, window, canvas):
-        render.redrawAll(app.client, canvas, doDrawHud=False)
-        canvas.create_text(app.width / 2, app.height / 3, text="Game Over!")
-        self.buttons.draw(app, canvas)
-    
-    def mousePressed(self, app, event):
-        self.buttons.onPress(app, event.x, event.y)
-    
-    def mouseReleased(self, app, event):
-        btn = self.buttons.onRelease(app, event.x, event.y)
-        if btn == 'respawn':
-            # FIXME:
-            player = Player(app, False)
-            player.pos = [0.0, 75.0, 0.0]
-            app.cameraPos = [0.0, 75.0, 0.0]
-            app.mode = PlayingMode(app, player)
 
 class PlayingMode(Mode):
     lookedAtBlock = None
@@ -592,7 +565,7 @@ class PlayingMode(Mode):
         if hasattr(app, 'server'):
             tick.serverTick(app, app.server)
 
-        if player.health <= 0.0:
+        if player.health <= 0.0 and not isinstance(app.mode, GameOverMode):
             app.mode = GameOverMode(app)
 
     def mousePressed(self, app, event):
@@ -804,6 +777,42 @@ class PlayingMode(Mode):
         elif key == 'SPACE' or key == ' ':
             client.space = False
 
+class GameOverMode(PlayingMode):
+    buttons: ButtonManager
+
+    def __init__(self, app):
+        print('Entering GameOverMode')
+
+        setMouseCapture(app, False)
+
+        respawnButton = Button(app, 0.5, 0.5, 200, 40, "Respawn")
+
+        self.buttons = ButtonManager()
+        self.buttons.addButton("respawn", respawnButton)
+
+    def redrawAll(self, app, window, canvas):
+        render.redrawAll(app.client, canvas, doDrawHud=False)
+        canvas.create_text(app.width / 2, app.height / 3, text="Game Over!")
+        self.buttons.draw(app, canvas)
+    
+    def mousePressed(self, app, event):
+        self.buttons.onPress(app, event.x, event.y)
+    
+    def mouseReleased(self, app, event):
+        btn = self.buttons.onRelease(app, event.x, event.y)
+        if btn == 'respawn':
+            print('Clicked respawn')
+
+            app.mode = PlayingMode(app, app.client.player)
+
+            '''
+            # FIXME:
+            player = Player(app, False)
+            player.pos = [0.0, 75.0, 0.0]
+            app.cameraPos = [0.0, 75.0, 0.0]
+            app.mode = PlayingMode(app, player)
+            '''
+    
 def handleS2CPackets(mode, app, client: ClientState):
     player = client.getPlayer()
     entities = client.entities
@@ -1047,6 +1056,8 @@ def handleS2CPackets(mode, app, client: ClientState):
             app.mode.overlay = InventoryMode(app, packet.windowId, windowName)
         elif isinstance(packet, network.ChatMessageS2C):
             app.client.chat.append((time.time(), packet.data))
+        elif isinstance(packet, network.UpdateHealthS2C):
+            app.client.player.health = packet.health
         elif isinstance(packet, network.JoinGameS2C):
             app.client.player.entityId = packet.entityId
 
@@ -1398,7 +1409,7 @@ def appStarted(app):
     #def makeTitleMode(app, _player): return TitleMode(app)
     #app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
     def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'world', True, makePlayingMode, seed=random.randint(0, 2**31))
+    app.mode = WorldLoadMode(app, 'localhost', False, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     # ---------------

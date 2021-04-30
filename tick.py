@@ -391,7 +391,18 @@ def sendChatMessage(app, text: str):
                     print(f'== DIMENSION {dim} ==')
                     for pos, chunk in dim.world.chunks.items():
                         print(f'{pos} - {chunk.worldgenStage}')
-
+            elif parts[0] == 'killall':
+                toRemove = []
+                idx = 0
+                dim = server.getLocalDimension()
+                while idx < len(dim.entities):
+                    if dim.entities[idx].kind.name != 'player':
+                        toRemove.append(dim.entities[idx].entityId)
+                        dim.entities.pop(idx)
+                    else:
+                        idx += 1
+            
+                network.s2cQueue.put(network.DestroyEntitiesS2C(toRemove))
             elif parts[0] == 'tp':
                 # TODO:
                 '''
@@ -412,9 +423,13 @@ def sendClientStatus(app, status: int):
         player = server.getLocalPlayer()
 
         network.s2cQueue.put(network.PlayerPositionAndLookS2C(
-            player.pos[0], player.pos[1], player.pos[2], 0.0, 0.0,
+            0.0, 72.0, 0.0, 0.0, 0.0,
             False, False, False, True, True, server.getTeleportId()
         ))
+
+        if player.health <= 0.0:
+            player.health = 20.0
+            network.s2cQueue.put(network.UpdateHealthS2C(player.health, 20, 5.0))
 
         '''
         for ent in server.entities:
@@ -904,6 +919,8 @@ def serverTick(app, server: ServerState):
         # HACK:
         for ent1, ent2 in zip(dim.entities, app.client.entities):
             ent1.variables = copy.copy(ent2.variables)
+    
+    network.s2cQueue.put(network.UpdateHealthS2C(server.getLocalPlayer().health, 20, 5.0))
 
     app.client.entities = copy.deepcopy(server.getLocalDimension().entities)
     app.client.player.inventory = copy.deepcopy(server.getLocalPlayer().inventory)
@@ -994,7 +1011,7 @@ def isValidSpawnLocation(app, dim: Dimension, pos: BlockPos):
     feet = pos
     head = BlockPos(pos.x, pos.y + 1, pos.z)
 
-    light = dim.world.getTotalLight(app.time, pos)
+    light = dim.world.getTotalLight(server.time, pos)
 
     isOk = (dim.world.coordsOccupied(floor)
         and not dim.world.coordsOccupied(feet)
