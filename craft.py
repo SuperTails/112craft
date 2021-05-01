@@ -58,6 +58,7 @@ import tick
 import server
 from queue import SimpleQueue
 from client import ClientState, lookedAtEntity, getLookVector
+import client as clientMod
 from util import ChunkPos, BlockPos
 import util
 from button import Button, ButtonManager, createSizedBackground
@@ -1501,9 +1502,29 @@ def mouseReleased(app, event):
 def timerFired(app):
     app.mode.timerFired(app)
 
+
+from OpenGL import GL
+import ctypes
+import util
+
 def sizeChanged(app):
-    app.csToCanvasMat = render.csToCanvasMat(app.vpDist, app.vpWidth, app.vpHeight,
-                        app.width, app.height)
+    client: ClientState = app.client
+    app.csToCanvasMat = render.csToCanvasMat(client.vpDist, client.vpWidth, client.vpHeight,
+                        app.width, client.height)
+    
+    
+    if config.USE_OPENGL_BACKEND:
+        GL.glBindTexture(GL.GL_TEXTURE_2D, clientMod.CLIENT_DATA.transColorTex)
+        GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGB, app.width, app.height, 0, GL.GL_RGB, GL.GL_UNSIGNED_BYTE, ctypes.c_void_p(0)) #type:ignore
+
+        GL.glBindTexture(GL.GL_TEXTURE_2D, clientMod.CLIENT_DATA.transDepthTex)
+        GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_DEPTH_COMPONENT24, app.width, app.height, 0, GL.GL_DEPTH_COMPONENT, GL.GL_FLOAT, ctypes.c_void_p(0)) #type:ignore
+
+        GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
+
+
+    app.client.width = app.width
+    app.client.height = app.height
     
     app.mode.sizeChanged(app)
 

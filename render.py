@@ -337,6 +337,8 @@ def renderInstancesTk(client: ClientState, canvas):
     drawToCanvas(client, canvas, faces)
 
 def renderInstancesGl(client: ClientState, canvas):
+    glViewport(0, 0, client.width, client.height)
+
     view = glViewMat(client.cameraPos, client.cameraYaw, client.cameraPitch)
 
     th = math.tan(0.5 * math.radians(70.0));

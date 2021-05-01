@@ -57,7 +57,10 @@ class App:
         self._callFn("appStarted", self)
 
         def sizeChanged(window, width, height):
-            glViewport(0, 0, width, height)
+            self.width = width
+            self.height = height
+            print(f'new size: {width} {height}')
+            self.canvas.resize(width, height)
             self._callFn('sizeChanged', self)
         
         def keyEvent(*args): self.dispatchKeyEvent(*args)

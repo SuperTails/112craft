@@ -76,10 +76,12 @@ class Canvas:
     font: ImageFont.ImageFont
 
     def __init__(self, width, height):
-        self.image = Image.new("RGB", (width, height), color=ALPHA_COLOR)
-        self.draw = typing.cast(ImageDraw.ImageDraw, ImageDraw.Draw(self.image, "RGBA"))
-
         self._createGlSurface()
+
+        self.texture = 0
+
+        self.resize(width, height)
+
         self._createGlTexture()
 
         self.width = width
@@ -89,6 +91,16 @@ class Canvas:
 
         self.font = ImageFont.truetype('assets/minecraft_font.ttf', 16)
     
+    def resize(self, width, height):
+        self.width = width
+        self.height = height
+
+        self.image = Image.new("RGB", (width, height), color=ALPHA_COLOR)
+        self.draw = typing.cast(ImageDraw.ImageDraw, ImageDraw.Draw(self.image, "RGBA"))
+
+        if self.texture == 0:
+            self._createGlTexture()
+        
     def create_oval(self, x0, y0, x1, y1, **kwargs):
         if 'fill' in kwargs:
             assert(kwargs['fill'] not in ['#000', '#000000', 'black'])
@@ -188,21 +200,14 @@ class Canvas:
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
 
-        #grassTex = grassTex.transpose(Image.FLIP_TOP_BOTTOM)
-        arr = numpy.asarray(self.image, dtype=numpy.uint8)
-
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, self.image.width, self.image.height, 0, GL_RGB, GL_UNSIGNED_BYTE, arr) #type:ignore
-
         glBindTexture(GL_TEXTURE_2D, 0)
     
     def redraw(self):
-        glBindTexture(GL_TEXTURE_2D, self.texture)
-        arr = numpy.asarray(self.image, dtype=numpy.uint8)
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, self.image.width, self.image.height, 0, GL_RGB, GL_UNSIGNED_BYTE, arr) #type:ignore
-        #glBindTexture(GL_TEXTURE_2D, 0)
+        arr = numpy.asarray(self.image.convert('RGBA'), dtype=numpy.uint8)
 
         glActiveTexture(GL_TEXTURE0)
         glBindTexture(GL_TEXTURE_2D, self.texture)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, self.image.width, self.image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, arr) #type:ignore
 
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 

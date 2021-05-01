@@ -1707,7 +1707,8 @@ class OverworldGen(TerrainGen):
                     chunk.blocks[xIdx, topY, zIdx] = 'grass'
 
         for pos in positions:
-            chunk.blocks[pos.x, pos.y, pos.z] = 'air'
+            if chunk.blocks[pos.x, pos.z, pos.z] not in ('flowing_water', 'water', 'flowing_lava', 'lava'):
+                chunk.blocks[pos.x, pos.y, pos.z] = 'air'
         
         chunk.blocks[:, 0, :] = 'bedrock'
             
