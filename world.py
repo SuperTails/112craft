@@ -2078,6 +2078,8 @@ class World:
     def loadUnloadChunks(self, instData):
         chunkLoadDistance = math.ceil(config.CHUNK_LOAD_DISTANCE / 16)
 
+        chunkUnloadDistance = math.ceil(config.CHUNK_UNLOAD_DISTANCE / 16)
+
         # Unload chunks
         shouldUnload = set(self.chunks)
         for unloadChunkPos in self.chunks:
@@ -2086,7 +2088,7 @@ class World:
 
                 (ux, _, uz) = unloadChunkPos
                 dist = max(abs(ux - x), abs(uz - z))
-                if dist <= chunkLoadDistance + 1:
+                if dist <= chunkUnloadDistance:
                     # This chunk is still in range, so don't unload it
                     if unloadChunkPos in shouldUnload:
                         shouldUnload.remove(unloadChunkPos)

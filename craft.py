@@ -746,6 +746,8 @@ class PlayingMode(Mode):
             app.doDrawHud = not app.doDrawHud
         elif key == 'J':
             app.client.cinematic = not app.client.cinematic
+        elif key == 'K':
+            app.client.showDebugInfo = not app.client.showDebugInfo
         elif key == 'T':
             app.mode = ChatMode(app, self, '')
         elif key == '/':
@@ -958,7 +960,7 @@ def handleS2CPackets(mode, app, client: ClientState):
                 else:
                     # TODO:
                     print(f'Other slot: {packet.slotIdx}')
-            elif hasattr(mode.overlay, 'heldItem') and packet.windowId == -1 and packet.slotIdx == -1:
+            elif hasattr(mode, 'overlay') and hasattr(mode.overlay, 'heldItem') and packet.windowId == -1 and packet.slotIdx == -1:
                 mode.overlay.heldItem = stack
             elif mode.overlay is not None and hasattr(mode.overlay.gui, 'slots') and packet.windowId == mode.overlay.windowId:
                 mode.overlay.gui.slots[packet.slotIdx][2].stack = stack
@@ -1192,11 +1194,11 @@ class InventoryCraftingGui(ContainerGui):
 
         slots = []
 
-        slots.append((460, 100 + w / 2, Slot(canInput=False)))
+        slots.append((app.width * 0.58 + 110, 100 + w / 2, Slot(canInput=False)))
 
         for rowIdx in range(2):
             for colIdx in range(2):
-                x = colIdx * w + 350
+                x = colIdx * w + app.width * 0.58
                 y = rowIdx * w + 100
                 slots.append((x, y, Slot(persistent=False)))
 
@@ -1361,6 +1363,8 @@ def appStarted(app):
     client.width = app.width
 
     client.cinematic = False
+
+    client.showDebugInfo = True
 
     client.tickTimes = [0.0] * 10
     client.tickTimeIdx = 0

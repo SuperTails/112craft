@@ -714,16 +714,21 @@ def drawTextOutlined(canvas, x, y, **kwargs):
     canvas.create_text(x, y, fill='white', **kwargs)
 
 def getSlotCenterAndSize(client: ClientState, slotIdx) -> Tuple[int, int, int]:
-    slotWidth = CLIENT_DATA.itemTextures['air'].width + 7
+    #slotWidth = CLIENT_DATA.itemTextures['air'].width + 7
+
+    guiScale = min(client.width // 320, client.height // 240)
+
+    slotWidth = 18 * guiScale
+
     if slotIdx < 9:
         margin = 10
-        x = (slotIdx - 4) * slotWidth + client.width / 2
-        y = client.height - margin - slotWidth / 2
+        x = (slotIdx - 4) * slotWidth + client.width // 2
+        y = client.height - margin - slotWidth // 2
         return (x, y, slotWidth)
     else:
         rowNum = (36 // 9) - 1
         rowIdx = (slotIdx // 9) - 1
-        x = ((slotIdx % 9) - 4) * slotWidth + client.width / 2
+        x = ((slotIdx % 9) - 4) * slotWidth + client.width // 2
         y = client.height / 2 - (rowIdx - (rowNum - 1) / 2) * slotWidth 
         return (x, y, slotWidth)
 
@@ -733,8 +738,6 @@ def drawMainInventory(client: ClientState, canvas):
     player = client.getPlayer()
     assert(player is not None)
 
-    slotWidth = CLIENT_DATA.itemTextures['air'].width + 7
-
     for i in range(9, 36):
         slot = player.inventory[i]
 
@@ -743,7 +746,9 @@ def drawMainInventory(client: ClientState, canvas):
         drawSlot(client, canvas, x, y, slot)
 
 def drawHealthbar(client: ClientState, canvas):
-    slotWidth = CLIENT_DATA.itemTextures['air'].width + 7
+    #slotWidth = CLIENT_DATA.itemTextures['air'].width + 7
+
+    slotWidth = getSlotCenterAndSize(client, 0)[2]
 
     leftX = -4 * slotWidth + client.width / 2
 
@@ -765,7 +770,8 @@ def drawHotbar(client: ClientState, canvas):
     player = client.getPlayer()
     assert(player is not None)
 
-    slotWidth = CLIENT_DATA.itemTextures['air'].width + 7
+    #slotWidth = CLIENT_DATA.itemTextures['air'].width + 7
+    slotWidth = getSlotCenterAndSize(client, 0)[2]
 
     margin = 10
 
@@ -784,7 +790,9 @@ def drawHotbar(client: ClientState, canvas):
         outline='white')
 
 def drawStack(client: ClientState, canvas, x, y, stack: Stack):
-    slotWidth = CLIENT_DATA.itemTextures['air'].width + 6
+    #slotWidth = CLIENT_DATA.itemTextures['air'].width + 6
+
+    slotWidth = getSlotCenterAndSize(client, 0)[2]
 
     if not stack.isEmpty():
         tex = CLIENT_DATA.itemTextures[stack.item]
@@ -803,7 +811,9 @@ def drawStack(client: ClientState, canvas, x, y, stack: Stack):
 def drawSlot(client: ClientState, canvas, x, y, slot: Slot):
     """x and y are the *center* of the slot"""
 
-    slotWidth = CLIENT_DATA.itemTextures['air'].width + 6
+    #slotWidth = CLIENT_DATA.itemTextures['air'].width + 6
+
+    slotWidth = getSlotCenterAndSize(client, 0)[2] - 2
 
     canvas.create_rectangle(x - slotWidth / 2, y - slotWidth / 2,
         x + slotWidth / 2,
@@ -821,46 +831,47 @@ def drawHud(client: ClientState, canvas, startTime):
 
     drawHotbar(client, canvas)
 
-    clientTickTime = sum(client.tickTimes) / len(client.tickTimes) * 1000.0
-    serverTickTime = sum(client.serverTickTimes) / len(client.serverTickTimes) * 1000.0
+    if client.showDebugInfo:
+        clientTickTime = sum(client.tickTimes) / len(client.tickTimes) * 1000.0
+        serverTickTime = sum(client.serverTickTimes) / len(client.serverTickTimes) * 1000.0
 
-    drawTextOutlined(canvas, 10, 30, text=f'Tick: (C) {clientTickTime:.2f}ms (S) {serverTickTime:.2f}ms', anchor='nw')
-    
-    global frameTimes
-    global frameTimeIdx
+        drawTextOutlined(canvas, 10, 30, text=f'Tick: (C) {clientTickTime:.2f}ms (S) {serverTickTime:.2f}ms', anchor='nw')
+        
+        global frameTimes
+        global frameTimeIdx
 
-    endTime = time.time()
-    frameTimes[frameTimeIdx] = (endTime - startTime)
-    frameTimeIdx += 1
-    frameTimeIdx %= len(frameTimes)
-    frameTime = sum(frameTimes) / len(frameTimes) * 1000.0
+        endTime = time.time()
+        frameTimes[frameTimeIdx] = (endTime - startTime)
+        frameTimeIdx += 1
+        frameTimeIdx %= len(frameTimes)
+        frameTime = sum(frameTimes) / len(frameTimes) * 1000.0
 
-    drawTextOutlined(canvas, 10, 10, text=f'Frame Time: {frameTime:.2f}ms', anchor='nw')
+        drawTextOutlined(canvas, 10, 10, text=f'Frame Time: {frameTime:.2f}ms', anchor='nw')
 
-    drawTextOutlined(canvas, 10, 50, text=f"Eyes: {client.cameraPos[0]:.2f}, {client.cameraPos[1]:.2f}, {client.cameraPos[2]:.2f}", anchor='nw')
-    
-    chunkX = math.floor(client.cameraPos[0] / 16)
-    chunkY = math.floor(client.cameraPos[1] / world.CHUNK_HEIGHT)
-    chunkZ = math.floor(client.cameraPos[2] / 16)
+        drawTextOutlined(canvas, 10, 50, text=f"Eyes: {client.cameraPos[0]:.2f}, {client.cameraPos[1]:.2f}, {client.cameraPos[2]:.2f}", anchor='nw')
+        
+        chunkX = math.floor(client.cameraPos[0] / 16)
+        chunkY = math.floor(client.cameraPos[1] / world.CHUNK_HEIGHT)
+        chunkZ = math.floor(client.cameraPos[2] / 16)
 
-    drawTextOutlined(canvas, 10, 140, text=f'Chunk coords: {chunkX}, {chunkY}, {chunkZ}', anchor='nw')
+        drawTextOutlined(canvas, 10, 140, text=f'Chunk coords: {chunkX}, {chunkY}, {chunkZ}', anchor='nw')
 
-    # FIXME:
-    player = client.getPlayer()
-    if player is not None:
-        drawTextOutlined(canvas, 10, 90, text=f"Feet: {player.pos[0]:.2f}, {player.pos[1]:.2f}, {player.pos[2]:.2f}", anchor='nw')
+        # FIXME:
+        player = client.getPlayer()
+        if player is not None:
+            drawTextOutlined(canvas, 10, 90, text=f"Feet: {player.pos[0]:.2f}, {player.pos[1]:.2f}, {player.pos[2]:.2f}", anchor='nw')
 
-        feetPos = (client.cameraPos[0], client.cameraPos[1] - player.height + 0.1, client.cameraPos[2])
-        feetBlockPos = world.nearestBlockPos(feetPos[0], feetPos[1], feetPos[2])
-        (ckPos, ckLocal) = world.toChunkLocal(feetBlockPos)
-        if ckPos in client.world.chunks:
-            lightLevel = client.world.getLightLevel(feetBlockPos)
-            blockLightLevel = client.world.getBlockLightLevel(world.nearestBlockPos(feetPos[0], feetPos[1], feetPos[2]))
-            drawTextOutlined(canvas, 10, 190, text=f'Sky {lightLevel}, Block {blockLightLevel}', anchor='nw')
+            feetPos = (client.cameraPos[0], client.cameraPos[1] - player.height + 0.1, client.cameraPos[2])
+            feetBlockPos = world.nearestBlockPos(feetPos[0], feetPos[1], feetPos[2])
+            (ckPos, ckLocal) = world.toChunkLocal(feetBlockPos)
+            if ckPos in client.world.chunks:
+                lightLevel = client.world.getLightLevel(feetBlockPos)
+                blockLightLevel = client.world.getBlockLightLevel(world.nearestBlockPos(feetPos[0], feetPos[1], feetPos[2]))
+                drawTextOutlined(canvas, 10, 190, text=f'Sky {lightLevel}, Block {blockLightLevel}', anchor='nw')
 
-            biome = client.world.chunks[ckPos].biomes[ckLocal.x // 4, ckLocal.y // 4, ckLocal.z // 4]
+                biome = client.world.chunks[ckPos].biomes[ckLocal.x // 4, ckLocal.y // 4, ckLocal.z // 4]
 
-            drawTextOutlined(canvas, 10, 230, text=f'Biome: {biome.name}', anchor='nw')
+                drawTextOutlined(canvas, 10, 230, text=f'Biome: {biome.name}', anchor='nw')
 
 def redrawAll(client: ClientState, canvas, doDrawHud=True):
     startTime = time.time()

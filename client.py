@@ -94,6 +94,8 @@ class ClientState:
 
     cinematic: bool
 
+    showDebugInfo: bool
+
     w: bool
     a: bool
     s: bool
