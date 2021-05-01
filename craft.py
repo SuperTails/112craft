@@ -534,20 +534,20 @@ class PlayingMode(Mode):
         tick.updatePlayerPos(app.client)
         
         app.client.lastFrameTime = time.perf_counter()
-    
-    def timerFired(self, app):
-        self.lookedAtBlock = app.client.lookedAtBlock()
-
-        player = app.client.getPlayer()
-
+        
         if app.client.cinematic:
-            # TODO: Use framerate instead
             app.client.cameraPitch += app.pitchSpeed * 0.05
             app.client.cameraYaw += app.yawSpeed * 0.05
 
             app.pitchSpeed *= 0.95
             app.yawSpeed *= 0.95
         
+    
+    def timerFired(self, app):
+        self.lookedAtBlock = app.client.lookedAtBlock()
+
+        player = app.client.getPlayer()
+
         updateBlockBreaking(app, self)
 
         handleS2CPackets(self, app, app.client)
