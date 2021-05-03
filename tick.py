@@ -12,7 +12,7 @@ from dimension import Dimension
 from util import BlockPos, roundHalfUp, ChunkPos
 import util
 import world
-from world import World, isSolid
+from world import World, isSolid, Furnace
 import time
 import math
 import config
@@ -23,6 +23,7 @@ import network
 import resources
 from inventory import Stack, Slot
 import inventory
+import typing
 from typing import Optional, List, Tuple
 from quarry.types.uuid import UUID
 from quarry.types.chat import Message
@@ -757,7 +758,7 @@ def updatePlayerPos(client: ClientState):
             else:
                 player.velocity[1] = 0.0
         
-        collideY(client.world, player, ticks)
+        collideY(client.world, player, ticks, useGravity=False)
         if player.onGround:
             player.velocity[0] = x
             player.velocity[2] = z
@@ -788,6 +789,10 @@ def clientTick(client: ClientState, instData):
     client.world.flushLightChanges()
 
     player: Player = client.player
+
+    if not player.onGround:
+        player.velocity[1] -= GRAVITY
+
 
     playerChunkPos = world.toChunkLocal(player.getBlockPos())[0]
     playerChunkPos = ChunkPos(playerChunkPos.x, 0, playerChunkPos.z)
@@ -883,7 +888,7 @@ def serverTick(app, server: ServerState):
                 ))
 
                 network.s2cQueue.put(network.PlayerPositionAndLookS2C(
-                    dest.x, dest.y, dest.z, 0.0, 0.0, False, False, False, False, False, server.getTeleportId()
+                    dest.x, dest.y + 1, dest.z, 0.0, 0.0, False, False, False, False, False, server.getTeleportId()
                 ))
             else:
                 player.portalCooldown = 80
@@ -942,6 +947,35 @@ def serverTick(app, server: ServerState):
             ent1.variables = copy.copy(ent2.variables)
     
     network.s2cQueue.put(network.UpdateHealthS2C(server.getLocalPlayer().health, 20, 5.0))
+
+    for windowId, openWindow in server.openWindows.items():
+        if windowId != 0 and openWindow.kind == 'furnace':
+            chunk, localPos = server.getLocalDimension().world.getChunk(openWindow.pos)
+            furnace = typing.cast(Furnace, chunk.tileEntities[localPos])
+            network.s2cQueue.put(network.WindowPropertyS2C(
+                windowId, 0, furnace.fuelLeft
+            ))
+            network.s2cQueue.put(network.WindowPropertyS2C(
+                windowId, 1, 1600
+            ))
+            network.s2cQueue.put(network.WindowPropertyS2C(
+                windowId, 2, furnace.progress
+            ))
+            network.s2cQueue.put(network.WindowPropertyS2C(
+                windowId, 3, 200
+            ))
+
+            for slotIdx, slot in enumerate((furnace.inputSlot, furnace.fuelSlot, furnace.outputSlot, )):
+                # FIXME: EMPTY SLOTS??
+                if slot.stack.isEmpty():
+                    itemId = 'stone'
+                else:
+                    itemId = slot.stack.item
+
+                itemId = util.REGISTRY.encode('minecraft:item', 'minecraft:' + itemId)
+                network.s2cQueue.put(network.SetSlotS2C(
+                    windowId, slotIdx, itemId, slot.stack.amount 
+                ))
 
     app.client.entities = copy.deepcopy(server.getLocalDimension().entities)
     app.client.player.inventory = copy.deepcopy(server.getLocalPlayer().inventory)
@@ -1041,9 +1075,9 @@ def isValidSpawnLocation(app, dim: Dimension, pos: BlockPos):
     
     return isOk
 
-GRAVITY = 0.1
+GRAVITY = 0.08
 
-def collideY(wld: World, entity: Entity, ticks=1.0):
+def collideY(wld: World, entity: Entity, ticks=1.0, useGravity=True):
     entity.pos[1] += entity.velocity[1] * ticks
 
     if entity.onGround:
@@ -1051,7 +1085,8 @@ def collideY(wld: World, entity: Entity, ticks=1.0):
             entity.onGround = False
     else:
         #if not hasattr(entity, 'flying') or not entity.flying: #type:ignore
-        entity.velocity[1] -= GRAVITY * ticks
+        if useGravity:
+            entity.velocity[1] -= GRAVITY * ticks
         [_, yPos, _] = entity.pos
         #yPos -= entity.height
         yPos -= 0.1

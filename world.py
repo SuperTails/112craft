@@ -798,7 +798,7 @@ class Chunk:
             otherPos = self._globalBlockPos(otherPos)
 
             lit = not world.isWeaklyPowered(otherPos)
-            
+
             newLit = 'true' if lit else 'false'
 
             if newLit != blockState['lit']:
@@ -1413,8 +1413,8 @@ class Chunk:
             self.tileEntities[blockPos] = Furnace(blockPos)
 
         if doBlockUpdates:
-            if blockId == 'redstone_wire':
-                if prevId == blockId: #type:ignore
+            if blockId in ('redstone_wire', 'redstone_torch', 'redstone_wall_torch'):
+                if prevId == blockId and blockId == 'redstone_wire': #type:ignore
                     priority = 3
                 else:
                     priority = -1
@@ -1707,7 +1707,7 @@ class OverworldGen(TerrainGen):
                     chunk.blocks[xIdx, topY, zIdx] = 'grass'
 
         for pos in positions:
-            if chunk.blocks[pos.x, pos.z, pos.z] not in ('flowing_water', 'water', 'flowing_lava', 'lava'):
+            if chunk.blocks[pos.x, pos.y, pos.z] not in ('flowing_water', 'water', 'flowing_lava', 'lava'):
                 chunk.blocks[pos.x, pos.y, pos.z] = 'air'
         
         chunk.blocks[:, 0, :] = 'bedrock'
@@ -2183,7 +2183,7 @@ class World:
         print(f"Unloading chunk at {pos}")
         saveFile = self.chunkFileName(pos)
         self.chunks[pos].save(saveFile)
-        self.chunks.pop(pos)
+        del self.chunks[pos]
     
     def getChunk(self, pos: BlockPos) -> Tuple[Chunk, BlockPos]:
         (cx, cy, cz) = pos
@@ -2259,6 +2259,9 @@ class World:
         chunk.meshes[y // MESH_HEIGHT].dirty = True
     
     def isWeaklyPowered(self, pos: BlockPos) -> bool:
+        if self.getBlock(pos) == 'air':
+            return False
+
         if self.isStronglyPowered(pos):
             return True
         
@@ -2270,13 +2273,15 @@ class World:
                 adjPos = adjacentBlockPos(pos, face)
                 adjId = self.getBlock(adjPos)
                 adjState = self.getBlockState(adjPos)
-                if adjId == 'redstone_wire' and int(adjState['power']) > 0:
+                if adjId == 'redstone_wire' and int(adjState['power']) > 0 and adjState[neededDir] != 'none':
                     return True
             
             return False
         
     def isStronglyPowered(self, pos: BlockPos) -> bool:
-        if (self.getBlock(pos) in ('redstone_torch', 'redstone_wall_torch')
+        if self.getBlock(pos) == 'air':
+            return False
+        elif (self.getBlock(pos) in ('redstone_torch', 'redstone_wall_torch')
             and self.getBlockState(pos)['lit'] == 'true'):
 
             return True

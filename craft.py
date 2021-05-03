@@ -662,6 +662,12 @@ class PlayingMode(Mode):
                             'distance': '7',
                             'persistent': 'true',
                         }
+                    elif stack.item == 'furnace':
+                        placedId = 'furnace'
+                        placedState = {
+                            'facing': 'north',
+                            'lit': 'false',
+                        }
                     else:
                         placedId = stack.item
                         placedState = {}
@@ -735,7 +741,7 @@ class PlayingMode(Mode):
         elif key == 'SPACE' or key == ' ':
             client.space = True
             if player.onGround:
-                player.velocity[1] = 0.35
+                player.velocity[1] = 0.40
             elif player.creative and not player.onGround:
                 player.flying = True
         elif key == 'SHIFT':
@@ -1411,7 +1417,7 @@ def appStarted(app):
     #def makeTitleMode(app, _player): return TitleMode(app)
     #app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
     def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'world', True, makePlayingMode, seed=random.randint(0, 2**31))
+    app.mode = WorldLoadMode(app, 'world2', True, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
 
     # ---------------
@@ -1611,9 +1617,9 @@ def redrawAll(app, *args):
 def main():
     try:
         if config.USE_OPENGL_BACKEND:
-            openglapp.runApp(width=600, height=400)
+            openglapp.runApp(width=640, height=480)
         else:
-            cmu_112_graphics.runApp(width=600, height=400)
+            cmu_112_graphics.runApp(width=640, height=480)
     except Exception as e:
         import traceback
 

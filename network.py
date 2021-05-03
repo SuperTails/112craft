@@ -978,6 +978,9 @@ def main(hostname, port):
 
     profile = yield Profile.from_credentials(username, password)
 
+    with open('clienttoken.txt', 'w') as f:
+        f.write(profile.access_token)
+
     factory = MinecraftFactory(profile)
 
     factory.connect(hostname, port)
