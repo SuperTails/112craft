@@ -102,6 +102,7 @@ class Mode:
     def redrawAll(self, app, window, canvas): pass
     def keyPressed(self, app, event): pass
     def keyReleased(self, app, event): pass
+    def charPressed(self, app, event): pass
 
 def worldToFolderName(name: str) -> str:
     result = ''
@@ -139,7 +140,13 @@ class WorldLoadMode(Mode):
 
             self.centerPos = [0.0, 0.0, 0.0]
 
-            network.c2sQueue.put((worldName, 25565))
+            if ':' in worldName:
+                hostname, port = worldName.split(':')
+                port = int(port)
+            else:
+                hostname, port = worldName, 25565
+
+            network.connectToHost(hostname, port)
         
     def timerFired(self, app):
         loader = app.server.getLocalDimension() if app.client.local else app.client
@@ -227,6 +234,130 @@ def posInBox(x, y, bounds) -> bool:
     (x0, y0, x1, y1) = bounds
     return x0 <= x and x <= x1 and y0 <= y and y <= y1
 
+from twisted.internet import threads, reactor
+from quarry.net.auth import Profile, ProfileException
+import json
+
+class AuthenticateMode(Mode):
+    profile: Optional[Profile]
+
+    email: str
+    password: str
+
+    message: str
+
+    selectedBox: str
+
+    buttons: ButtonManager
+
+    def __init__(self, app):
+        try:
+            self.fromFile(app)
+        except FileNotFoundError:
+            self.profile = None
+        
+        self.email = ''
+        self.password = ''
+
+        self.message = ''
+
+        self.selectedBox = ''
+
+        self.buttons = ButtonManager()
+
+        logIn = Button(app, 0.5, 0.6, 200, 40, "Log In")
+        self.buttons.addButton('logIn', logIn)
+    
+    def timerFired(self, app):
+        if self.profile is not None:
+            network.setProfile(self.profile)
+            app.mode = DirectConnectMode(app)
+
+    def fromFile(self, app):
+        # For some reason quarry can't parse its own format...
+
+        with open('clienttoken.json', 'r') as f:
+            j = json.load(f)
+
+        uuid = j['selectedUser']
+        clientToken = j['clientToken']
+        user = j['authenticationDatabase'][uuid]
+
+        displayName = user['displayName']
+        accessToken = user['accessToken']
+        uuid = user['uuid']
+
+        self.profile = threads.blockingCallFromThread(reactor,
+            Profile.from_token, clientToken, accessToken, displayName, uuid)
+        
+        self.profile.to_file('clienttoken.json')
+    
+    def fromCredentials(self, app, email: str, password: str):
+        self.profile = threads.blockingCallFromThread(reactor,
+            Profile.from_credentials, email, password)
+        
+        self.profile.to_file('clienttoken.json')
+    
+    def emailBoxBounds(self, app):
+        return (app.width * 0.5 - 200, app.height * 0.25 - 15,
+                app.width * 0.5 + 200, app.height * 0.25 + 15)
+    
+    def passwordBoxBounds(self, app):
+        return (app.width * 0.5 - 200, app.height * 0.4 - 15,
+                app.width * 0.5 + 200, app.height * 0.4 + 15)
+        
+    def mousePressed(self, app, event):
+        self.buttons.onPress(app, event.x, event.y)
+
+        if posInBox(event.x, event.y, self.emailBoxBounds(app)):
+            self.selectedBox = 'email'
+        elif posInBox(event.x, event.y, self.passwordBoxBounds(app)):
+            self.selectedBox = 'password'
+
+    def mouseReleased(self, app, event):
+        btn = self.buttons.onRelease(app, event.x, event.y)
+        if btn is not None:
+            if btn == 'logIn':
+                if self.email == '' or self.password == '':
+                    self.message = 'Enter a username and password'
+                else:
+                    try:
+                        self.fromCredentials(app, self.email, self.password)
+                    except ProfileException as e:
+                        self.message = e.error_message
+    
+    def keyPressed(self, app, event):
+        key = event.key.upper()
+        if key == 'BACKSPACE':
+            if self.selectedBox == 'email':
+                if self.email != '':
+                    self.email = self.email[:-1]
+            elif self.selectedBox == 'password':
+                if self.password != '':
+                    self.password = self.password[:-1]
+
+    def charPressed(self, app, event):
+        if self.selectedBox == 'email':
+            self.email += event.char
+        elif self.selectedBox == 'password':
+            self.password += event.char
+        
+    def redrawAll(self, app, window, canvas):
+        self.buttons.draw(app, canvas)
+
+        (x0, y0, x1, y1) = self.emailBoxBounds(app)
+        canvas.create_rectangle(x0, y0, x1, y1)
+        canvas.create_text(app.width / 2, y0 - 20, text='Email')
+        canvas.create_text(app.width / 2, (y0 + y1) / 2, text=self.email)
+
+        (x0, y0, x1, y1) = self.passwordBoxBounds(app)
+        canvas.create_rectangle(x0, y0, x1, y1)
+        canvas.create_text(app.width / 2, y0 - 20, text='Password')
+        censoredText = '-' * len(self.password)
+        canvas.create_text(app.width / 2, (y0 + y1) / 2, text=censoredText)
+
+        canvas.create_text(app.width / 2, app.height / 2, text=self.message)
+    
 class DirectConnectMode(Mode):
     buttons: ButtonManager
 
@@ -259,8 +390,10 @@ class DirectConnectMode(Mode):
         # FIXME: CHECK IF BACKSPACE IS CORRECT FOR TKINTER TOO
         if key == 'backspace' and len(self.ip) > 0:
             self.ip = self.ip[:-1]
-        elif len(key) == 1 and len(self.ip) < 30:
-            self.ip += key
+    
+    def charPressed(self, app, event):
+        if len(self.ip) < 30:
+            self.ip += event.char
     
     def mousePressed(self, app, event):
         self.buttons.onPress(app, event.x, event.y)
@@ -349,7 +482,7 @@ class CreateWorldMode(Mode):
             self.worldName = self.worldName[:-1]
         elif len(key) == 1 and len(self.worldName) < 15:
             self.worldName += key
-
+        
     def mousePressed(self, app, event):
         self.buttons.onPress(app, event.x, event.y)
 
@@ -420,7 +553,7 @@ class TitleMode(Mode):
             else:
                 app.mode = WorldListMode(app)
         elif btn == 'multiplayer':
-            app.mode = DirectConnectMode(app)
+            app.mode = AuthenticateMode(app)
 
     def redrawAll(self, app, window, canvas):
         render.redrawAll(app.client, canvas, doDrawHud=False)
@@ -472,9 +605,12 @@ def drawChatHistory(app, client: ClientState, canvas, useAge=True):
 class ChatMode(Mode):
     text: str
 
+    ignoreNext: bool
+
     def __init__(self, app, submode, text):
         self.submode = submode
         self.text = text
+        self.ignoreNext = True
     
     def keyPressed(self, app, event):
         key = event.key.upper()
@@ -487,10 +623,12 @@ class ChatMode(Mode):
         elif key == 'BACKSPACE':
             if self.text != '':
                 self.text = self.text[:-1]
-        elif key == 'SPACE':
-            self.text += ' '
-        elif len(key) == 1:
-            self.text += key.lower()
+    
+    def charPressed(self, app, event):
+        if self.ignoreNext:
+            self.ignoreNext = False
+        else:
+            self.text += event.char
         
     def redrawAll(self, app, window, canvas):
         self.submode.redrawAll(app, window, canvas)
@@ -1414,11 +1552,12 @@ def appStarted(app):
 
     app.client = client
 
-    #def makeTitleMode(app, _player): return TitleMode(app)
-    #app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
-    def makePlayingMode(app, player): return PlayingMode(app, player)
-    app.mode = WorldLoadMode(app, 'world2', True, makePlayingMode, seed=random.randint(0, 2**31))
+    def makeTitleMode(app, _player): return TitleMode(app)
+    app.mode = WorldLoadMode(app, 'world', True, makeTitleMode)
+    #def makePlayingMode(app, player): return PlayingMode(app, player)
+    #app.mode = WorldLoadMode(app, 'world2', True, makePlayingMode, seed=random.randint(0, 2**31))
     #app.mode = CreateWorldMode(app)
+    #app.mode = AuthenticateMode(app)
 
     # ---------------
     # Input Variables
@@ -1494,8 +1633,19 @@ def updateBlockBreaking(app, mode: PlayingMode):
 def keyPressed(app, event):
     app.mode.keyPressed(app, event)
 
+    if not config.USE_OPENGL_BACKEND:
+        CharEvent = make_dataclass('CharEvent', ['window', 'char'])
+        CharEvent(None, app.mode.key)
+
+        charPressed(app, event)
+
 def keyReleased(app, event):
     app.mode.keyReleased(app, event)
+
+from dataclasses import make_dataclass
+
+def charPressed(app, event):
+    app.mode.charPressed(app, event)
 
 def rightMousePressed(app, event):
     app.mode.rightMousePressed(app, event)

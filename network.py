@@ -1,5 +1,5 @@
 from sys import float_repr_style
-from twisted.internet import defer, reactor
+from twisted.internet import defer, reactor, threads
 from quarry.net.auth import Profile
 from quarry.net.client import ClientFactory, ClientProtocol
 from quarry.net.ticker import Ticker
@@ -13,6 +13,7 @@ from quarry.types.buffer import BufferUnderrun
 from quarry.types.chat import Message
 from quarry.types.chunk import PackedArray
 from quarry.types import nbt
+from quarry.net.auth import ProfileException
 from dimregistry import DimensionCodec, DimensionType
 import math
 
@@ -968,29 +969,22 @@ class MinecraftProtocol(ClientProtocol):
 class MinecraftFactory(ClientFactory):
     protocol = MinecraftProtocol
 
-@defer.inlineCallbacks
-def main(hostname, port):
-    with open('creds.txt', 'r') as f:
-        [username, password] = f.readlines()[:2]
+_profile: Profile
+
+def setProfile(profile: Profile):
+    def inner():
+        global _profile
+        _profile = profile 
+
+    reactor.callFromThread(inner) #type:ignore
+
+def connectToHost(hostname: str, port: int):
+    def inner():
+        print(f'Connecting to {hostname} on port {port}')
+        factory = MinecraftFactory(_profile)
+        factory.connect(hostname, port)
     
-    username = username.strip()
-    password = password.strip()
-
-    profile = yield Profile.from_credentials(username, password)
-
-    with open('clienttoken.txt', 'w') as f:
-        f.write(profile.access_token)
-
-    factory = MinecraftFactory(profile)
-
-    factory.connect(hostname, port)
+    reactor.callFromThread(inner) #type:ignore
 
 def go():
-    startPacket = c2sQueue.get(block=True)
-    if startPacket is None:
-        return
-    (hostname, port) = startPacket
-
-    main(hostname, port)
-        
     reactor.run() #type:ignore

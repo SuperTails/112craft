@@ -63,12 +63,14 @@ class App:
             self.canvas.resize(width, height)
             self._callFn('sizeChanged', self)
         
+        def charEvent(*args): self.dispatchCharEvent(*args)
         def keyEvent(*args): self.dispatchKeyEvent(*args)
         def mouseMoved(*args): self.dispatchMouseMoved(*args)
         def mouseChanged(*args): self.dispatchMouseChanged(*args)
         
         glfw.set_framebuffer_size_callback(self.window, sizeChanged)
         glfw.set_key_callback(self.window, keyEvent)
+        glfw.set_char_callback(self.window, charEvent)
         glfw.set_cursor_pos_callback(self.window, mouseMoved)
         glfw.set_mouse_button_callback(self.window, mouseChanged)
 
@@ -144,6 +146,13 @@ class App:
             else:
                 self._callFn('keyReleased', self, event)
     
+    def dispatchCharEvent(self, window, codepoint: int):
+        CharEvent = make_dataclass('KeyEvent', ['window', 'char'])
+
+        event = CharEvent(window, chr(codepoint))
+
+        self._callFn('charPressed', self, event)
+
     def dispatchMouseMoved(self, window, mouseX, mouseY):
         self.mouseX = mouseX
         self.mouseY = mouseY
